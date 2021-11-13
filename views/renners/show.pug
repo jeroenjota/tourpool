@@ -1,0 +1,54 @@
+extends ../layout.pug
+block content 
+  - 
+    var vNaam = renner.vNaam 
+    var tNaam = renner.tNaam
+    var aNaam = renner.aNaam
+    var saveRoute = '/renners/'  + renner._id + '?_method=PUT'
+  ui.container  
+    h1.grid.center.aligned Renner aanpassen
+    .container.ui.center.aligned.grid
+      .ui.inverted.segment
+        form(action=saveRoute method="POST").ui.inverted.form 
+          .row
+            .three.fields 
+              .field
+                label(for="vNaam") Voornaam
+                input(type="text" id="vNaam" name="renner[vNaam]" value=vNaam)
+              .field
+                label(for="tNaam") voorvoeg
+                input(type="text" id="tNaam" name="renner[tNaam]" value=tNaam)
+              .field
+                label(for="aNaam") Achternaam
+                input(type="text" id="aNaam" name="renner[aNaam]" value=aNaam)
+          .row  
+            .three.fields
+              .field
+                label(for="nr") Rugnummer
+                input(type="number" id="nr" name="renner[nr]" value=renner.nr)
+              .field
+                label(for="land") Land
+                input(type="text" id="land" name="renner[land]" value=renner.land)
+              .field
+                label(for="land") Ploeg
+                input(type="text" id="ploeg" name="renner[ploeg]" value=renner.ploeg)
+
+          button.ui.submit.primary.button Opslaan
+          a(href="/renners") Annuleren
+          .ui.error.message
+
+  script. 
+    $('.ui.form')
+    .form({
+      fields: {
+        aNaam: {
+          identifier: 'aNaam',
+          rules: [
+            {
+              type   : 'empty',
+              prompt : 'Je moet minimaal een achternaam invullen!'
+            }
+          ]
+        },
+      }
+    });          

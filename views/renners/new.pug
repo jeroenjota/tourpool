@@ -1,0 +1,36 @@
+extends ../layout.pug
+block content 
+  .ui.container
+    h1.grid.center.aligned Renner toevoegen
+    .container.ui.center.aligned.grid
+      .ui.inverted.segment
+        form(action='/renners', method="POST").ui.inverted.form 
+          .row
+            .three.fields 
+              .field
+                label(for="vNaam") Voornaam
+                input(type="text" id="vNaam" name="renner[vNaam]" value=vNaam)
+              .field
+                label(for="tNaam") voorvoeg
+                input(type="text" id="tNaam" name="renner[tNaam]" value=tNaam)
+              .field
+                label(for="aNaam") Achternaam
+                input(type="text" id="aNaam" name="renner[aNaam]" value=aNaam)
+          button.ui.submit.primary.button Opslaan
+          a(href="/renners") Alle renners
+          .ui.error.message    
+  script.
+    $('.ui.form')
+    .form({
+      fields: {
+        aNaam: {
+          identifier: 'aNaam',
+          rules: [
+            {
+              type   : 'empty',
+              prompt : 'Je moet minimaal een achternaam invullen!'
+            }
+          ]
+        },
+      }
+    });          

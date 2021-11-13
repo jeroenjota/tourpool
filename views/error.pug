@@ -1,0 +1,8 @@
+extends layout.pug
+
+block content
+
+  .ui.negative.message   
+    i.close.icon 
+    h3.header #{err.message}
+    p #{err.stack}

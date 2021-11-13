@@ -1,0 +1,60 @@
+doctype
+html(lang='en')
+  head
+    meta(charset='utf-8')
+    title Tourpool
+    //-semantic/dist/semantic.css  semantic/dist/semantic.min.css
+    script(src="https://code.jquery.com/jquery-3.6.0.min.js")
+    link(rel="stylesheet", href="/semantic/dist/semantic.min.css")
+    script( src="/semantic/dist/semantic.min.js")
+    style.
+      footer { position: absolute; bottom: 0; width: 100%; height: 30px; margin-top: 0; margin-bottom: 0; padding-top: 0; padding-bottom: 0; text-align: center}
+      .mainpage { margin-top: 60px; margin-bottom: 40px; height:auto}
+  body(style=" background-color : #FFC324;")
+    .ui.container
+      .ui.fixed.menu 
+        a.header.item(href="/") 
+          i.home.icon
+          | Tourpool 
+        if gebruiker && gebruiker.isAdmin
+          a.item(href="/home") 
+            i.cog.icon 
+            | Instellingen 
+        a.item(href="/tours")
+          i.sitemap.icon 
+          | Tourgegevens
+        a.item(href="/renners")
+          i.tasks.icon
+          | Renners
+        .ui.right.menu 
+          if !gebruiker || !gebruiker.username
+            a.item(href="/users/register") 
+              i.user.plus.icon
+              | Registreer 
+            a.item(href="/users/login") 
+              i.user.sign.in.alternate.icon
+              | Login 
+          else  
+            .item
+              i.hand.spock.outline.icon
+              | Welkom #{gebruiker.vNaam}
+            a.item(href="/users/profiel")
+              i.address.card.outline.icon
+              | Je profiel
+            a.item(href="/ploegen")
+              i.bicycle.icon
+              | Jouw ploegen
+            a.item(href="/users/logout")
+              i.user.sign.out.alternate.icon
+              | Afmelden
+
+      .ui.grid.container.center.aligned
+        .ui.container.grid.center.aligned
+          .mainpage
+            include partials/message
+            block content 
+              
+            block footer 
+        
+    footer 
+      p © #{new Date().getFullYear()} Jota Services 

@@ -1,0 +1,31 @@
+if success && success.length
+  .ui.two.column.center.aligned.grid
+    .column
+      .ui.positive.message 
+        i.close.icon
+        each msg in success
+          .header #{msg}
+if error && error.length
+  .ui.two.column.center.aligned.grid
+    .column
+      .ui.negative.message 
+        i.close.icon
+        each msg in error
+          .header #{msg}
+if info && info.length
+  .ui.two.column.center.aligned.grid
+    .column
+      .ui.info.message 
+        i.close.icon
+        each msg in info
+          .header #{msg}
+
+script.
+  $('.message .close')
+  .on('click', function() {
+    $(this)
+      .closest('.message')
+      .transition('fade')
+    ;
+  })
+  ;

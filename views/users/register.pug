@@ -1,0 +1,60 @@
+extends ../layout.pug
+
+block content
+  .ui.container
+    h1.ui.header Welkom bij Jota's Tourpool #{new Date().getFullYear()}
+    .ui.center.aligned.grid
+      .ui.raised.yellow.inverted.very.padded.text.left.aligned.segment
+        form(action="/users/register" method="POST").ui.left.aligned.form
+          h2.ui.black.center.aligned.header Registreren
+          .field  
+            label(for="username") Gebruikersnaam
+            input(type="text" id="username" name="user[username]" placceholder= "Gebrukersnaam")
+          .fields.left.aligned
+            .five.wide.field 
+              label(for="vNaam") Voornaam
+              input(type="text" id="vNaam" name="user[vNaam]" placceholder= "Voornaam")
+            .three.wide.field 
+              label(for="tNaam") -
+              input(type="text" id="tNaam" name="user[tNaam]" placceholder= "tussenv")
+            .eight.wide.field 
+              label(for="aNaam") Achternaam
+              input(type="text" id="aNaam" name="user[aNaam]" placceholder= "Achternaam")
+          .field  
+            label(for="email") Email
+            input(type="email" id="email" name="user[email]" placceholder= "Email")
+          .field  
+            label(for="wachtwoord") Wachtwoord
+            input(type="password" id="wachtwoord" name="user[wachtwoord]" placceholder= "Wachtwoord")
+          button(type="submit").ui.right.floated.basic.big.button Registreer
+          h3.ui.black.header Al geregistreerd?
+            a(href="/users/login") Login
+          .ui.error.message
+  script. 
+    $('.ui.form')
+    .form({
+      fields: {
+        username: {
+          identifier: 'username',
+          rules: [
+            {
+              type   : 'empty',
+              prompt : 'Je hebt geen gebruikersnaam opgegeven!'
+            }
+          ]
+        },
+        wachtwoord: {
+          identifier: 'wachtwoord',
+          rules: [
+            {
+              type   : 'empty',
+              prompt : 'Een wachtwoord is wel verplicht hoor'
+            },
+            {
+              type   : 'minLength[6]',
+              prompt : 'Je wachtwoord moet minimaal {ruleValue} lettertekens zijn'
+            }
+          ]
+        },
+      }
+    });

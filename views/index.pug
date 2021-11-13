@@ -1,0 +1,99 @@
+extends layout.pug
+
+block content
+  - var inleg = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(setting.inleg)
+  - var dagHgPr = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(setting.dagScoreHoogPrijs)
+  - var ttlHgPr = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(setting.dagTotaalHoogPrijs)
+  - var ttlLgPr = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(setting.dagTotaalLaagPrijs)
+  
+  h1.ui.grid.center.aligned  Welkom bij Jota's Tourpool #{new Date().getFullYear()}
+  .ui.two.column.stackable.grid.left.aligned
+    .column
+      .ui.raised.segment
+        h3.ui.header 
+          i.child.icon 
+          | Eerst aanmelden
+        .item Uiteraard moet je je eerst registreren, geef daarbij in ieder geval een gebruikersnaam, email en een wachtwoord op.
+      .ui.raised.segment
+        h3.ui.header 
+          i.users.icon 
+          | Ploegen
+        .ui.item Nadat je ben aangemeld kun je je ploeg(en) gaan samenstellen.
+        p Een ploeg bestaat uit #{setting.rennerAant} renners en daarnaast nog #{setting.reserveAant} reserves.
+        p Zodra een van jouw renners uitvalt, komt de eerst beschikbare reserve daarvoor in de plaats. (Kies met wijsheid!)
+      .ui.raised.segment
+        h3.ui.header 
+          i.envelope.icon
+          |Pool inleveren 
+        .ui.item Je kunt je ploegen afdrukken en inleveren bij de organisatie. 
+        p Zodra je formulier is ingeleverd en je hebt betaald, doet hij mee voor de pool
+        p De inleg per formulier is           #[strong #{inleg}]
+
+    .column 
+      .ui.raised.segment
+        h3.ui.header 
+          i.sort.numeric.up.icon 
+          | Punten 
+        h4.ui.header Aan het eind van de etappe verdienen deelnemerploegen punten: 
+        .ui.list 
+          h4.ui.header 
+            i.database.icon
+            | Etappeuitslag
+          each pnt, index in setting.punten.etappe.uitslag
+            if index > 0
+              | ; #{index+1}e pl: #[strong #{pnt}] pnt
+            else  
+              | #{index+1}e pl: #[strong #{pnt}] pnt
+          h4.ui.header 
+            i.th.lists.icon
+            | Klassementen (eind van de etappe)
+          .ui.item Gele trui: 
+            each pnt, index in setting.punten.etappe.truien.geel
+              if index > 0
+                | ; #{index+1}e:  #[strong #{pnt}] pnt
+              else 
+                |  #{index+1}e:  #[strong #{pnt}] pnt
+          .ui.item Groene trui (sprinters): #[strong #{setting.punten.etappe.truien.groen}] pnt
+          .ui.item Bolletjes trui (klimmers): #[strong #{setting.punten.etappe.truien.bol}] pnt
+          .ui.item Witte trui (jongeren): #[strong #{setting.punten.etappe.truien.wit}] pnt
+        h4.ui.header Voor de eindstand zijn de volgende punten te verdienen:
+        p Algemeen klassement
+        .ui.list 
+          each pnt, index in setting.punten.eindstand.geel
+            if index > 0
+              | ; #{index+1}e pl: #[strong #{pnt}] pnt
+            else  
+              | #{index+1}e pl: #[strong #{pnt}] pnt
+        p Andere truien:
+          each pnt, index in setting.punten.eindstand.groen
+            if index > 0
+              | ; #{index+1}e pl: #[strong #{pnt}] pnt
+            else  
+              | #{index+1}e pl: #[strong #{pnt}] pnt
+
+
+    .column 
+      .ui.raised.segment 
+        h3.ui.header 
+          i.money.bill.alternate.outline.icon
+          | Dagprijzen
+        .ui.item Elke dag kunnen deelnemers kunnen met hun ploeg de volgende prijzen winnen: 
+        .ui.list
+          .ui.item Meeste punten van de dag: #{b} #[strong #{dagHgPr}]
+          .ui.item Meeste punten in de totaal stand: #[strong #{ttlHgPr}]
+          .ui.item Minste punten in de totaal stand: #[strong #{ttlLgPr}]
+
+    .column 
+      .ui.raised.segment 
+        h3.ui.header 
+          i.flag.checkered.icon
+          |Prijzen eindstand 
+        .item De laatste plaats krijgt zijn #{inleg} terug.
+        .item De hoofdprijzen van de pool zijn:
+        each pnt, index in setting.eindScorePerc
+          if index > 0
+            | ; #{index+1}e pl: #[strong #{pnt}]%  
+          else
+            | #{index+1}e pl:  #[strong #{pnt}]%  
+        .item van de totale inleg minus de dagprijzen en de #{inleg} voor de laatste plaats
+        .item Bij gelijke stand wordt het prijzengeld verdeeld.
