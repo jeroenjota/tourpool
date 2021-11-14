@@ -2,7 +2,7 @@ extends ../layout.pug
 
 block content 
   .ui.container 
-    h1.ui.header #[ploeg.teamname] aanpassen
+    h1.ui.header Ploeg van #{ gebruiker.username.toUpperCase() } aanpassen
     //- #{gebruiker.username}
     .ui.center.aligned.stackable.grid 
       .ui.container.stackable.grid
@@ -19,45 +19,43 @@ block content
                   h3.ui.black.center.aligned.header Jouw renners
                   .ui.list  
                     - var n = 1
-                    while n <= setting.rennerAant
+                    while n <= setting.rennerstotaal
                       .item
                         .inline.field 
-                        -var plNaam = (ploeg.renners[n].aNaam + ", " + ploeg.renners[n].vNaam + ' ' + ploeg.renners[n].tNaam).substring(0,20) + " (" + ploeg.renners[n].nr + ")"
+                          - var id = 'fld' + n
                           - var lbl = 'renners[]'
                           if n < 10
                             label(for=lbl)
                             | &nbsp;
-                            | #{n++}: #[plNaam] 
+                            | #{n++}:
                             | &nbsp;
                           else  
                             label(for=lbl)
-                            | #{n}: #[plNaam]
+                            | #{n++}:
                             | &nbsp;
-
-                          .item= plNaam
-                          select(id=lbl name=lbl) 
+                          select(id=id name=lbl value=ploeg.renners[n].id ) 
                             each renner in renners
                               -var naam = (renner.aNaam + ", " + renner.vNaam + ' ' + renner.tNaam).substring(0,20) + " (" + renner.nr + ")"
-                              if (ploeg.renners[n]._id && ploeg.renners[n]===renner._id)
-                                option(value=renner._id selected)= naam 
-                              else 
-                                option(value=renner._id)= naam 
+                              if ploeg.renners[n]._id.equals(renner._id)
+                                option(value=renner.nr selected)= naam
+                              else  
+                                option(value=renner.nr)= naam
 
-                .four.wide.center.aligned.column
-                  h3.ui.center.aligned.header Jouw reserves
-                  .ui.list  
-                    - var r = 1
-                    while r <= setting.reserveAant
-                      .item
-                        .inline.field 
-                          label(for=lbl)
-                          | &nbsp;
-                          | #{r++}
-                          | &nbsp;
 
-                          select(id=lbl name=lbl value=ploeg.renners[n])
-                            each renner in renners 
-                              -var naam = (renner.aNaam + ", " + renner.vNaam + ' ' + renner.tNaam).substring(0,20) + " (" + renner.nr + ")"
-                              option(value=renner._id)= naam
-                  button(type="submit").ui.big.button Opslaan
-                  a(href='/ploegen') Annuleren
+                //- .four.wide.center.aligned.column
+                //-   h3.ui.center.aligned.header Jouw reserves
+                //-   .ui.list  
+                //-     - var r = 1
+                //-     while r <= setting.reserveAant 
+                //-       .item
+                //-         .inline.field 
+                //-           label(for=lbl)
+                //-           | &nbsp;
+                //-           | #{r++}
+                //-           | &nbsp;
+                //-           - var id = 'fld' + n
+                //-           select(id=id name=lbl) 
+                //-             each renner in renners 
+                //-               option(value=renner._id)= naam
+                //-   button(type="submit").ui.big.button Opslaan
+                //-   a(href='/ploegen') Annuleren

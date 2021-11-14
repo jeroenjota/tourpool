@@ -52,6 +52,6 @@ block content
                             option(hidden selected) Selecteer ...
                             each renner in renners 
                               -var naam = (renner.aNaam + ", " + renner.vNaam + ' ' + renner.tNaam).substring(0,20) + " (" + renner.nr + ")"
-                              option(value=renner._id)= naam
+                              option(value=renner.nr)= naam
                   button(type="submit").ui.big.button Opslaan
                 .four.wide.column

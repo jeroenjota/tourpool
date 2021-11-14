@@ -2,6 +2,7 @@ const poolSetting = {
     inleg: 10,
     rennerAant: 8,
     reserveAant: 4,
+    rennerstotaal: 12,
     dagScoreHoogPrijs: 2.5,
     dagTotaalHoogPrijs: 1,
     dagTotaalLaagPrijs: 0.1,

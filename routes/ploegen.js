@@ -34,38 +34,48 @@ router.post('/newteam', isLoggedIn, wrapAsync(async(req, res, next) => {
 
     const team = new Team({
         jaar: poolSetting.tourjaar,
-        userId: req.user._id,
+        user: req.user._id,
         teamname: req.body.teamname,
     })
     for (let i = 0; i < renners.length; i++) {
-        if (isValidObjectId(renners[i])) {
-            team.renners.push(renners[i])
+        // if (isValidObjectId(renners[i])) {
+        //     team.renners.push({ position: i, id: renners[i] })
+        // }
+        console.log(renners[i])
+        if (renners[i]) {
+            team.renners.push({ position: i, id: renners[i] })
         }
     }
     const newTeam = await team.save();
-    res.send(newTeam)
+    if (!newTeam) {
+        req.flash('error', "Ploeg kon niet worden aangemaakt")
+        return res.redirect('/ploegen')
+    }
+    res.redirect('/ploegen')
         //const newTeam = new Ploeg(team)
 }))
 
 router.get('/:id/edit', isLoggedIn, wrapAsync(async(req, res, next) => {
     const { id } = req.params
-    const ploeg = await Team.findById(id).populate('renners')
+    const ploeg = await Team.findById(id).populate('renners').populate('user')
     if (!ploeg) {
         req.flash('error', 'ploeg is niet gevonden???')
         return res.redirect('ploegen/index')
     }
+    console.log(ploeg)
     const renners = await Renner.find({}).sort('aNaam')
     if (!renners) {
         throw new AppError("Geen renners bekend???", 404)
         return res.redirect('/');
     }
+
     res.render('ploegen/edit', { ploeg, renners })
 }))
 
 router.get('/', isLoggedIn, wrapAsync(async(req, res, next) => {
     const ploegen = await Team.find({
-        gebruiker: req.user._id
-    }).populate('renners')
+        user: req.user._id
+    }).populate('renners').populate('user')
     res.render('ploegen/index', {
         ploegen: ploegen
     })
