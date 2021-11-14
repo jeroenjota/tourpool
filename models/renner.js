@@ -33,4 +33,22 @@ RennerSchema.virtual('fullName').get(function() {
     return name;
 })
 
+RennerSchema.virtual('showName').get(function() {
+    let name = ''
+    if (this.aNaam) {
+        name = this.aNaam
+    }
+    if (this.vNaam) {
+        if (name) {
+            name = name + ', ' + this.vNaam
+        }
+    }
+    if (this.tNaam) {
+        if (name) {
+            name = name + ' ' + this.tNaam
+        }
+    }
+    return name;
+})
+
 module.exports = mongoose.model('Renner', RennerSchema);

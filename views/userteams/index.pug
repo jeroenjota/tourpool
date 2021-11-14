@@ -3,28 +3,28 @@ block content
 
   .ui.container
   h1.ui.header De ploegen van #{gebruiker.vNaam} (#{gebruiker.username})
-   a(href="/ploegen/newteam/").ui.blue.button Nieuw
+   a(href="/userteams/newteam/").ui.blue.button Nieuw
   
   .ui.left.aligned.four.column.grid
-    if ploegen.length === 0
+    if userteams.length === 0
       h2.ui.header Nog geen ploegen ingeleverd
     else
       .ui.row
-        each ploeg in ploegen 
+        each team in userteams 
           .four.wide.column
             .ui.left.aligned.card 
               .content
                 .ui.center.block.aligned.large.header 
-                  - var ploegUrl = `/ploegen/${ploeg._id}/edit`
-                  a(href=ploegUrl) Ploeg: #{ploeg.teamname}
+                  - var ploegUrl = `/userteams/${team._id}/edit`
+                  a(href=ploegUrl) Team: #{team.teamname}
                 .description
                   table.ui.basic.compact.table
                     - var i=1
-                    each renner in ploeg.renners
-                      - var naam = (renner.aNaam + ", " + renner.vNaam + ' ' + renner.tNaam).substring(0,20) + " (" + renner.nr + ")"
+                    each renner in team.renners
+                      //- - var naam = (renner.renner.fullName).substring(0,20) + " (" + renner.renner.nr + ")"
                       tr 
                         td.center.aligned= i++
-                        td.left.aligned= naam 
+                        td.left.aligned= renner.fullName
 
 
       

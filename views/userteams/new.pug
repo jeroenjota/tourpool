@@ -7,7 +7,7 @@ block content
     .ui.center.aligned.stackable.grid 
       .ui.container.stackable.grid
         .column
-          form(action="/ploegen/newteam" method="POST").ui.left.aligned.form
+          form(action="/userteams/newteam" method="POST").ui.left.aligned.form
             .inline.field  
               label(for="teamname").ui.black.center.aligned.header Naam van de ploeg
               input(type="text" id="teamname" name="teamname" placceholder= "Ploegnaam")
@@ -52,6 +52,6 @@ block content
                             option(hidden selected) Selecteer ...
                             each renner in renners 
                               -var naam = (renner.aNaam + ", " + renner.vNaam + ' ' + renner.tNaam).substring(0,20) + " (" + renner.nr + ")"
-                              option(value=renner.nr)= naam
+                              option(value=renner._id)= naam
                   button(type="submit").ui.big.button Opslaan
                 .four.wide.column

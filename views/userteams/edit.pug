@@ -1,0 +1,57 @@
+extends ../layout.pug
+
+block content 
+  .ui.container 
+    h1.ui.header Ploeg van #{ gebruiker.username.toUpperCase() } aanpassen
+    //- #{gebruiker.username}
+    .ui.center.aligned.stackable.grid 
+      .ui.stackable.grid
+        .column
+          - var saveUrl = `/userteams/${team._id}`
+          form(action=saveUrl method="POST").ui.center.aligned.small.form
+            .inline.field  
+              label(for="teamname").ui.black.center.aligned.header Naam van de ploeg
+              input(type="text" id="teamname" name="teamname" placceholder= "Ploegnaam" value = team.teamname)
+            .ui.container
+              .ui.four.columns.stackable.grid
+                .column
+                .column
+                  .ui.left.aligned.card
+                    .content
+                      .description
+                        table.ui.basic.compact.small.table
+                          tr 
+                            th(colspan="2") Renners in de ploeg
+                          - var n = 1
+                          while n <= setting.rennerAant
+                            - var ren = n-1
+                            - var lbl = 'renners[]'
+                            tr  
+                              td.center.aligned= n++
+                              td.left.aligned 
+                                select(id=id name=lbl value=team.renners[ren]._id )
+                                  each renner in renners
+                                    if team.renners[ren]._id .equals(renner._id)
+                                      option(value=renner._id selected=true)= renner.showName
+                                    else
+                                      option(value=renner._id)= renner.showName
+                .column
+                  .ui.left.aligned.card
+                    .content
+                      .description
+                        table.ui.basic.compact.small.table
+                          tr 
+                            th(colspan="2") Reserves
+                          - var n = setting.rennerAant +1
+                          while n <= setting.rennerstotaal
+                            - var ren = n-1
+                            - var lbl = 'renners[]'
+                            tr  
+                              td.center.aligned= n++
+                              td.left.aligned 
+                                select(id=id name=lbl value=team.renners[ren]._id )
+                                  each renner in renners
+                                    if team.renners[ren]._id .equals(renner._id)
+                                      option(value=renner._id selected=true)= renner.showName
+                                    else
+                                      option(value=renner._id)= renner.showName

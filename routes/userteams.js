@@ -25,7 +25,7 @@ router.get('/newteam', isLoggedIn, wrapAsync(async(req, res, next) => {
         throw new AppError("Geen renners bekend???", 404)
         return res.redirect('/');
     }
-    res.render('ploegen/new', { renners })
+    res.render('userteams/new', { renners })
 }))
 
 router.post('/newteam', isLoggedIn, wrapAsync(async(req, res, next) => {
@@ -43,41 +43,41 @@ router.post('/newteam', isLoggedIn, wrapAsync(async(req, res, next) => {
         // }
         console.log(renners[i])
         if (renners[i]) {
-            team.renners.push({ position: i, id: renners[i] })
+            team.renners.push(renners[i])
         }
     }
     const newTeam = await team.save();
     if (!newTeam) {
-        req.flash('error', "Ploeg kon niet worden aangemaakt")
-        return res.redirect('/ploegen')
+        req.flash('error', "Team kon niet worden aangemaakt")
+        return res.redirect('/userteams')
     }
-    res.redirect('/ploegen')
-        //const newTeam = new Ploeg(team)
+    res.redirect('/userteams')
+        //const newTeam = new Team(team)
 }))
 
 router.get('/:id/edit', isLoggedIn, wrapAsync(async(req, res, next) => {
     const { id } = req.params
-    const ploeg = await Team.findById(id).populate('renners').populate('user')
-    if (!ploeg) {
-        req.flash('error', 'ploeg is niet gevonden???')
-        return res.redirect('ploegen/index')
+    const team = await Team.findById(id).populate('renners').populate('user')
+    if (!team) {
+        req.flash('error', 'team is niet gevonden???')
+        return res.redirect('userteams/index')
     }
-    console.log(ploeg)
+    console.log(team)
     const renners = await Renner.find({}).sort('aNaam')
     if (!renners) {
         throw new AppError("Geen renners bekend???", 404)
         return res.redirect('/');
     }
 
-    res.render('ploegen/edit', { ploeg, renners })
+    res.render('userteams/edit', { team, renners })
 }))
 
 router.get('/', isLoggedIn, wrapAsync(async(req, res, next) => {
-    const ploegen = await Team.find({
+    const userteams = await Team.find({
         user: req.user._id
-    }).populate('renners').populate('user')
-    res.render('ploegen/index', {
-        ploegen: ploegen
+    }).populate('user').populate('renners')
+    res.render('userteams/index', {
+        userteams: userteams
     })
 }))
 

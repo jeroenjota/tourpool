@@ -16,7 +16,7 @@ const flash = require('express-flash');
 const userRoutes = require('./routes/users');
 const rennerRoutes = require('./routes/renners');
 const tourRoutes = require('./routes/tours');
-const ploegRoutes = require('./routes/ploegen');
+const teamRoutes = require('./routes/userteams');
 
 // models
 const User = require('./models/user');
@@ -74,7 +74,7 @@ app.use((req, res, next) => {
 app.use('/users', userRoutes);
 app.use('/renners', rennerRoutes);
 app.use('/tours', tourRoutes);
-app.use('/ploegen', ploegRoutes);
+app.use('/userteams', teamRoutes);
 
 let deGebruiker = {}
 
