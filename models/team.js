@@ -6,6 +6,7 @@ const TeamSchema = new Schema({
     user: { type: Schema.Types.ObjectId, ref: 'User' },
     teamname: {
         type: String,
+        trim: true,
         required: true,
         unique: [true, 'Naam bestaat al']
     },

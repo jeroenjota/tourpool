@@ -3,28 +3,42 @@ block content
 
   .ui.container
   h1.ui.header De ploegen van #{gebruiker.vNaam} (#{gebruiker.username})
-   a(href="/userteams/newteam/").ui.blue.button Nieuw
   
-  .ui.left.aligned.four.column.grid
+  .ui.center.aligned.four.column.grid
     if userteams.length === 0
       h2.ui.header Nog geen ploegen ingeleverd
     else
       .ui.row
         each team in userteams 
-          .four.wide.column
-            .ui.left.aligned.card 
-              .content
-                .ui.center.block.aligned.large.header 
-                  - var ploegUrl = `/userteams/${team._id}/edit`
-                  a(href=ploegUrl) Team: #{team.teamname}
+          .ui.five.wide.form
+            .ui.left.aligned.comment
+              .ui.block.center.aligned.large.header 
+                - var ploegUrl = `/userteams/${team._id}/edit`
+                - var ploegDelete = `/userteams/${team._id}/delete`
+                a(href=ploegUrl) Team: #{team.teamname}
+                a(href=ploegDelete) 
+                  .ui.animated.tiny.orange.right.floated.button
+                    .visible.content
+                      i.trash.alternate.outline.icon Wis
+                    .hidden.content 
+                      i.trash.icon
                 .description
                   table.ui.basic.compact.table
                     - var i=1
                     each renner in team.renners
                       //- - var naam = (renner.renner.fullName).substring(0,20) + " (" + renner.renner.nr + ")"
-                      tr 
-                        td.center.aligned= i++
-                        td.left.aligned= renner.fullName
+                      if i >  setting.rennerAant 
+                        tr.error 
+                          td.center.aligned= i++
+                            td.left.aligned= renner.fullName
+                      else  
+                        tr.positive
+                          td.center.aligned= i++
+                            td.left.aligned= renner.fullName
+    .ui.buttons
+      a(href="/").ui.large.button Terug
+      .or(data-text="-")
+      a(href="/userteams/newteam/").ui.teal.large.button Nieuw
 
 
       

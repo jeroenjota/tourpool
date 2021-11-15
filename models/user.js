@@ -8,9 +8,9 @@ const passportLocalMongoose = require('passport-local-mongoose')
 
 const UserSchema = new Schema({
 
-    vNaam: String,
-    tNaam: String,
-    aNaam: String,
+    vNaam: { type: String, trim: true },
+    tNaam: { type: String, trim: true },
+    aNaam: { type: String, trim: true },
     email: {
         type: String,
         required: [true, 'Email is verplicht'],
@@ -20,7 +20,6 @@ const UserSchema = new Schema({
         type: Boolean,
         default: false
     },
-
 }, { timestamps: true });
 
 // passportLocalMongooses voegt automatisch username en password toe!!!

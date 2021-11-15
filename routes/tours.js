@@ -4,13 +4,14 @@ const poolSetting = require('../public/data/tourdata')
 
 
 router.get('/', (req, res) => {
-  // if (!req.session.gebruikerID) {
-  //   res.redirect('/login')
-  // } else {
+    // if (!req.session.gebruikerID) {
+    //   res.redirect('/login')
+    // } else {
     res.render('tour/tourgegevens', {
-      setting: poolSetting
-    })
-  // }
+            setting: poolSetting
+        })
+        // }
 })
+
 
 module.exports = router;

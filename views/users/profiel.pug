@@ -8,24 +8,29 @@ block content
       .ui.raised.yellow.inverted.very.padded.text.left.aligned.segment
         form(action=userUrl method="POST").ui.left.aligned.form
           h2.ui.black.center.aligned.header Jouw gegevens
-          .field  
-            label(for="username") Gebruikersnaam
-            input(type="text" name="username" placceholder= "Gebrukersnaam" value=gebruiker.username)
-          .fields.left.aligned
-            .five.wide.field 
-              label(for="vNaam") Voornaam
-              input(type="text" name="vNaam" placceholder= "Voornaam" value=gebruiker.vNaam)
-            .three.wide.field 
-              label(for="tNaam") -
-              input(type="text" name="tNaam" placceholder= "tussenv" value=gebruiker.tNaam)
-            .eight.wide.field 
-              label(for="aNaam") Achternaam
-              input(type="text" name="aNaam" placceholder= "Achternaam" value=gebruiker.aNaam)
-          .field  
-            label(for="email") Email
-            input(type="email" name="email" placceholder= "Email" value=gebruiker.email)
-          button(type="submit)").ui.right.floated.basic.big.button Opslaan
-          h3.ui.black.header 
-            a(href="/") Annuleren
+          .ui.form
+            .two.fields
+              .required.field  
+                label(for="username") Gebruikersnaam
+                input(type="text" name="username" placceholder= "Gebrukersnaam" value=gebruiker.username)
+              .required.field  
+                label(for="email") Email
+                input(type="email" name="email" placceholder= "Email" value=gebruiker.email)
+            .fields.left.aligned
+              .five.wide.field 
+                label(for="vNaam") Voornaam
+                input(type="text" name="vNaam" placceholder= "Voornaam" value=gebruiker.vNaam)
+              .three.wide.field 
+                label(for="tNaam") &nbsp;
+                input(type="text" name="tNaam" placceholder= "tussenv" value=gebruiker.tNaam)
+              .eight.wide.required.field 
+                label(for="aNaam") Achternaam
+                input(type="text" name="aNaam" placceholder= "Achternaam" value=gebruiker.aNaam)
+          .ui.center.aligned.four.column.grid
+            .ui.row
+              .ui.buttons
+                a(href="/").ui.large.button Annuleren
+                .or(data-text="-")
+                button(type="submit)").ui.large.positive.button Opslaan
             
                 

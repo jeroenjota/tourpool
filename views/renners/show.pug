@@ -6,11 +6,11 @@ block content
     var aNaam = renner.aNaam
     var saveRoute = '/renners/'  + renner._id + '?_method=PUT'
   ui.container  
-    h1.grid.center.aligned Renner aanpassen
     .container.ui.center.aligned.grid
-      .ui.inverted.segment
-        form(action=saveRoute method="POST").ui.inverted.form 
-          .row
+      .ui.raised.yellow.inverted.very.padded.text.left.aligned.segment
+        form(action=saveRoute method="POST").ui.left.aligned.form
+          h2.ui.black.center.aligned.header Renner aanpassen
+          .ui.form
             .three.fields 
               .field
                 label(for="vNaam") Voornaam
@@ -32,10 +32,13 @@ block content
               .field
                 label(for="land") Ploeg
                 input(type="text" id="ploeg" name="renner[ploeg]" value=renner.ploeg)
-
-          button.ui.submit.primary.button Opslaan
-          a(href="/renners") Annuleren
-          .ui.error.message
+          .ui.center.aligned.four.column.grid
+            .ui.row
+              .ui.buttons
+                a(href="/renners").ui.large.button Annuleren
+                .or(data-text="-")
+                button.ui.positive.large.button Opslaan
+                .ui.error.message
 
   script. 
     $('.ui.form')

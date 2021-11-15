@@ -11,7 +11,7 @@ block content
           form(action=saveUrl method="POST").ui.center.aligned.small.form
             .inline.field  
               label(for="teamname").ui.black.center.aligned.header Naam van de ploeg
-              input(type="text" id="teamname" name="teamname" placceholder= "Ploegnaam" value = team.teamname)
+              input(type="text" id="teamname" name="team[teamname]" placceholder= "Ploegnaam" value = team.teamname)
             .ui.container
               .ui.four.columns.stackable.grid
                 .column
@@ -55,3 +55,8 @@ block content
                                       option(value=renner._id selected=true)= renner.showName
                                     else
                                       option(value=renner._id)= renner.showName
+              .ui.center.aligned.grid
+                .ui.buttons
+                  a(href="/userteams").ui.large.button Annuleren
+                  .or(data-text="-")
+                  button(type="submit").ui.positive.large.button Opslaan

@@ -3,15 +3,18 @@ const { Schema } = mongoose;
 
 const RennerSchema = new Schema({
     nr: Number,
-    vNaam: String,
-    tNaam: String,
+    vNaam: { type: String, trim: true },
+    tNaam: { type: String, trim: true },
     aNaam: {
+
         type: String,
+        trim: true,
         required: true
     },
-    ploeg: String,
-    land: String,
+    ploeg: { type: String, trim: true },
+    land: { type: String, trim: true },
 });
+
 RennerSchema.set('toObject', { virtuals: true })
 RennerSchema.set('toJSON', { virtuals: true })
 

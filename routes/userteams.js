@@ -8,6 +8,7 @@ const { isLoggedIn } = require('../js/middleware');
 const poolSetting = require('../public/data/tourdata');
 const mongoose = require('mongoose');
 const ObjectId = require('mongoose').Types.ObjectId;
+const team = require('../models/team');
 
 function isValidObjectId(id) {
 
@@ -70,6 +71,31 @@ router.get('/:id/edit', isLoggedIn, wrapAsync(async(req, res, next) => {
     }
 
     res.render('userteams/edit', { team, renners })
+}))
+
+router.get('/:id/delete', isLoggedIn, wrapAsync(async(req, res, next) => {
+    const { id } = req.params
+    const team = await Team.findById(id)
+    if (!team) {
+        req.flash('error', "Team niet gevonden??")
+        return res.redirect('userteams')
+    }
+    const teamName = team.teamname
+
+    Team.deleteOne({ _id: id })
+    req.flash('success', "Team is verwijderd")
+    res.redirect('/userteams')
+}))
+
+
+router.post('/:id', isLoggedIn, wrapAsync(async(req, res, next) => {
+    const { id } = req.params
+    const { team, renners } = req.body;
+    console.log(team, renners)
+    const updatedTeam = await Team.findOneAndUpdate(id, { teamname: team.teamname })
+    updatedTeam.set({ renners: renners })
+    await updatedTeam.save()
+    res.redirect("/userteams")
 }))
 
 router.get('/', isLoggedIn, wrapAsync(async(req, res, next) => {
