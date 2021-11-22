@@ -1,40 +1,61 @@
 extends ../layout.pug
 include ../mixins/_rennerRij
 block content
-  h1.grid.center.aligned Renners
-  .container.ui.center.aligned.grid
-    table.ui.striped.celled.table.compact.collapsing(align="center")
-      thead 
-        tr 
-          th.sorted.descending Rugnr
-          th Renner
-          th Ploeg
-          th.center.aligned #{current} / #{pages}
-      tbody
-        each renner, index in renners
-          +rennerRij(index, renner)
-        tfoot 
-          tr
-            td(colspan="4").center.aligned
-              .ui.horizontal.list
-                if current > 1
-                  .item
-                    - var nwPage = Number(current)-1
-                    - var ref1 = '?page=' + nwPage
-                    a(href=ref1) Vorige
-                - var i = 1
-                while i <= pages 
-                  - var ref2 = '?page=' + i
-                  .item
-                    a(href=ref2) #{i++}
-                if current < pages  
-                  - var nwPage = Number(current)+1
-                  - var ref3 = '?page=' + nwPage
-                  .item
-                    a(href=ref3) Volgende
-                  .item   
-                    a(href="renners/new") Nieuw
+  .container
+    h1.ui.grid.center.aligned.header  Tour de France #{setting.tourjaar}
 
+    .ui.center.aligned.grid
+      .ui.segment
+        .ui.three.column.grid
+          .middle.aligned.row
+            .column
+              h2.ui.header Renners & Ploegen
+            .column
+              .ui.search
+                .ui.icon.input
+                  input.prompt(id="zoektxt" type="text" onkeyup="searchTable()"  placeholder = "Zoek...")
+                  i.search.icon
+            .column   
+              a(href="/renners/new").ui.positive.large.button 
+                | Nieuw 
+                | &nbsp;  
+                i.bicycle.icon
+
+        .ui.raised.segment(style="overflow: auto; max-height: 65vh")
+          table#rennertable.ui.striped.celled.table(align="center")
+            thead 
+              tr 
+                th.sorted.descending Rugnr
+                th Naam
+                th Ploeg
+                th
+            tbody
+              each renner, index in renners
+                +rennerRij(index, renner)
+            tfoot 
+  script.
+    function searchTable() {
+      var input, filter, found, table, tr, td, i, j;
+      input = document.getElementById("zoektxt");
+      filter = input.value.toUpperCase();
+      table = document.getElementById("rennertable");
+      tr = table.getElementsByTagName("tr");
+      for (i = 0; i < tr.length; i++) {
+          td = tr[i].getElementsByTagName("td");
+          for (j = 0; j < td.length; j++) {
+              if (td[j].innerHTML.toUpperCase().indexOf(filter) > -1) {
+                  found = true;
+              }
+          }
+          if (found) {
+              tr[i].style.display = "";
+              found = false;
+          } else {
+              tr[i].style.display = "none";
+          }
+      }
+    } 
+  
 
 
       

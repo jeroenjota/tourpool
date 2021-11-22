@@ -4,55 +4,58 @@ block content
   .ui.container 
     h1.ui.header Nieuwe ploeg voor #{gebruiker.username}
     //- #{gebruiker.username}
-    .ui.center.aligned.stackable.grid 
-      .ui.container.stackable.grid
-        .column
-          form(action="/userteams/newteam" method="POST").ui.left.aligned.form
-            .inline.field  
-              label(for="teamname").ui.black.center.aligned.header Naam van de ploeg
-              input(type="text" id="teamname" name="teamname" placceholder= "Ploegnaam")
-            .container
-              .ui.left.aligned.stackable.grid
-                .four.wide.column
-                .four.wide.column
-                  h3.ui.black.center.aligned.header Jouw renners
-                  .ui.list  
-                    - var n = 1
-                    while n <= setting.rennerAant
-                      .item
-                        .inline.field 
-                          - var lbl = 'renners[]'
-                          if n < 10
-                            label(for=lbl)
-                            | &nbsp;
-                            | #{n++}
-                            | &nbsp;
-                          else  
-                            label(for=lbl)
-                            | #{n}
-                            | &nbsp;
-                          select(id=lbl name=lbl)
-                            option(hidden selected) Selecteer ...
-                            each renner in renners 
-                              -var naam = (renner.aNaam + ", " + renner.vNaam + ' ' + renner.tNaam).substring(0,20) + " (" + renner.nr + ")"
-                              option(value=renner._id)= naam
-                .four.wide.center.aligned.column
-                  h3.ui.center.aligned.header Jouw reserves
-                  .ui.list  
-                    - var r = 1
-                    while r <= setting.reserveAant
-                      .item
-                        .inline.field 
-                          label(for=lbl)
-                          | &nbsp;
-                          | #{r++}
-                          | &nbsp;
+    .ui.center.aligned.four.column.grid
 
-                          select(id=lbl name=lbl)
-                            option(hidden selected) Selecteer ...
-                            each renner in renners 
-                              -var naam = (renner.aNaam + ", " + renner.vNaam + ' ' + renner.tNaam).substring(0,20) + " (" + renner.nr + ")"
-                              option(value=renner._id)= naam
-                  button(type="submit").ui.large.button Opslaan
+      .ui.row
+        .ui.left.aligned.comment
+          .ui.block.center.aligned.large.header
+            form(action="/userteams/newteam" method="POST").ui.large.form
+              .inline.field  
+                label(for="teamname").ui.center.aligned.header Naam van de ploeg
+                input(type="text" id="teamname" name="teamname" placceholder= "Ploegnaam")
+              .ui.grid
+                .ui.two.column.grid
+                  .column
+                    h3.ui.center.aligned.header Jouw renners
+                    table.ui.basic.compact.table
+                      tr 
+                        th Pos
+                        th Renner
+                      - var n = 1
+                      while n <= setting.rennerAant
+                        - var ren = n-1
+                        - var lbl = 'renners[]'
+                        tr  
+                          td.center.aligned= n++
+                          td.left.aligned 
+                            select(id=lbl name=lbl)
+                              option(hidden selected) Selecteer ...
+                              each renner in renners 
+                                -var naam = (renner.aNaam + ", " + renner.vNaam + ' ' + renner.tNaam).substring(0,20) + " (" + renner.nr + ")"
+                                option(value=renner._id)= naam
+                  .column
+                    .ui.left.aligned.comment
+                      .content
+                        .description
+                          h3.ui.center.aligned.header Jouw reserves
+                          table.ui.basic.compact.small.table
+                            tr 
+                              th Pos 
+                              th Renner
+                            - var n = setting.rennerAant +1
+                            while n <= setting.rennerstotaal
+                              - var ren = n-1
+                              - var lbl = 'renners[]'
+                              tr  
+                                td.center.aligned= n++
+                                td.left.aligned 
+                                  select(id=lbl name=lbl)
+                                    option(hidden selected) Selecteer ...
+                                    each renner in renners 
+                                      -var naam = (renner.aNaam + ", " + renner.vNaam + ' ' + renner.tNaam).substring(0,20) + " (" + renner.nr + ")"
+                                      option(value=renner._id)= naam
+              .ui.center.aligned.row
+                .ui.buttons
                   a(href="/userteams").ui.large.button Annuleren
-                .four.wide.column
+                  .or(data-text="-")
+                  button(type="submit").ui.positive.large.button Opslaan

@@ -91,10 +91,13 @@ router.get('/:id/delete', isLoggedIn, wrapAsync(async(req, res, next) => {
 router.post('/:id', isLoggedIn, wrapAsync(async(req, res, next) => {
     const { id } = req.params
     const { team, renners } = req.body;
-    console.log(team, renners)
-    const updatedTeam = await Team.findOneAndUpdate(id, { teamname: team.teamname })
-    updatedTeam.set({ renners: renners })
-    await updatedTeam.save()
+    console.log(id, team, renners)
+    const updatedTeam = await Team.findById(id)
+    console.log('Gevonden: ' + updatedTeam)
+    updatedTeam.teamname = team.teamname;
+    updatedTeam.renners = renners;
+    await updatedTeam.save();
+    console.log('Aangepast: ' + updatedTeam)
     res.redirect("/userteams")
 }))
 

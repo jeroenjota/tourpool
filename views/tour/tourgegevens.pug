@@ -2,16 +2,16 @@ extends ../layout.pug
 include ../mixins/_etappes
 
 block content   
-  .ui.container
-  h1.ui.header Welkom bij Jota's Tourpool
   - var optie = {weekday: 'long', day: 'numeric', month:'long'}
   - var short = {weekday: 'short', day: 'numeric'}
   - var startdag = new Intl.DateTimeFormat('nl-NL',optie).format(new Date(setting.tourdatum.start))
   - var einddag =  new Intl.DateTimeFormat('nl-NL',optie).format(new Date(setting.tourdatum.eind))
+  h1.ui.grid.center.aligned.header  Tour de France #{setting.tourjaar}
+
   .ui.center.aligned.grid
-    .ui.raised.yellow.very.padded.text.left.aligned.segment
-      h2.ui.center.aligned.header De tour van #{setting.tourjaar} wordt gereden van  #{startdag} tot #{einddag}
-      .ui.raised.segment
+    .ui.segment
+      h3.ui.header De tour van #{setting.tourjaar} wordt gereden van  #{startdag} tot #{einddag}
+      .ui.raised.segment(style="overflow:auto; max-height: 70vh;")
         table.ui.striped.table
           thead
             tr 

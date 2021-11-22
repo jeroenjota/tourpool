@@ -1,48 +1,45 @@
 extends ../layout.pug
-
 block content
-  .ui.container
-    h1.ui.header Welkom bij Jota's Tourpool #{new Date().getFullYear()}
-    .ui.center.aligned.grid
-      .ui.raised.yellow.inverted.very.padded.text.left.aligned.segment
-        form(action="/users/login" method="POST").ui.left.aligned.form
-          h3.ui.black.header Nog niet geregistreerd?
-            a(href="/users/register") 
-              |  Registreren
-          h2.ui.black.center.aligned.header Login
-          .field  
-            label(for="username") Gebruikersnaam
-            input(type="text" name="username" placceholder= "Gebrukersnaam")
-          .field  
-            label(for="password") Wachtwoord
-            input(type="password" name="password" placceholder= "Wachtwoord")
-            button.ui.right.floated.basic.big.button(type="submit") Log in
-          .ui.error.message
-    script.  
-      $('.ui.form')
-      .form({
-        fields: {
-          username: {
-            identifier: 'username',
-            rules: [
-              {
-                type   : 'empty',
-                prompt : 'Je hebt geen gebruikersnaam opgegeven!'
-              }
-            ]
-          },
-          wachtwoord: {
-            identifier: 'password',
-            rules: [
-              {
-                type   : 'empty',
-                prompt : 'Een wachtwoord is wel verplicht hoor'
-              },
-              {
-                type   : 'minLength[6]',
-                prompt : 'Je wachtwoord moet minimaal {ruleValue} lettertekens zijn'
-              }
-            ]
-          },
-        }
-      });
+  h1.ui.header Welkom bij Jota's Tourpool #{setting.tourjaar}
+  .ui.center.aligned.grid
+    .ui.raised.yellow.inverted.very.padded.text.left.aligned.segment
+      form(action="/users/login" method="POST").ui.left.aligned.form
+        a(href="/users/register").ui.teal.tiny.button 
+          |  Nog niet geregistreerd?
+        h2.ui.center.aligned.header Login
+        .field  
+          label(for="username") Gebruikersnaam
+          input(type="text" name="username" placceholder= "Gebrukersnaam")
+        .field  
+          label(for="password") Wachtwoord
+          input(type="password" name="password" placceholder= "Wachtwoord")
+        button.ui.right.floated.positive.big.button(type="submit") Log in
+        .ui.error.message
+  script.  
+    $('.ui.form')
+    .form({
+      fields: {
+        username: {
+          identifier: 'username',
+          rules: [
+            {
+              type   : 'empty',
+              prompt : 'Je hebt geen gebruikersnaam opgegeven!'
+            }
+          ]
+        },
+        wachtwoord: {
+          identifier: 'password',
+          rules: [
+            {
+              type   : 'empty',
+              prompt : 'Een wachtwoord is wel verplicht hoor'
+            },
+            {
+              type   : 'minLength[6]',
+              prompt : 'Je wachtwoord moet minimaal {ruleValue} lettertekens zijn'
+            }
+          ]
+        },
+      }
+    });

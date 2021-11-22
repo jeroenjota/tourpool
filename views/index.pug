@@ -6,8 +6,8 @@ block content
   - var ttlHgPr = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(setting.dagTotaalHoogPrijs)
   - var ttlLgPr = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(setting.dagTotaalLaagPrijs)
   
-  h1.ui.grid.center.aligned  Welkom bij Jota's Tourpool #{new Date().getFullYear()}
-  .ui.two.column.stackable.grid.left.aligned
+  h1.ui.grid.center.aligned.header  Welkom bij Jota's Tourpool #{new Date().getFullYear()}
+  .ui.two.column.stackable.grid.left.aligned(style="overflow: auto; max-height: 85vh")
     .column
       .ui.raised.segment
         h3.ui.header 
@@ -25,9 +25,9 @@ block content
         h3.ui.header 
           i.envelope.icon
           |Pool inleveren 
-        .ui.item Je kunt je ploegen afdrukken en inleveren bij de organisatie. 
-        p Zodra je formulier is ingeleverd en je hebt betaald, doet hij mee voor de pool
-        p De inleg per formulier is           #[strong #{inleg}]
+        .ui.item Je kunt per ploeg een formulier afdrukken en inleveren bij de organisatie. 
+        p Zodra je ploeg is ingeleverd en je hebt betaald, doet hij mee voor de pool
+        p De inleg per ploeg is #[strong #{inleg}]
 
     .column 
       .ui.raised.segment
@@ -53,9 +53,24 @@ block content
                 | ; #{index+1}e:  #[strong #{pnt}] pnt
               else 
                 |  #{index+1}e:  #[strong #{pnt}] pnt
-          .ui.item Groene trui (sprinters): #[strong #{setting.punten.etappe.truien.groen}] pnt
-          .ui.item Bolletjes trui (klimmers): #[strong #{setting.punten.etappe.truien.bol}] pnt
-          .ui.item Witte trui (jongeren): #[strong #{setting.punten.etappe.truien.wit}] pnt
+          .ui.item Groene trui (sprinters): 
+            each pnt, index in setting.punten.etappe.truien.groen
+              if index > 0
+                | ; #{index+1}e:  #[strong #{pnt}] pnt
+              else 
+                |  #{index+1}e:  #[strong #{pnt}] pnt
+          .ui.item Bolletjes trui (klimmers): 
+            each pnt, index in setting.punten.etappe.truien.bol
+              if index > 0
+                | ; #{index+1}e:  #[strong #{pnt}] pnt
+              else 
+                |  #{index+1}e:  #[strong #{pnt}] pnt
+          .ui.item Witte trui (jongeren): 
+            each pnt, index in setting.punten.etappe.truien.wit
+              if index > 0
+                | ; #{index+1}e:  #[strong #{pnt}] pnt
+              else 
+                |  #{index+1}e:  #[strong #{pnt}] pnt
         h4.ui.header Voor de eindstand zijn de volgende punten te verdienen:
         p Algemeen klassement
         .ui.list 
@@ -77,7 +92,7 @@ block content
         h3.ui.header 
           i.money.bill.alternate.outline.icon
           | Dagprijzen
-        .ui.item Elke dag kunnen deelnemers kunnen met hun ploeg de volgende prijzen winnen: 
+        .ui.item #[strong Elke dag] kunnen deelnemers kunnen met hun ploeg de volgende prijzen winnen: 
         .ui.list
           .ui.item Meeste punten van de dag: #{b} #[strong #{dagHgPr}]
           .ui.item Meeste punten in de totaal stand: #[strong #{ttlHgPr}]
@@ -88,8 +103,10 @@ block content
         h3.ui.header 
           i.flag.checkered.icon
           |Prijzen eindstand 
-        .item De laatste plaats krijgt zijn #{inleg} terug.
-        .item De hoofdprijzen van de pool zijn:
+        .item De 
+          span.ui.red.text #[strong rode lantaarn] 
+          | (laatste plaats) krijgt zijn #{inleg} terug.
+        .item De #[strong hoofdprijzen] van de pool zijn:
         each pnt, index in setting.eindScorePerc
           if index > 0
             | ; #{index+1}e pl: #[strong #{pnt}]%  

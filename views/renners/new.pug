@@ -1,11 +1,11 @@
 extends ../layout.pug
 block content 
-  .ui.container
-    h1.grid.center.aligned Renner toevoegen
-    .container.ui.center.aligned.grid
-      .ui.inverted.segment
-        form(action='/renners', method="POST").ui.inverted.form 
-          .row
+  .ui.container 
+    .ui.center.aligned.grid
+      .ui.raised.yellow.inverted.very.padded.text.left.aligned.segment
+        form(action='/renners', method="POST").ui.form 
+          h2.ui.center.aligned.header Renner toevoegen
+          .ui.form
             .three.fields 
               .field
                 label(for="vNaam") Voornaam
@@ -16,8 +16,12 @@ block content
               .field
                 label(for="aNaam") Achternaam
                 input(type="text" id="aNaam" name="renner[aNaam]" value=aNaam)
-          button.ui.submit.primary.button Opslaan
-          a(href="/renners") Alle renners
+          .ui.center.aligned.grid
+            .ui.row
+              .ui.buttons
+                a(href="/renners").ui.large.button Annuleren
+                .or(data-text="")
+                button.ui.submit.large.positive.button Opslaan
           .ui.error.message    
   script.
     $('.ui.form')

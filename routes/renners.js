@@ -6,32 +6,15 @@ const wrapAsync = require('../js/wrapAsync')
 const { isLoggedIn } = require('../js/middleware')
     // ROUTES to RENNERS
 
-router.get('/', (req, res) => {
-    // aantal renners op pagina
-    var perPage = 12 // (req.query.records == null) ? 1 : req.query.records;
-    var page = (req.query.page == null) ? 1 : req.query.page;
-    Renner
-        .find({})
-        .sort({
-            nr: 1
-        })
-        .collation({
-            locale: 'nl',
-            numericOrdering: true
-        })
-        .skip((perPage * page) - perPage)
-        .limit(perPage) // console.log(renners)
-        .exec(function(err, renners) {
-            Renner.count().exec(function(err, count) {
-                if (err) return next(err)
-                res.render('renners/index', {
-                    current: page,
-                    "renners": renners,
-                    "pages": Math.ceil(count / perPage)
-                })
-            })
-        })
-})
+router.get('/', wrapAsync(async(req, res, next) => {
+    const renners = await Renner.find({}).sort({ nr: 1 })
+    if (!renners) {
+        req.flash('error', "De renners tabel is niet gevonden???")
+        return res.redirect('/')
+    }
+    res.render('renners/index', { renners })
+}))
+
 
 router.get('/new', isLoggedIn, (req, res) => {
     res.render('renners/new');

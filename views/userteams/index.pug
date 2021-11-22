@@ -1,7 +1,6 @@
 extends ../layout.pug
 block content 
 
-  .ui.container
   h1.ui.header De ploegen van #{gebruiker.vNaam} (#{gebruiker.username})
   
   .ui.center.aligned.four.column.grid
@@ -17,28 +16,33 @@ block content
                 - var ploegDelete = `/userteams/${team._id}/delete`
                 a(href=ploegUrl) Team: #{team.teamname}
                 a(href=ploegDelete) 
-                  .ui.animated.tiny.orange.right.floated.button
+                  .ui.animated.tiny.negative.right.floated.button
                     .visible.content
-                      i.trash.alternate.outline.icon Wis
+                      i.trash.alternate.outline.icon 
                     .hidden.content 
-                      i.trash.icon
+                      i.trash.icon Wis
                 .description
                   table.ui.basic.compact.table
                     - var i=1
                     each renner in team.renners
-                      //- - var naam = (renner.renner.fullName).substring(0,20) + " (" + renner.renner.nr + ")"
                       if i >  setting.rennerAant 
-                        tr.error 
+                        tr.negative 
                           td.center.aligned= i++
-                            td.left.aligned= renner.fullName
+                          td.left.aligned= renner.fullName
                       else  
                         tr.positive
-                          td.center.aligned= i++
-                            td.left.aligned= renner.fullName
+                        td.center.aligned= i++
+                        td.left.aligned= renner.fullName
     .ui.buttons
-      a(href="/").ui.large.button Terug
-      .or(data-text="-")
-      a(href="/userteams/newteam/").ui.teal.large.button Nieuw
+      a(href="/").ui.animated.large.button
+        .visible.content Terug
+        .hidden.content   
+          i.arrow.left.icon 
+      .or(data-text="")
+      a(href="/userteams/newteam/").ui.animated.positive.large.button 
+        .visible.content Nieuw
+        .hidden.content 
+          i.edit.icon
 
 
       

@@ -6,7 +6,7 @@ block content
     .ui.center.aligned.grid
       .ui.raised.yellow.inverted.very.padded.text.left.aligned.segment
         form(action="/users/register" method="POST").ui.left.aligned.form
-          h2.ui.black.center.aligned.header Registreren
+          h2.ui.center.aligned.header Registreren
           .field  
             label(for="username") Gebruikersnaam
             input(type="text" id="username" name="user[username]" placceholder= "Gebrukersnaam")
@@ -26,9 +26,9 @@ block content
           .field  
             label(for="wachtwoord") Wachtwoord
             input(type="password" id="wachtwoord" name="user[wachtwoord]" placceholder= "Wachtwoord")
-          button(type="submit").ui.right.floated.basic.big.button Registreer
-          h3.ui.black.header Al geregistreerd?
-            a(href="/users/login") Login
+          button(type="submit").ui.right.floated.positive.big.button Registreer
+          h3.ui.header 
+            a(href="/users/login").ui.teal.tiny.button Al geregistreerd? Login
           .ui.error.message
   script. 
     $('.ui.form')

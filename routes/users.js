@@ -29,7 +29,7 @@ router.post('/login', passport.authenticate('local', { failureFlash: true, failu
 
 router.get('/logout', (req, res) => {
     req.logout();
-    req.flash('success', "Je bent uitgelogd, daaag")
+    req.flash('success', "Je bent uitgelogd, tot een volgende keer")
     res.redirect('/')
 })
 

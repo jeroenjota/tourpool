@@ -1,0 +1,35 @@
+:root {
+    --main-head-color: #1133af;
+    --main-bg-color: #FFC324;
+    --positive-color: #81da5e;
+}
+
+body {
+    background-color: var(--main-bg-color);
+}
+
+.ui.inverted.menu .item {
+    color: var(--main-head-color);
+}
+
+.ui.header {
+    color: var(--main-head-color);
+}
+
+.ui.buttons .or:before {
+    background: var(--main-bg-color);
+    opacity: 1;
+    height: 1.9em;
+    border: 1px gray solid;
+}
+
+.ui.positive.button {
+    background: var(--positive-color);
+    color: var(--main-head-color)
+}
+
+.mainpage {
+    margin-top: 0px;
+    margin-bottom: 40px;
+    height: auto
+}

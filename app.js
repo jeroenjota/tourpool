@@ -31,7 +31,8 @@ app.use(express.urlencoded({
 // to use themes
 app.use('/semantic', express.static(path.join(__dirname + '/semantic')));
 app.use('/css', express.static(path.join(__dirname + '/public/css')));
-
+app.use('/js', express.static(path.join(__dirname + '/public/js')));
+app.use('/img', express.static(path.join(__dirname + '/public/img')));
 // logging
 app.use(morgan('tiny'))
 
