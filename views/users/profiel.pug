@@ -28,8 +28,14 @@ block content
         .ui.center.aligned.four.column.grid
           .ui.row
             .ui.buttons
-              a(href="/").ui.large.button Annuleren
+              a(href="/").ui.animated.large.button 
+                .visible.content Annuleren
+                .hidden.content 
+                  i.left.arrow.icon
               .or.blue(data-text="")
-              button(type="submit)").ui.large.positive.button Opslaan
+              button.ui.submit.large.animated.positive.button 
+                .visible.content Opslaan
+                .hidden.content   
+                  i.save.icon
             
                 

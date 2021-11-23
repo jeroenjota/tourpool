@@ -82,8 +82,8 @@ router.get('/:id/delete', isLoggedIn, wrapAsync(async(req, res, next) => {
     }
     const teamName = team.teamname
 
-    Team.deleteOne({ _id: id })
-    req.flash('success', "Team is verwijderd")
+    console.log(await Team.findByIdAndRemove(id))
+    req.flash('success', `Team ${teamName} is verwijderd`)
     res.redirect('/userteams')
 }))
 

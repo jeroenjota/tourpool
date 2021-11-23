@@ -2,6 +2,7 @@
     --main-head-color: #1133af;
     --main-bg-color: #FFC324;
     --positive-color: #81da5e;
+    --or-color: #f1dea8;
 }
 
 body {
@@ -18,9 +19,9 @@ body {
 
 .ui.buttons .or:before {
     background: var(--main-bg-color);
-    opacity: 1;
-    height: 1.9em;
-    border: 1px gray solid;
+    /*     opacity: 1;
+    font-size: 1rem;
+    border: 1px black dotted; */
 }
 
 .ui.positive.button {

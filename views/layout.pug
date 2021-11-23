@@ -13,53 +13,79 @@ html(lang='en')
       
   body
     .container
-      .ui.stackable.yellow.inverted.large.menu
+      .ui.yellow.inverted.large.menu
         a.header.item(href="/") 
           img.ui.tiny.spaced.image(src="/img/jota.png", alt="Tourpool")
-          if gebruiker && gebruiker.isAdmin
-            a.item(href="/home") 
-              i.cog.icon 
-              | Instellingen 
-          a.item(href="/tours")
-            i.sitemap.icon 
-            | Tourgegevens
-          a.item(href="/renners")
-            i.tasks.icon
-            | Renners
-          .ui.yellow.inverted.right.menu 
-            if !gebruiker || !gebruiker.username
-              a.item(href="/users/register") 
-                i.user.plus.icon
-                | Registreer 
-              a.item(href="/users/login") 
-                i.user.sign.in.alternate.icon
-                | Login 
-            else  
+        if gebruiker && gebruiker.isAdmin
+          .ui.dropdown.simple.link.item
+            i.cog.icon 
+            |Admin
+            i.dropdown.icon
+            .menu 
+              a(href="#").item
+                i.registered.outline.icon
+                | Formulier registreren
+              a(href="#").item
+                i.list.ol.icon
+                | Daguitslag invoeren
               .item
-                i.hand.spock.outline.icon
-                | Welkom #{gebruiker.fullName}
-              a.item(href="/users/profiel")
-                i.address.card.outline.icon
-                | Je profiel
-              a.item(href="/userteams")
-                i.bicycle.icon
-                | Jouw ploegen
-              a.item(href="/users/logout")
-                i.user.sign.out.alternate.icon
-                | Afmelden
+                i.print.icon
+                | Afdrukken
+                i.dropdown.icon
+                .menu 
+                  a(href="#").item
+                    i.wpforms.icon
+                    | Formulieren
+                  a(href="#").item
+                    i.list.ol.icon
+                    | Stand in de pool
+                  a(href="#").item
+                    i.columns.icon
+                    | Rituitslag & klassementen
+                  a(href="#").item
+                    i.signal.icon
+                    | Skyline
+                  
+
+
+        a.item(href="/tours")
+          i.sitemap.icon 
+          | Tourgegevens
+        a.item(href="/renners")
+          i.tasks.icon
+          | Renners
+        .ui.yellow.inverted.right.menu 
+          if !gebruiker || !gebruiker.username
+            a.item(href="/users/register") 
+              i.user.plus.icon
+              | Registreer 
+            a.item(href="/users/login") 
+              i.user.sign.in.alternate.icon
+              | Login 
+          else  
+            .item
+              i.hand.spock.outline.icon
+              | Welkom #{gebruiker.fullName}
+            a.item(href="/users/profiel")
+              i.address.card.outline.icon
+              | Je profiel
+            a.item(href="/userteams")
+              i.bicycle.icon
+              | Jouw ploegen
+            a.item(href="/users/logout")
+              i.user.sign.out.alternate.icon
+              | Afmelden
 
       .ui.grid.container.center.aligned
         .container
+          include partials/message
           .mainpage
             block content 
                 
-      include partials/message
   footer 
     p © #{new Date().getFullYear()} Jota Services 
 
-script(src="js/vendor/jquery.js")
-script(src="js/vendor/what-input.js")
-script(src="js/vendor/foundation.min.js")
 script.
-  $(document).foundation()
-    
+  $(document).ready(function(){
+          $('.ui.dropdown') .dropdown();
+    });

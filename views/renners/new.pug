@@ -1,28 +1,33 @@
 extends ../layout.pug
 block content 
-  .ui.container 
-    .ui.center.aligned.grid
-      .ui.raised.yellow.inverted.very.padded.text.left.aligned.segment
-        form(action='/renners', method="POST").ui.form 
-          h2.ui.center.aligned.header Renner toevoegen
-          .ui.form
-            .three.fields 
-              .field
-                label(for="vNaam") Voornaam
-                input(type="text" id="vNaam" name="renner[vNaam]" value=vNaam)
-              .field
-                label(for="tNaam") voorvoeg
-                input(type="text" id="tNaam" name="renner[tNaam]" value=tNaam)
-              .field
-                label(for="aNaam") Achternaam
-                input(type="text" id="aNaam" name="renner[aNaam]" value=aNaam)
-          .ui.center.aligned.grid
-            .ui.row
-              .ui.buttons
-                a(href="/renners").ui.large.button Annuleren
-                .or(data-text="")
-                button.ui.submit.large.positive.button Opslaan
-          .ui.error.message    
+  h1.ui.header Renner toevoegen
+  .ui.center.aligned.grid
+    .ui.raised.yellow.inverted.very.padded.text.left.aligned.segment
+      form(action='/renners', method="POST").ui.form 
+        .ui.form
+          .three.fields 
+            .field
+              label(for="vNaam") Voornaam
+              input(type="text" id="vNaam" name="renner[vNaam]" value=vNaam)
+            .field
+              label(for="tNaam") voorvoeg
+              input(type="text" id="tNaam" name="renner[tNaam]" value=tNaam)
+            .field
+              label(for="aNaam") Achternaam
+              input(type="text" id="aNaam" name="renner[aNaam]" value=aNaam)
+        .ui.center.aligned.grid
+          .ui.row
+            .ui.buttons
+              a(href="/renners").ui.animated.large.button 
+                .visible.content Annuleren
+                .hidden.content 
+                  i.left.arrow.icon
+              .or(data-text="")
+              button.ui.submit.large.animated.positive.button 
+                .visible.content Opslaan
+                .hidden.content   
+                  i.save.icon
+        .ui.error.message    
   script.
     $('.ui.form')
     .form({

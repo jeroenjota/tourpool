@@ -27,8 +27,9 @@ block content
             label(for="wachtwoord") Wachtwoord
             input(type="password" id="wachtwoord" name="user[wachtwoord]" placceholder= "Wachtwoord")
           button(type="submit").ui.right.floated.positive.big.button Registreer
-          h3.ui.header 
-            a(href="/users/login").ui.teal.tiny.button Al geregistreerd? Login
+          a(href="/users/login").ui.teal.large.animated.button
+            .visible.content Al geregistreerd?
+            .hidden.content Login
           .ui.error.message
   script. 
     $('.ui.form')
@@ -43,12 +44,25 @@ block content
             }
           ]
         },
+        email: {
+          identifier: 'email',
+          rules: [
+            {
+              type: 'empty',
+              prompt :  'Je hebt geen email opgegeven, zonder email kunnen we je identiteit niet verifiëren'
+            },
+            {
+              type: 'not[email]',
+              prompt: "Geen juist email adres"
+            }
+          ]
+        },
         wachtwoord: {
           identifier: 'wachtwoord',
           rules: [
             {
               type   : 'empty',
-              prompt : 'Een wachtwoord is wel verplicht hoor'
+              prompt : 'Geen wachwoord ingevuld'
             },
             {
               type   : 'minLength[6]',
