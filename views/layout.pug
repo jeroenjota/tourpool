@@ -12,48 +12,23 @@ html(lang='en')
       footer { position: absolute; bottom: 0; width: 100%; height: 30px; margin-top: 0; margin-bottom: 0; padding-top: 0; padding-bottom: 0; text-align: center}
       
   body
+    .container.background
+      img(src="../img/logogroot.png", alt="" style)
     .container
       .ui.yellow.inverted.large.menu
         a.header.item(href="/") 
-          img.ui.tiny.spaced.image(src="/img/jota.png", alt="Tourpool")
-        if gebruiker && gebruiker.isAdmin
-          .ui.dropdown.simple.link.item
-            i.cog.icon 
-            |Admin
-            i.dropdown.icon
-            .menu 
-              a(href="#").item
-                i.registered.outline.icon
-                | Formulier registreren
-              a(href="#").item
-                i.list.ol.icon
-                | Daguitslag invoeren
-              .item
-                i.print.icon
-                | Afdrukken
-                i.dropdown.icon
-                .menu 
-                  a(href="#").item
-                    i.wpforms.icon
-                    | Formulieren
-                  a(href="#").item
-                    i.list.ol.icon
-                    | Stand in de pool
-                  a(href="#").item
-                    i.columns.icon
-                    | Rituitslag & klassementen
-                  a(href="#").item
-                    i.signal.icon
-                    | Skyline
-                  
-
-
-        a.item(href="/tours")
-          i.sitemap.icon 
-          | Tourgegevens
-        a.item(href="/renners")
-          i.tasks.icon
-          | Renners
+          img.ui.tiny.spaced.image(src="/img/logo2.png", alt="Tourpool")
+        .ui.dropdown.simple.link.item
+          i.france.flag 
+          | Tour #{setting.tourjaar}
+          i.dropdown.icon
+          .menu
+            a.item(href="/tours")
+              i.sitemap.icon 
+              | Etappes
+            a.item(href="/renners")
+              i.tasks.icon
+              | Renners
         .ui.yellow.inverted.right.menu 
           if !gebruiker || !gebruiker.username
             a.item(href="/users/register") 
@@ -66,6 +41,35 @@ html(lang='en')
             .item
               i.hand.spock.outline.icon
               | Welkom #{gebruiker.fullName}
+            if gebruiker && gebruiker.isAdmin
+              .ui.dropdown.simple.link.item
+                i.cog.icon 
+                |Admin
+                i.dropdown.icon
+                .menu 
+                  a(href="#").item
+                    i.registered.outline.icon
+                    | Formulier registreren
+                  a(href="#").item
+                    i.list.ol.icon
+                    | Daguitslag invoeren
+                  .item
+                    i.print.icon
+                    | Afdrukken
+                    i.dropdown.icon
+                    .menu 
+                      a(href="#").item
+                        i.wpforms.icon
+                        | Formulieren
+                      a(href="#").item
+                        i.list.ol.icon
+                        | Stand in de pool
+                      a(href="#").item
+                        i.columns.icon
+                        | Rituitslag & klassementen
+                      a(href="#").item
+                        i.signal.icon
+                        | Skyline
             a.item(href="/users/profiel")
               i.address.card.outline.icon
               | Je profiel

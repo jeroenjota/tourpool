@@ -32,5 +32,17 @@ body {
 .mainpage {
     margin-top: 0px;
     margin-bottom: 40px;
-    height: auto
+    height: auto;
+}
+
+.background {
+    opacity: .05;
+    position: absolute;
+    overflow: hidden;
+    left: 0;
+    top: 0px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
 }
