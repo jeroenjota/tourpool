@@ -3,13 +3,13 @@ block content
 
   h1.ui.header De ploegen van #{gebruiker.vNaam} (#{gebruiker.username})
   
-  .ui.center.aligned.four.column.grid
+  .ui.center.aligned.grid(style="overflow:auto; max-height: 80vh;")
     if userteams.length === 0
       h2.ui.header Nog geen ploegen ingeleverd
     else
       .ui.row
         each team in userteams 
-          .ui.five.wide.form
+          .ui.form
             .ui.left.aligned.comment
               .ui.block.center.aligned.large.header 
                 - var ploegUrl = `/userteams/${team._id}/edit`
@@ -24,15 +24,23 @@ block content
                 .description
                   table.ui.basic.compact.table
                     - var i=1
-                    each renner in team.renners
-                      if i >  setting.rennerAant 
-                        tr.negative 
+                    tbody
+                      each renner in team.renners
+                        if i >  setting.rennerAant 
+                          tr.negative 
+                            td.center.aligned= i++
+                            td.left.aligned= renner.fullName
+                        else  
+                          tr.positive
                           td.center.aligned= i++
                           td.left.aligned= renner.fullName
-                      else  
-                        tr.positive
-                        td.center.aligned= i++
-                        td.left.aligned= renner.fullName
+                    tfoot   
+                      tr 
+                        if team.betaald 
+                          td(colspan="2").center.aligned.positive (ingeleverd en betaald)
+                        else  
+                          td(colspan="2").center.aligned.warning (formulier is nog niet betaald)
+
     .ui.buttons
       a(href="/").ui.animated.large.button
         .visible.content Terug
@@ -43,6 +51,3 @@ block content
         .visible.content Nieuw
         .hidden.content 
           i.edit.icon
-
-
-      

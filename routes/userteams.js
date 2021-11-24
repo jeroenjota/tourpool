@@ -7,18 +7,6 @@ const Team = require('../models/team')
 const { isLoggedIn } = require('../js/middleware');
 const poolSetting = require('../public/data/tourdata');
 const mongoose = require('mongoose');
-const ObjectId = require('mongoose').Types.ObjectId;
-const team = require('../models/team');
-
-function isValidObjectId(id) {
-
-    if (ObjectId.isValid(id)) {
-        if ((String)(new ObjectId(id)) === id)
-            return true;
-        return false;
-    }
-    return false;
-}
 
 router.get('/newteam', isLoggedIn, wrapAsync(async(req, res, next) => {
     const renners = await Renner.find({}).sort('aNaam')

@@ -17,6 +17,7 @@ const userRoutes = require('./routes/users');
 const rennerRoutes = require('./routes/renners');
 const tourRoutes = require('./routes/tours');
 const teamRoutes = require('./routes/userteams');
+const adminRoutes = require('./routes/admin');
 
 // models
 const User = require('./models/user');
@@ -29,7 +30,7 @@ app.use(express.urlencoded({
 }))
 
 // to use themes
-app.use('/semantic', express.static(path.join(__dirname + '/semantic')));
+// app.use('/semantic', express.static(path.join(__dirname + '/semantic')));
 app.use('/css', express.static(path.join(__dirname + '/public/css')));
 app.use('/js', express.static(path.join(__dirname + '/public/js')));
 app.use('/img', express.static(path.join(__dirname + '/public/img')));
@@ -76,8 +77,7 @@ app.use('/users', userRoutes);
 app.use('/renners', rennerRoutes);
 app.use('/tours', tourRoutes);
 app.use('/userteams', teamRoutes);
-
-let deGebruiker = {}
+app.use('/admin', adminRoutes);
 
 // database
 main().catch(err => console.log(err));

@@ -2,7 +2,7 @@ extends ../layout.pug
 
 block content 
   .ui.container 
-    h1.ui.header Ploeg van #{ gebruiker.username.toUpperCase() } aanpassen
+    h1.ui.header Ploeg van #{ gebruiker.username.toUpperCase() } (#{team.user.vNaam})aanpassen
     //- #{gebruiker.username}
     .ui.center.aligned.four.column.grid
       - var saveUrl = `/userteams/${team._id}`

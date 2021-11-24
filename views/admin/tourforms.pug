@@ -1,0 +1,62 @@
+extends ../layout.pug
+
+block content
+  h1.ui.header Tourpool #{setting.tourjaar}
+  .ui.center.aligned.four.column.grid
+    .ui.segment
+      .ui.block.center.aligned.large.header
+        h2.ui.header Ingevulde formulieren 
+        .ui.search
+          .ui.inline.field
+            .ui.icon.input
+              input.prompt(id="zoektxt" type="text" onkeyup="searchTable()"  placeholder = "Zoek...")
+              i.search.icon
+        .ui.raised.segment(style="overflow:auto; max-height: 80vh;")
+          table.ui.striped.table
+            thead
+              tr
+              th Ploegnaam 
+              th Ploeg van 
+              th Betaald
+            tbody#teamstable
+              each ploeg in teams 
+                - var tglURL = '/admin/togglepay/' + ploeg._id
+                tr
+                  td #{ploeg.teamname }
+                  td #{ploeg.user.fullName } (#{ploeg.user.username})
+                  td 
+                    if ploeg.betaald 
+                      a(href=tglURL) 
+                        i.check.square.outline.icon
+                    else
+                      a(href=tglURL) 
+                        i.square.outline.icon
+            tfoot 
+              tr 
+                td(colspan="3").center.aligned Vink betalingen aan/uit
+
+  script.
+    function searchTable() {
+      var input, filter, found, table, tr, td, i, j;
+      input = document.getElementById("zoektxt");
+      filter = input.value.toUpperCase();
+      table = document.getElementById("teamstable");
+      tr = table.getElementsByTagName("tr");
+      for (i = 0; i < tr.length; i++) {
+          td = tr[i].getElementsByTagName("td");
+          for (j = 0; j < td.length; j++) {
+              if (td[j].innerHTML.toUpperCase().indexOf(filter) > -1) {
+                  found = true;
+              }
+          }
+          if (found) {
+              tr[i].style.display = "";
+              found = false;
+          } else {
+              tr[i].style.display = "none";
+          }
+      }
+    } 
+  
+
+      

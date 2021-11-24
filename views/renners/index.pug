@@ -22,14 +22,14 @@ block content
                 i.bicycle.icon
 
         .ui.raised.segment(style="overflow: auto; max-height: 65vh")
-          table#rennertable.ui.striped.celled.table(align="center")
+          table.ui.striped.celled.table(align="center")
             thead 
               tr 
                 th.sorted.descending Rugnr
                 th Naam
                 th Ploeg
                 th
-            tbody
+            tbody#rennertable
               each renner, index in renners
                 +rennerRij(index, renner)
             tfoot 
