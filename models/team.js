@@ -11,6 +11,7 @@ const TeamSchema = new Schema({
         unique: [true, 'Naam bestaat al']
     },
     renners: [{ type: Schema.Types.ObjectId, ref: 'Renner' }],
+    betaald: Boolean,
 }, { timestamps: true })
 
 module.exports = mongoose.model('Team', TeamSchema)

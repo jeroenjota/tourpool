@@ -3,39 +3,42 @@ extends ../layout.pug
 block content
   - var userUrl = "/users/profiel/" + gebruiker._id
   h1.ui.header Welkom #{gebruiker.gebruikersnaam} bij Jota's Tourpool #{new Date().getFullYear()}
-  .ui.center.aligned.grid
-    .ui.raised.yellow.inverted.very.padded.text.left.aligned.segment
-      form(action=userUrl method="POST").ui.left.aligned.form
-        h2.ui.center.aligned.header Jouw gegevens
-        .ui.form
-          .two.fields
-            .required.field  
-              label(for="username") Gebruikersnaam
-              input(type="text" name="username" placceholder= "Gebrukersnaam" value=gebruiker.username)
-            .required.field  
-              label(for="email") Email
-              input(type="email" name="email" placceholder= "Email" value=gebruiker.email)
-          .fields.left.aligned
-            .five.wide.field 
-              label(for="vNaam") Voornaam
-              input(type="text" name="vNaam" placceholder= "Voornaam" value=gebruiker.vNaam)
-            .three.wide.field 
-              label(for="tNaam") &nbsp;
-              input(type="text" name="tNaam" placceholder= "tussenv" value=gebruiker.tNaam)
-            .eight.wide.required.field 
-              label(for="aNaam") Achternaam
-              input(type="text" name="aNaam" placceholder= "Achternaam" value=gebruiker.aNaam)
-        .ui.center.aligned.four.column.grid
-          .ui.row
-            .ui.buttons
-              a(href="/").ui.animated.large.button 
-                .visible.content Annuleren
-                .hidden.content 
-                  i.left.arrow.icon
-              .or.blue(data-text="")
-              button.ui.submit.large.animated.positive.button 
-                .visible.content Opslaan
-                .hidden.content   
-                  i.save.icon
-            
+  .ui.center.aligned.four.column.grid
+    .ui.five.wide.form
+      .ui.left.aligned.comment
+        .ui.block.center.aligned.large.header 
+          .description
+            form(action=userUrl method="POST").ui.left.aligned.form
+              h2.ui.center.aligned.header Jouw gegevens
+              .ui.form
+                .two.fields
+                  .required.field  
+                    label(for="username") Gebruikersnaam
+                    input(type="text" name="username" placceholder= "Gebrukersnaam" value=gebruiker.username)
+                  .required.field  
+                    label(for="email") Email
+                    input(type="email" name="email" placceholder= "Email" value=gebruiker.email)
+                .fields.left.aligned
+                  .five.wide.field 
+                    label(for="vNaam") Voornaam
+                    input(type="text" name="vNaam" placceholder= "Voornaam" value=gebruiker.vNaam)
+                  .three.wide.field 
+                    label(for="tNaam") &nbsp;
+                    input(type="text" name="tNaam" placceholder= "tussenv" value=gebruiker.tNaam)
+                  .eight.wide.required.field 
+                    label(for="aNaam") Achternaam
+                    input(type="text" name="aNaam" placceholder= "Achternaam" value=gebruiker.aNaam)
+              .ui.center.aligned.four.column.grid
+                .ui.row
+                  .ui.buttons
+                    a(href="/").ui.animated.large.button 
+                      .visible.content Annuleren
+                      .hidden.content 
+                        i.left.arrow.icon
+                    .or.blue(data-text="")
+                    button.ui.submit.large.animated.positive.button 
+                      .visible.content Opslaan
+                      .hidden.content   
+                        i.save.icon
                 
+                    

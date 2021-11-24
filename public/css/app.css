@@ -5,6 +5,11 @@
     --or-color: #f1dea8;
 }
 
+h1.ui.header {
+    margin-top: 20px;
+    margin-bottom: 20px;
+}
+
 body {
     background-color: var(--main-bg-color);
 }
