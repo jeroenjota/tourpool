@@ -11,7 +11,7 @@ block content
             .ui.icon.input
               input.prompt(id="zoektxt" type="text" onkeyup="searchTable()"  placeholder = "Zoek...")
               i.search.icon
-        .ui.raised.segment(style="overflow:auto; max-height: 80vh;")
+        .ui.raised.segment(style="overflow:auto; max-height: 55vh;")
           table.ui.striped.table
             thead
               tr
@@ -31,9 +31,7 @@ block content
                     else
                       a(href=tglURL) 
                         i.square.outline.icon
-            tfoot 
-              tr 
-                td(colspan="3").center.aligned Vink betalingen aan/uit
+        .ui.center.aligned.tiny.message Vink betalingen aan/uit
 
   script.
     function searchTable() {

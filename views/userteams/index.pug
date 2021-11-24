@@ -2,45 +2,6 @@ extends ../layout.pug
 block content 
 
   h1.ui.header De ploegen van #{gebruiker.vNaam} (#{gebruiker.username})
-  
-  .ui.center.aligned.grid(style="overflow:auto; max-height: 80vh;")
-    if userteams.length === 0
-      h2.ui.header Nog geen ploegen ingeleverd
-    else
-      .ui.row
-        each team in userteams 
-          .ui.form
-            .ui.left.aligned.comment
-              .ui.block.center.aligned.large.header 
-                - var ploegUrl = `/userteams/${team._id}/edit`
-                - var ploegDelete = `/userteams/${team._id}/delete`
-                a(href=ploegUrl) Team: #{team.teamname}
-                a(href=ploegDelete) 
-                  .ui.animated.tiny.negative.right.floated.button
-                    .visible.content
-                      i.trash.alternate.outline.icon 
-                    .hidden.content 
-                      i.trash.icon Wis
-                .description
-                  table.ui.basic.compact.table
-                    - var i=1
-                    tbody
-                      each renner in team.renners
-                        if i >  setting.rennerAant 
-                          tr.negative 
-                            td.center.aligned= i++
-                            td.left.aligned= renner.fullName
-                        else  
-                          tr.positive
-                          td.center.aligned= i++
-                          td.left.aligned= renner.fullName
-                    tfoot   
-                      tr 
-                        if team.betaald 
-                          td(colspan="2").center.aligned.positive (ingeleverd en betaald)
-                        else  
-                          td(colspan="2").center.aligned.warning (formulier is nog niet betaald)
-
     .ui.buttons
       a(href="/").ui.animated.large.button
         .visible.content Terug
@@ -51,3 +12,45 @@ block content
         .visible.content Nieuw
         .hidden.content 
           i.edit.icon
+  
+  .ui.left.aligned.padded.grid(style="overflow:auto; max-height: 80vh;")
+    if userteams.length === 0
+      h2.ui.header Nog geen ploegen ingeleverd
+    else
+      .ui.four.column.row
+        each team in userteams 
+          .column
+            .ui.form
+              .ui.left.aligned.comment
+                .ui.block.center.aligned.large.header 
+                  - var ploegUrl = `/userteams/${team._id}/edit`
+                  - var ploegDelete = `/userteams/${team._id}/delete`
+                  table.ui.small.compact.table
+                    thead 
+                      tr 
+                        th(colspan="2")
+                          a(href=ploegUrl) Team: #{team.teamname}
+                          a(href=ploegDelete) 
+                            .ui.animated.tiny.negative.right.floated.button
+                              .visible.content
+                                i.trash.alternate.outline.icon 
+                              .hidden.content 
+                                i.trash.icon Wis
+                      - var i=1
+                    tbody
+                      each renner in team.renners
+                        if i >  setting.rennerAant 
+                          tr.negative 
+                            td.two.wide.center.aligned.collapsing= i++
+                            td.fourteen.wide.left.aligned= renner.fullName
+                        else  
+                          tr.collapsing.positive
+                            td.two.wide.center.aligned.collapsing= i++
+                            td.fourteen.wide.left.aligned= renner.fullName
+                    tfoot   
+                      tr 
+                        if team.betaald 
+                          td(colspan="2").center.aligned.positive (ingeleverd en betaald)
+                        else  
+                          td(colspan="2").center.aligned.warning (formulier is nog niet betaald)
+
