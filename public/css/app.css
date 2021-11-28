@@ -51,3 +51,11 @@ body {
     display: flex;
     justify-content: center;
 }
+
+td.rennerrij {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    width: 1px;
+}

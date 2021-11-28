@@ -1,13 +1,13 @@
 const express = require('express');
 const AppError = require('../js/AppError');
 const router = express.Router();
-const Renner = require('../models/renner');
+const Tourrenner = require('../models/tourrenner');
 const wrapAsync = require('../js/wrapAsync')
 const { isLoggedIn } = require('../js/middleware')
     // ROUTES to RENNERS
 
 router.get('/', wrapAsync(async(req, res, next) => {
-    const renners = await Renner.find({}).sort({ nr: 1 })
+    const renners = await Tourrenner.find({}).sort({ nr: 1 }).populate('renner')
     if (!renners) {
         req.flash('error', "De renners tabel is niet gevonden???")
         return res.redirect('/')

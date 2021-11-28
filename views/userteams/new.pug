@@ -3,16 +3,19 @@ extends ../layout.pug
 block content 
   .ui.container 
     h1.ui.header Nieuwe ploeg voor #{gebruiker.username}
-    //- #{gebruiker.username}
     .ui.center.aligned.four.column.grid
 
       .ui.row
         .ui.left.aligned.comment
           .ui.block.center.aligned.large.header
-            form(action="/userteams/newteam" method="POST").ui.large.form
+            form(id="teamfrm" action="/userteams/newteam" method="POST").ui.large.form
               .inline.field  
                 label(for="teamname").ui.center.aligned.header Naam van de ploeg
-                input(type="text" id="teamname" name="teamname" placceholder= "Ploegnaam")
+                if !team 
+                  input(type="text" id="teamname" name="teamname" placceholder= "Ploegnaam")
+                else 
+                  input(type="text" id="teamname" name="teamname" placceholder= "Ploegnaam" value = team.teamname)
+
               .ui.grid
                 .ui.two.column.grid
                   .column
@@ -24,14 +27,19 @@ block content
                       - var n = 1
                       while n <= setting.rennerAant
                         - var ren = n-1
-                        - var lbl = 'renners[]'
+                        - var lbl = `renners[]`
                         tr  
                           td.center.aligned= n++
                           td.left.aligned 
-                            select(id=lbl name=lbl)
-                              option(hidden selected) Selecteer ...
-                              each renner in renners 
-                                -var naam = (renner.aNaam + ", " + renner.vNaam + ' ' + renner.tNaam).substring(0,20) + " (" + renner.nr + ")"
+                            if team
+                              - var sel = team.renners[ren]
+                            else  
+                              - var sel = ""
+                            select(id=ren name=lbl class="selRen", value=sel)
+
+                              option(hidden selected) 
+                              each renner in renners
+                                -var naam = renner.renner.showName.substring(0,20) + " (" + renner.nr + ")"
                                 option(value=renner._id)= naam
                   .column
                     .ui.left.aligned.comment
@@ -49,29 +57,59 @@ block content
                               tr  
                                 td.center.aligned= n++
                                 td.left.aligned 
-                                  select(id=lbl name=lbl)
-                                    option(hidden selected) Selecteer ...
+                                  if team
+                                    - var sel = team.renners[ren]
+                                  else  
+                                    - var sel = ""
+                                  select(id=ren name=lbl class="selRen", value=sel)
+                                    option(hidden selected) 
                                     each renner in renners 
-                                      -var naam = (renner.aNaam + ", " + renner.vNaam + ' ' + renner.tNaam).substring(0,20) + " (" + renner.nr + ")"
+                                      -var naam = renner.renner.showName.substring(0,20) + " (" + renner.nr + ")"
                                       option(value=renner._id)= naam
                     .ui.error.message
               .ui.center.aligned.row
                 .ui.buttons
                   a(href="/userteams").ui.large.button Annuleren
-                  .or(data-text="-")
+                  .or(data-text="")
                   button(type="submit").ui.positive.large.button Opslaan
   script.  
-    $('.ui.form')
-    .form({
-      fields: {
-        username: {
-          identifier: 'teamname',
-          rules: [
-            {
-              type   : 'empty',
-              prompt : 'Je hebt geen teamnaam opgegeven!'
-            }
-          ]
+    //- $('.ui.form')
+    //- .form({
+    //-   fields: {
+    //-     teamname: {
+    //-       identifier: 'teamname',
+    //-       rules: [
+    //-         {
+    //-           type   : 'empty',
+    //-           prompt : 'Je hebt geen teamnaam opgegeven!'
+    //-         }
+    //-       ]
+    //-     }
+    //-   }
+    //- });
+    $(document).ready(function(){
+      $("#teamfrm").validate({
+        ignore: [],
+        rules: {
+          "renners[]": "required",
+          "teamname": "required"
+        },
+        messages: {
+          "renners[]": "Selecteer overal een renner",
+          "teamname": "Geen ploegnaam opgegeven"
         }
-      }
-    });
+      })
+    })
+
+    $(".selRen").change(function(){
+      var ren = $(this).val()
+      var id = $(this).attr('id')
+      //- enable all disabled options first
+      $('option[disabled]').prop('disabled', false);
+
+      //- haal de geselecteerde renner uit de overige select options
+      $(".selRen").each(function(){
+        //- niet als het de huidige select is!
+        $('select').not(this).find('option[value="' + this.value +'"]').prop("disabled", true);
+      })
+    })

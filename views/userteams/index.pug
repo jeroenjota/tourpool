@@ -1,6 +1,10 @@
 extends ../layout.pug
 block content 
 
+  - var dt = new Date(setting.tourdatum.start).getTime()
+  - var nu = new Date().getTime()
+  - var dgn = Math.floor((dt-nu)/1000/60/60/24)-setting.updateTotDgn
+
   h1.ui.header De ploegen van #{gebruiker.vNaam} (#{gebruiker.username})
     .ui.buttons
       a(href="/").ui.animated.large.button
@@ -12,45 +16,65 @@ block content
         .visible.content Nieuw
         .hidden.content 
           i.edit.icon
-  
-  .ui.left.aligned.padded.grid(style="overflow:auto; max-height: 80vh;")
+  .ui.item
+    if dgn === 0
+      | (Laatste dag om te wijzigen!)
+    else if dgn === 1
+      | (Nog 1 dag om te wijzigen!)
+    else  
+      | (Nog #{dgn} dagen om te wijzigen!)
+
+  .ui.left.aligned.grid(style="overflow:auto; max-height: 70vh;")
     if userteams.length === 0
       h2.ui.header Nog geen ploegen ingeleverd
     else
-      .ui.four.column.row
+      .ui.four.column.grid
         each team in userteams 
-          .column
+          if userteams.length > 4
+            - var wd = 25
+          else
+            -var wd= 100/userteams.length
+          - var wid = `width: ${wd}%` 
+          .column(style=wid)
             .ui.form
               .ui.left.aligned.comment
                 .ui.block.center.aligned.large.header 
-                  - var ploegUrl = `/userteams/${team._id}/edit`
+                  if dgn >= 0
+                    - var ploegUrl = `/userteams/${team._id}/edit`
+                  else  
+                    - var ploegUrl = `/userteams`
                   - var ploegDelete = `/userteams/${team._id}/delete`
                   table.ui.small.compact.table
                     thead 
                       tr 
                         th(colspan="2")
-                          a(href=ploegUrl) Team: #{team.teamname}
-                          a(href=ploegDelete) 
-                            .ui.animated.tiny.negative.right.floated.button
-                              .visible.content
-                                i.trash.alternate.outline.icon 
-                              .hidden.content 
-                                i.trash.icon Wis
+                          //- dagen voor de tourstart niet meer updaten (setting.updateTotDgn)
+                          if dgn >= 0
+                            a(href=ploegUrl) Team: #{team.teamname}
+                          else  
+                            | Team: #{team.teamname}
                       - var i=1
                     tbody
                       each renner in team.renners
                         if i >  setting.rennerAant 
-                          tr.negative 
+                          tr.negative
                             td.two.wide.center.aligned.collapsing= i++
-                            td.fourteen.wide.left.aligned= renner.fullName
+                            td.rennerrij.fourteen.wide.left.aligned= renner.renner.showName.substring(0,23)
                         else  
                           tr.collapsing.positive
                             td.two.wide.center.aligned.collapsing= i++
-                            td.fourteen.wide.left.aligned= renner.fullName
+                            td.rennerrij.fourteen.wide.left.aligned= renner.renner.showName.substring(0,23)
                     tfoot   
                       tr 
                         if team.betaald 
-                          td(colspan="2").center.aligned.positive (ingeleverd en betaald)
+                          td(colspan="2").center.aligned.positive ingeleverd en betaald
                         else  
-                          td(colspan="2").center.aligned.warning (formulier is nog niet betaald)
+                          td(colspan="2").center.aligned.warning Nog niet betaald 
+                            a(href=ploegDelete) 
+                              .ui.animated.tiny.negative.right.floated.button
+                                .visible.content
+                                  i.trash.alternate.outline.icon 
+                                .hidden.content 
+                                  i.trash.icon Wis
+
 

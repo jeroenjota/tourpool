@@ -26,15 +26,17 @@ block content
           i.envelope.icon
           |Pool inleveren 
         .ui.item Je kunt per ploeg een formulier afdrukken en inleveren bij de organisatie. 
-        p Zodra je ploeg is ingeleverd en je hebt betaald, doet hij mee voor de pool
-        p De inleg per ploeg is #[strong #{inleg}]
+        | Zodra je ploeg is ingeleverd en je hebt betaald, doet hij mee voor de pool.
+        br
+        | Je mag formulieren inleveren tot #[strong #{setting.updateTotDgn} dagen] voor de start van de tour.
+        h4.ui.header De inleg per ploeg is #[strong #{inleg}]
 
     .column 
       .ui.raised.segment
         h3.ui.header 
           i.sort.numeric.up.icon 
           | Punten 
-        h4.ui.header Aan het eind van de etappe verdienen deelnemerploegen punten: 
+        h4.ui.header Aan het eind van de dag kunnen renners in je ploeg punten verdienen: 
         .ui.list 
           h4.ui.header 
             i.database.icon

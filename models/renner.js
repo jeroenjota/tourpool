@@ -1,8 +1,17 @@
+/////////////
+// RENNER model
+/////////////
+
+// this is the source renner table. 
+// For now used as the basis for the user temas. 
+///  
+
+/// CHANGE THIS !!!! 
+
 const mongoose = require('mongoose')
 const { Schema } = mongoose;
 
 const RennerSchema = new Schema({
-    nr: Number,
     vNaam: { type: String, trim: true },
     tNaam: { type: String, trim: true },
     aNaam: {
@@ -11,30 +20,32 @@ const RennerSchema = new Schema({
         trim: true,
         required: true
     },
-    ploeg: { type: String, trim: true },
     land: { type: String, trim: true },
 });
 
 RennerSchema.set('toObject', { virtuals: true })
 RennerSchema.set('toJSON', { virtuals: true })
 
+
+// volledige naam
 RennerSchema.virtual('fullName').get(function() {
-    let name = ''
-    if (this.vNaam) {
-        name = this.vNaam
-    }
-    if (this.tNaam) {
-        if (name) {
-            name = name + ' ' + this.tNaam
+        let name = ''
+        if (this.vNaam) {
+            name = this.vNaam
         }
-    }
-    if (this.aNaam) {
-        if (name) {
-            name = name + ' ' + this.aNaam
+        if (this.tNaam) {
+            if (name) {
+                name = name + ' ' + this.tNaam
+            }
         }
-    }
-    return name;
-})
+        if (this.aNaam) {
+            if (name) {
+                name = name + ' ' + this.aNaam
+            }
+        }
+        return name;
+    })
+    // Achternaam gevolgde door Voornaam en tussenvg
 
 RennerSchema.virtual('showName').get(function() {
     let name = ''

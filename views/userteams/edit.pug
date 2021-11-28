@@ -1,6 +1,6 @@
 extends ../layout.pug
-
 block content 
+
   .ui.container 
     h1.ui.header Ploeg van #{ gebruiker.username.toUpperCase() } (#{team.user.vNaam})aanpassen
     //- #{gebruiker.username}
@@ -9,7 +9,7 @@ block content
       .ui.row
         .ui.left.aligned.comment
           .ui.block.center.aligned.large.header
-            form(action=saveUrl method="POST").ui.large.form
+            form(id="teamfrm" action=saveUrl method="POST").ui.large.form
               .inline.field  
                 label(for="teamname").ui.center.aligned.header Naam van de ploeg
                 input(type="text" id="teamname" name="team[teamname]" placceholder= "Ploegnaam" value = team.teamname)
@@ -23,15 +23,20 @@ block content
                       while n <= setting.rennerAant
                         - var ren = n-1
                         - var lbl = 'renners[]'
+                        - var teamRen = 0
+                        if team.renners.length > ren
+                          - var teamRen = team.renners[ren]._id
                         tr  
                           td.center.aligned= n++
                           td.left.aligned 
-                            select(id=id name=lbl value=team.renners[ren]._id )
+                            select(id=ren name=lbl class="selRen" value=teamRen)
+                              option(hidden selected) Selecteer ...
                               each renner in renners
-                                if team.renners[ren]._id .equals(renner._id)
-                                  option(value=renner._id selected=true)= renner.showName
+                                if renner._id.equals(teamRen)
+                                  option(value=renner._id selected=true)= renner.renner.showName
                                 else
-                                  option(value=renner._id)= renner.showName
+                                  option(value=renner._id)= renner.renner.showName
+                          
                   .column
                     .ui.left.aligned.comment
                       .content
@@ -39,19 +44,25 @@ block content
                           table.ui.basic.compact.small.table
                             tr 
                               th(colspan="2") Reserves
-                            - var n = setting.rennerAant +1
+                            - var n = setting.rennerAant + 1
                             while n <= setting.rennerstotaal
                               - var ren = n-1
                               - var lbl = 'renners[]'
+                              -  var teamRen = 0
+                              if team.renners.length > ren
+                                - var teamRen = team.renners[ren]._id
                               tr  
                                 td.center.aligned= n++
                                 td.left.aligned 
-                                  select(id=id name=lbl value=team.renners[ren]._id )
+                                  select(id=ren name=lbl class="selRen" value=teamRen)
+                                    option(hidden selected) 
                                     each renner in renners
-                                      if team.renners[ren]._id .equals(renner._id)
-                                        option(value=renner._id selected=true)= renner.showName
+                                      if renner._id.equals(teamRen)
+                                        option(value=renner._id selected=true)= renner.renner.showName
                                       else
-                                        option(value=renner._id)= renner.showName
+                                        option(value=renner._id)= renner.renner.showName
+                    .ui.error.message
+
               .ui.center.aligned.row
                 .ui.buttons
                   a(href="/userteams").ui.animated.large.button
@@ -63,3 +74,58 @@ block content
                     .visible.content Opslaan
                     .hidden.content 
                       i.save.icon
+  
+  script.  
+    $('.ui.form')
+    .form({
+      ignore: [],
+      fields: {
+        team: 
+        {
+          identifier: 'team[teamname]',
+          rules: [
+            {
+              type   : 'empty',
+              prompt : 'Je hebt geen teamnaam opgegeven!'
+            }
+          ]
+        },
+        renners[]: 
+        {
+          rules: [
+            { type : 'empty',
+              prompt: 'Vul alle renners in'
+            },
+          ]
+        }
+      }
+    });
+  script. 
+    $(document).ready(function(){
+      setRenList()
+      $("#teamfrm").validate({
+        ignore: [],
+        rules: {
+          "renners[]": "required",
+          "teamname": "required"
+        },
+        messages: {
+          "renners[]": "Selecteer overal een renner",
+        }
+      })
+    })
+    function setRenList(){
+      //- enable all disabled options first
+      $('option[disabled]').prop('disabled', false);
+
+      //- haal de geselecteerde renner uit de overige select options
+      $(".selRen").each(function(){
+        //- niet als het de huidige select is!
+        $('select').not(this).find('option[value="' + this.value +'"]').prop("disabled", true);
+      })
+
+    }
+    $(".selRen").change(function(){
+      setRenList()
+    })
+

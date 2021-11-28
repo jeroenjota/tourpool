@@ -5,7 +5,7 @@ mixin rennerRij(index, renner)
   
   tr
     td.right.aligned #{renner.nr}
-    td #{renner.fullName}
+    td #{renner.renner.fullName}
     td #{renner.ploeg}
     td 
       form(action=deleteUrl method = "POST")

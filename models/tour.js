@@ -1,3 +1,11 @@
+/////////////
+// TOUR model
+/////////////
+/// not used for now. We have a JSON file for this. 
+/// public/data/tourdata.js
+////////////
+
+
 const mongoose = require('mongoose')
 const { Schema } = mongoose;
 

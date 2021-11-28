@@ -1,3 +1,11 @@
+/////////////
+// TEAM model
+/////////////
+/// This is the model for the user teams (NOT the Tour teams)
+/////////////
+//////// ???????????????????????
+// for now we use the RENNER model this should be the TOURRENNER model
+/////////// !!!!!!!!!!!!!!!!!!!!!!!
 const mongoose = require('mongoose')
 const { Schema } = mongoose
 
@@ -10,8 +18,10 @@ const TeamSchema = new Schema({
         required: true,
         unique: [true, 'Naam bestaat al']
     },
-    renners: [{ type: Schema.Types.ObjectId, ref: 'Renner' }],
+    renners: [{ type: Schema.Types.ObjectId, ref: 'Tourrenner' }],
     betaald: Boolean,
 }, { timestamps: true })
+
+
 
 module.exports = mongoose.model('Team', TeamSchema)

@@ -1,0 +1,82 @@
+extends ../layout.pug
+
+block content 
+  .ui.container 
+    h1.ui.header Nieuwe ploeg voor #{gebruiker.username}
+    .ui.center.aligned.four.column.grid
+
+      .ui.row
+        .ui.left.aligned.comment
+          .ui.block.center.aligned.large.header
+            form(id="teamfrm" action="/userteams/newteam" method="POST").ui.large.form
+              .inline.field  
+                label(for="teamname").ui.center.aligned.header Naam van de ploeg
+                input(type="text" id="teamname" name="teamname" placceholder= "Ploegnaam")
+              .inline.field
+                label(for="renSelect").ui.center.aligned.header Renners 
+                select(id="renSelect")
+                  option(hidden selected) Kies renner ...
+                  each renner in renners 
+                    -var naam = renner.renner.showName.substring(0,20) + " (" + renner.nr + ")"
+                    option(value=renner._id)= naam
+                .ui.grid
+                  .column
+                    table.ui.selectable.basic.compact.celled.table
+                      tr 
+                        th.two.wide Pos
+                        th.fourteen.wide Renner
+                      - var n = 1
+                      while n <= setting.rennerstotaal
+                        - var ren = n-1
+                        - var lbl = `renners[]`
+                        - var trcls = 'positive'
+                        if n > setting.rennerAant
+                          - var trcls = 'negative'
+                        tr(class=trcls id=n)
+                          td.center.aligned= n++
+                          td.left.aligned
+                    .ui.error.message
+              .ui.center.aligned.row
+                .ui.buttons
+                  a(href="/userteams").ui.large.button Annuleren
+                  .or(data-text="")
+                  button(type="submit").ui.positive.large.button Opslaan
+  script.  
+    $('.ui.form')
+    .form({
+      fields: {
+        teamname: {
+          identifier: 'teamname',
+          rules: [
+            {
+              type   : 'empty',
+              prompt : 'Je hebt geen teamnaam opgegeven!'
+            }
+          ]
+        }
+      }
+    });
+  script. 
+    $(document).ready(function(){
+      console.log('ready')
+      $("#teamfrm").validate({
+        ignore: [],
+        rules: {
+          "renners[]": "required"
+        },
+        messages: {
+          "renners[]": "Selecteer overal een renner",
+        }
+      })
+    })
+  script.
+    var retval = []
+    var row = 1
+    $("tr").click(function(){
+      row = $("tr").index(this)
+    })
+    $("#renSelect").change(function(){
+      var ren = $("#renSelect option:selected").html()
+      $("table").find('tr#' + row).find('td:eq(1)').html(ren)
+      console.log('This = ' + ren)
+    })
