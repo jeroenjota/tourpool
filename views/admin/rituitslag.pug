@@ -1,0 +1,19 @@
+extends ../layout.pug
+
+block content 
+  .ui.container 
+    h1.ui.header Rituitslagen van Tour #{setting.tourjaar}
+    .ui.center.aligned.four.column.grid
+
+      .ui.row
+        .ui.left.aligned.grid
+          .ui.left.aligned.segment
+            .ui.list
+              each etap, index in setting.tourEtappes 
+                - var dat = new Intl.DateTimeFormat('nl-NL',{weekday:'short', day: 'numeric', month: 'short'}).format(new Date(etap.datum))
+                if etap.nr
+                  li.item
+                    | #{etap.nr}
+                    |: #{dat}
+                    | -#{etap.van} - #{etap.naar}
+                    

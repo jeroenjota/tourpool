@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const TourRennerSchema = new Schema({
+    jaar: Number,
     renner: { type: Schema.Types.ObjectId, ref: 'Renner' },
     nr: Number,
     ploeg: { type: String, trim: true },
