@@ -3,17 +3,61 @@ extends ../layout.pug
 block content 
   .ui.container 
     h1.ui.header Rituitslagen van Tour #{setting.tourjaar}
-    .ui.center.aligned.four.column.grid
-
-      .ui.row
-        .ui.left.aligned.grid
-          .ui.left.aligned.segment
-            .ui.list
-              each etap, index in setting.tourEtappes 
-                - var dat = new Intl.DateTimeFormat('nl-NL',{weekday:'short', day: 'numeric', month: 'short'}).format(new Date(etap.datum))
-                if etap.nr
-                  li.item
-                    | #{etap.nr}
-                    |: #{dat}
-                    | -#{etap.van} - #{etap.naar}
-                    
+    .ui.grid(style="overflow:auto; max-height: 70vh;")
+      .left.aligned.column
+        .ui.list
+          each etap, index in setting.tourEtappes 
+            - var dat = new Intl.DateTimeFormat('nl-NL',{weekday:'short', day: 'numeric', month: 'short'}).format(new Date(etap.datum))
+            if etap.nr
+              .ui.segment
+                li.dag
+                  | #{etap.nr}
+                  |: #{dat}
+                  | -#{etap.van} - #{etap.naar}
+                  .ui.five.column.grid.segment.compact.blok.hideContent
+                    .column
+                      h3.header Etappeuitslag
+                      .ui.list 
+                        each pnt, index in setting.punten.etappe.uitslag 
+                          if uitslag.etappes > 0  
+                            - var val = uitslag.etappes[etap.nr-1].ritUitsl[index].renner
+                          else  
+                            - var val = 0
+                          .inline.field 
+                            label #{index+1}: 
+                            select(id=index class="selRen" value=val)
+                              option(hidden selected) 
+                              each renner in renners
+                                -var naam = renner.renner.showName.substring(0,20) + " (" + renner.nr + ")"
+                                option(value=renner._id)= naam
+                    .column
+                      h3.header Gele trui
+                      .ui.list 
+                        each pnt, index in setting.punten.etappe.truien.geel 
+                        
+                          .item #{index+1}: 
+                            input(type="text", name="")
+                    .column
+                      h3.header Groene trui
+                      .ui.list 
+                        each pnt, index in setting.punten.etappe.truien.groen
+                          .item #{index+1}: 
+                            input(type="text", name="")
+                    .column
+                      h3.header Bolletjes trui
+                      .ui.list 
+                        each pnt, index in setting.punten.etappe.truien.bol 
+                          .item #{index+1}: 
+                            input(type="text", name="")
+                    .column
+                      h3.header Witte trui
+                      .ui.list 
+                        each pnt, index in setting.punten.etappe.truien.wit 
+                          .item #{index+1}: 
+                            input(type="text", name="")
+  script. 
+    $('li.dag').on('click', function(){
+      var uitsl = $(this).find('.blok')[0]
+      console.dir(uitsl)
+      uitsl.classList.toggle('hideContent');
+    })
