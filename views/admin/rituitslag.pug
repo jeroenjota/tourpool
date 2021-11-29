@@ -10,54 +10,107 @@ block content
             - var dat = new Intl.DateTimeFormat('nl-NL',{weekday:'short', day: 'numeric', month: 'short'}).format(new Date(etap.datum))
             if etap.nr
               .ui.segment
-                li.dag
+                h4.header.dag
                   | #{etap.nr}
                   |: #{dat}
                   | -#{etap.van} - #{etap.naar}
-                  .ui.five.column.grid.segment.compact.blok.hideContent
-                    .column
-                      h3.header Etappeuitslag
-                      .ui.list 
-                        each pnt, index in setting.punten.etappe.uitslag 
-                          if uitslag.etappes > 0  
-                            - var val = uitslag.etappes[etap.nr-1].ritUitsl[index].renner
-                          else  
-                            - var val = 0
-                          .inline.field 
-                            label #{index+1}: 
-                            select(id=index class="selRen" value=val)
-                              option(hidden selected) 
-                              each renner in renners
-                                -var naam = renner.renner.showName.substring(0,20) + " (" + renner.nr + ")"
-                                option(value=renner._id)= naam
-                    .column
-                      h3.header Gele trui
-                      .ui.list 
-                        each pnt, index in setting.punten.etappe.truien.geel 
-                        
-                          .item #{index+1}: 
-                            input(type="text", name="")
-                    .column
-                      h3.header Groene trui
-                      .ui.list 
-                        each pnt, index in setting.punten.etappe.truien.groen
-                          .item #{index+1}: 
-                            input(type="text", name="")
-                    .column
-                      h3.header Bolletjes trui
-                      .ui.list 
-                        each pnt, index in setting.punten.etappe.truien.bol 
-                          .item #{index+1}: 
-                            input(type="text", name="")
-                    .column
-                      h3.header Witte trui
-                      .ui.list 
-                        each pnt, index in setting.punten.etappe.truien.wit 
-                          .item #{index+1}: 
-                            input(type="text", name="")
+                  p
+                  form(action="/admin/rituitslag" method="POST").ui.form
+                    .ui.five.column.divided.grid.segment.compact.blok.hideContent
+                      input(type="hidden" name="ritnr" value=etap.nr)
+                      .column
+                        h4.header Etappeuitslag
+                        - var lbl = "ritUitsl[]"
+                        .ui.list 
+                          each pnt, index in setting.punten.etappe.uitslag 
+                            if etappe 
+                              - var sel=etappe[etap.nr-1].ritUitsl[index].renner
+                            else  
+                              - var sel = 0
+                            .inline.field
+                              label #{index+1}: 
+                              select.fourteen.wide.field(id=ren name=lbl class="selRen", value=sel)
+                                option(hidden selected) 
+                                each renner in renners
+                                  -var naam = renner.renner.showName.substring(0,15) + " (" + renner.nr + ")"
+                                  option(value=renner._id)= naam
+                      .column
+                        h4.header Gele trui
+                        - var lbl = "geel[]"
+                        .ui.list 
+                          each pnt, index in setting.punten.etappe.truien.geel 
+                            if etappe 
+                              - var sel=etappe[etap.nr-1].geell[index].renner
+                            else  
+                              - var sel = 0
+                            .inline.field
+                              label #{index+1}: 
+                              select.fourteen.wide.field(id=ren name=lbl class="selRen", value=sel)
+                                option(hidden selected) 
+                                each renner in renners
+                                  -var naam = renner.renner.showName.substring(0,15) + " (" + renner.nr + ")"
+                                  option(value=renner._id)= naam
+                      .column
+                        h4.header Groene trui
+                        - var lbl = "groen[]"
+                        .ui.list 
+                          each pnt, index in setting.punten.etappe.truien.groen
+                            if etappe 
+                              - var sel=etappe[etap.nr-1].groen[index].renner
+                            else  
+                              - var sel = 0
+                            .inline.field
+                              label #{index+1}: 
+                              select.fourteen.wide.field(id=ren name=lbl class="selRen", value=sel)
+                                option(hidden selected) 
+                                each renner in renners
+                                  -var naam = renner.renner.showName.substring(0,15) + " (" + renner.nr + ")"
+                                  option(value=renner._id)= naam
+                      .column
+                        h4.header Bolletjes trui
+                        - var lbl = "bol[]"
+                        .ui.list 
+                          each pnt, index in setting.punten.etappe.truien.bol
+                            if etappe 
+                              - var sel=etappe[etap.nr-1].bol[index].renner
+                            else  
+                              - var sel = 0
+                            .inline.field
+                              label #{index+1}: 
+                              select.fourteen.wide.field(id=ren name=lbl class="selRen", value=sel)
+                                option(hidden selected) 
+                                each renner in renners
+                                  -var naam = renner.renner.showName.substring(0,15) + " (" + renner.nr + ")"
+                                  option(value=renner._id)= naam
+                      .column
+                        h4.header Witte trui
+                        - var lbl = "wit[]"
+                        .ui.list 
+                          each pnt, index in setting.punten.etappe.truien.wit
+                            if etappe 
+                              - var sel=etappe[etap.nr-1].wit[index].renner
+                            else  
+                              - var sel = 0
+                            .inline.field
+                              label #{index+1}: 
+                              select.fourteen.wide.field(id=ren name=lbl class="selRen", value=sel)
+                                option(hidden selected) 
+                                each renner in renners
+                                  -var naam = renner.renner.showName.substring(0,15) + " (" + renner.nr + ")"
+                                  option(value=renner._id)= naam
+                      .center.aligned.row
+                        button.ui.button.positive Opslaan
+
   script. 
-    $('li.dag').on('click', function(){
+    $('.dag').click(function(){
       var uitsl = $(this).find('.blok')[0]
       console.dir(uitsl)
-      uitsl.classList.toggle('hideContent');
+      uitsl.classList.remove("hideContent");
     })
+    
+    //- $('.ui.button').click(function(){
+    //-   console.log('button clicked:' , $(this).parent())
+    //-   var uitsl = $(this).parent().parent()[0]
+    //-   console.dir(uitsl)
+    //-   uitsl.classList.add('hideContent');
+    //- })
