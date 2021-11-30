@@ -31,4 +31,4 @@ const UitslagSchema = new Schema({
     }]
 })
 
-module.exports = mongoose.model('Uitslagen', UitslagSchema);
+module.exports = mongoose.model('Result', UitslagSchema);

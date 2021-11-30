@@ -1,7 +1,6 @@
 const express = require('express');
 const AppError = require('../js/AppError');
 const router = express.Router();
-const userValidate = require('../validations/schemas.js')
 const User = require('../models/user');
 const wrapAsync = require('../js/wrapAsync');
 const passport = require('passport');

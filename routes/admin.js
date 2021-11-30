@@ -40,8 +40,8 @@ router.get('/rituitslag', wrapAsync(async(req, res, next) => {
         let uitslag = new Uitslag({ jaar: poolSetting.tourjaar })
         try {
             uitslag.save();
-        } catch {
-            req.flash('error', "Kon geen nieuwe uitslag aanmaken")
+        } catch (e) {
+            req.flash('error', "Kon geen nieuwe uitslag aanmaken: " + e)
             res.redirect('/')
         }
     }
@@ -50,7 +50,12 @@ router.get('/rituitslag', wrapAsync(async(req, res, next) => {
     const renners = _.sortBy(tourrenners, function(item) {
         return [item.renner.aNaam]
     })
-    console.log(uitslag)
+    if (uitslag.etappes) {
+        uitslag.etappes = _.sortBy(uitslag.etappes, function(item) {
+            return [item.ritnr]
+        })
+    }
+    console.log(uitslag.etappes)
     res.render('admin/rituitslag', { uitslag, renners })
 }))
 

@@ -23,16 +23,6 @@ router.get('/new', isLoggedIn, (req, res) => {
 router.post('/', isLoggedIn, wrapAsync(async(req, res, next) => {
     // sla de renner op
     //if (!req.body.renner.aNaam) throw new AppError('Achternaam van een renner is verplicht', 400)
-    const rennerSchema = Joi.object({
-        renner: Joi.object({
-            vNaam: Joi.string().alphanum(),
-            tNaam: Joi.string().alphanum(),
-            aNaam: Joi.string().alphanum(),
-            nr: Joi.number().integer().min(1).max(250),
-            land: Joi.string().alphanum(),
-            ploeg: Joi.string().alphanum()
-        })
-    })
     const renner = new Renner(req.body.renner);
     const newRenner = await renner.save();
     if (!newRenner) {

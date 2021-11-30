@@ -14,29 +14,34 @@ block content
                   | #{etap.nr}
                   |: #{dat}
                   | -#{etap.van} - #{etap.naar}
-                  p
-                form(action="/admin/rituitslag" method="POST").ui.mini.form
-                  .ui.five.column.divided.grid.segment.compact.blok.hideContent
+                form(action="/admin/rituitslag" method="POST").ui.form
+                  .ui.three.column.grid.blok.hideContent
                     input(type="hidden" name="ritnr" value=etap.nr)
                     .column
                       +uitslag('ritUitsl', index+1)
                     .column
                       +uitslag('geel', index+1)
-                    .column
                       +uitslag('groen', index+1)
                     .column
                       +uitslag('bol', index+1)
-                    .column
                       +uitslag('wit', index+1)
-                    .center.aligned.row
-                      button.ui.button.positive Opslaan
+                    .two.column.row
+                      .fluid.ui.buttons
+                        button.animated.ui.right.floated.positive.button
+                          .visible.content Opslaan
+                          .hidden.content   
+                            i.save.icon
 
   script. 
     var uitsl
+    function hideResult(){
+      uitsl.classList.toggle("hideContent");
+    }
     $('h4.header').click(function(){
       uitsl = $(this).parent().find('.blok')[0]
-      uitsl.classList.toggle("hideContent");
+      hideResult()
     })
+    
     
     //- $('.ui.button').click(function(){
     //-   console.log('button clicked:' , $(this).parent())

@@ -16,10 +16,10 @@ mixin uitslag(type, etap)
           - var sel = 0
         .inline.field 
           label #{index+1}:
-          select.fourteen.wide.field(id=ren name=lbl class="selRen", value=sel)
+          select.fourteen.wide.field(id=ren name=lbl, value=sel)
             option(hidden selected) 
             each renner in renners
-              -var naam = renner.renner.showName.substring(0,12) + " (" + renner.nr + ")"
+              -var naam = renner.renner.showName.substring(0,25) + " (" + renner.nr + ")"
               if renner._id.equals(sel)
                 option(value=renner._id selected=true)= naam 
               else 

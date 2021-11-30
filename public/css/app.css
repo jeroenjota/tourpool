@@ -62,4 +62,5 @@ td.rennerrij {
 
 .hideContent {
     visibility: collapse !important;
+    display: none !important;
 }
