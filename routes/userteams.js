@@ -53,7 +53,7 @@ router.post('/newteam', isLoggedIn, wrapAsync(async(req, res, next) => {
         }
     }
     req.session.team = team;
-    console.log(await team.populate({ path: 'renners', populate: { path: 'renner', model: 'Renner' } }))
+    // console.log(await team.populate({ path: 'renners', populate: { path: 'renner', model: 'Renner' } }))
     try {
         const newTeam = await team.save();
     } catch (e) {

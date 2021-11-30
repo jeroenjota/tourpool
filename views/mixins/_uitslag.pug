@@ -1,0 +1,27 @@
+mixin uitslag(type, etap)
+  if type === 'ritUitsl'
+    - var hdr = "Etappenuitslag"
+    - var arr = setting.punten.etappe.uitslag    
+  else 
+    - var hdr = type.toLowerCase()
+    - var arr = setting.punten.etappe.truien[type]
+  - var lbl = type+'[]'
+  
+  h4 #{hdr}
+    .ui.list 
+      each pnt, index in arr
+        if uitslag.etappes[etap-1]
+          - var sel = uitslag.etappes[etap-1][type][index].renner
+        else  
+          - var sel = 0
+        .inline.field 
+          label #{index+1}:
+          select.fourteen.wide.field(id=ren name=lbl class="selRen", value=sel)
+            option(hidden selected) 
+            each renner in renners
+              -var naam = renner.renner.showName.substring(0,12) + " (" + renner.nr + ")"
+              if renner._id.equals(sel)
+                option(value=renner._id selected=true)= naam 
+              else 
+                option(value=renner._id)= naam
+                      

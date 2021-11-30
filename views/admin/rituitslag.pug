@@ -1,5 +1,5 @@
 extends ../layout.pug
-
+include ../mixins/_uitslag
 block content 
   .ui.container 
     h1.ui.header Rituitslagen van Tour #{setting.tourjaar}
@@ -15,97 +15,27 @@ block content
                   |: #{dat}
                   | -#{etap.van} - #{etap.naar}
                   p
-                  form(action="/admin/rituitslag" method="POST").ui.form
-                    .ui.five.column.divided.grid.segment.compact.blok.hideContent
-                      input(type="hidden" name="ritnr" value=etap.nr)
-                      .column
-                        h4.header Etappeuitslag
-                        - var lbl = "ritUitsl[]"
-                        .ui.list 
-                          each pnt, index in setting.punten.etappe.uitslag 
-                            if etappe 
-                              - var sel=etappe[etap.nr-1].ritUitsl[index].renner
-                            else  
-                              - var sel = 0
-                            .inline.field
-                              label #{index+1}: 
-                              select.fourteen.wide.field(id=ren name=lbl class="selRen", value=sel)
-                                option(hidden selected) 
-                                each renner in renners
-                                  -var naam = renner.renner.showName.substring(0,15) + " (" + renner.nr + ")"
-                                  option(value=renner._id)= naam
-                      .column
-                        h4.header Gele trui
-                        - var lbl = "geel[]"
-                        .ui.list 
-                          each pnt, index in setting.punten.etappe.truien.geel 
-                            if etappe 
-                              - var sel=etappe[etap.nr-1].geell[index].renner
-                            else  
-                              - var sel = 0
-                            .inline.field
-                              label #{index+1}: 
-                              select.fourteen.wide.field(id=ren name=lbl class="selRen", value=sel)
-                                option(hidden selected) 
-                                each renner in renners
-                                  -var naam = renner.renner.showName.substring(0,15) + " (" + renner.nr + ")"
-                                  option(value=renner._id)= naam
-                      .column
-                        h4.header Groene trui
-                        - var lbl = "groen[]"
-                        .ui.list 
-                          each pnt, index in setting.punten.etappe.truien.groen
-                            if etappe 
-                              - var sel=etappe[etap.nr-1].groen[index].renner
-                            else  
-                              - var sel = 0
-                            .inline.field
-                              label #{index+1}: 
-                              select.fourteen.wide.field(id=ren name=lbl class="selRen", value=sel)
-                                option(hidden selected) 
-                                each renner in renners
-                                  -var naam = renner.renner.showName.substring(0,15) + " (" + renner.nr + ")"
-                                  option(value=renner._id)= naam
-                      .column
-                        h4.header Bolletjes trui
-                        - var lbl = "bol[]"
-                        .ui.list 
-                          each pnt, index in setting.punten.etappe.truien.bol
-                            if etappe 
-                              - var sel=etappe[etap.nr-1].bol[index].renner
-                            else  
-                              - var sel = 0
-                            .inline.field
-                              label #{index+1}: 
-                              select.fourteen.wide.field(id=ren name=lbl class="selRen", value=sel)
-                                option(hidden selected) 
-                                each renner in renners
-                                  -var naam = renner.renner.showName.substring(0,15) + " (" + renner.nr + ")"
-                                  option(value=renner._id)= naam
-                      .column
-                        h4.header Witte trui
-                        - var lbl = "wit[]"
-                        .ui.list 
-                          each pnt, index in setting.punten.etappe.truien.wit
-                            if etappe 
-                              - var sel=etappe[etap.nr-1].wit[index].renner
-                            else  
-                              - var sel = 0
-                            .inline.field
-                              label #{index+1}: 
-                              select.fourteen.wide.field(id=ren name=lbl class="selRen", value=sel)
-                                option(hidden selected) 
-                                each renner in renners
-                                  -var naam = renner.renner.showName.substring(0,15) + " (" + renner.nr + ")"
-                                  option(value=renner._id)= naam
-                      .center.aligned.row
-                        button.ui.button.positive Opslaan
+                form(action="/admin/rituitslag" method="POST").ui.mini.form
+                  .ui.five.column.divided.grid.segment.compact.blok.hideContent
+                    input(type="hidden" name="ritnr" value=etap.nr)
+                    .column
+                      +uitslag('ritUitsl', index+1)
+                    .column
+                      +uitslag('geel', index+1)
+                    .column
+                      +uitslag('groen', index+1)
+                    .column
+                      +uitslag('bol', index+1)
+                    .column
+                      +uitslag('wit', index+1)
+                    .center.aligned.row
+                      button.ui.button.positive Opslaan
 
   script. 
-    $('.dag').click(function(){
-      var uitsl = $(this).find('.blok')[0]
-      console.dir(uitsl)
-      uitsl.classList.remove("hideContent");
+    var uitsl
+    $('h4.header').click(function(){
+      uitsl = $(this).parent().find('.blok')[0]
+      uitsl.classList.toggle("hideContent");
     })
     
     //- $('.ui.button').click(function(){
