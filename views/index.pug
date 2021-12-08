@@ -40,7 +40,7 @@ block content
         .ui.list 
           h4.ui.header 
             i.database.icon
-            | Etappeuitslag
+            | Etappeuitslag (1 - #{setting.punten.etappe.uitslag.length})
           each pnt, index in setting.punten.etappe.uitslag
             if index > 0
               | ; #{index+1}e pl: #[strong #{pnt}] pnt

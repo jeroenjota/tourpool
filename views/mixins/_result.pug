@@ -1,17 +1,19 @@
-mixin uitslag(type, etap)
+mixin result(type, etap, trui)
   if type === 'ritUitsl'
-    - var hdr = "Etappenuitslag"
+    - var hdr = "Etappeuitslag"
     - var arr = setting.punten.etappe.uitslag    
   else 
-    - var hdr = type.toLowerCase()
+    - var hdr = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase()
     - var arr = setting.punten.etappe.truien[type]
   - var lbl = type+'[]'
   
-  h4 #{hdr}
+  
+  .ui.fluid.raised.card
+
     .ui.list 
       each pnt, index in arr
-        if uitslag.etappes[etap-1]
-          - var sel = uitslag.etappes[etap-1][type][index].renner
+        if result.etappes[etap-1]
+          - var sel = result.etappes[etap-1][type][index].renner
         else  
           - var sel = 0
         .inline.field 

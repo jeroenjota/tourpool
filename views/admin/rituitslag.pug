@@ -1,6 +1,8 @@
 extends ../layout.pug
-include ../mixins/_uitslag
+include ../mixins/_result
 block content 
+  //- uitslagenAantal is nodig voor het script onderaan
+  - let uitslagenAantal = result.etappes.length
   .ui.container 
     h1.ui.header Rituitslagen van Tour #{setting.tourjaar}
     .ui.grid(style="overflow:auto; max-height: 70vh;")
@@ -9,43 +11,46 @@ block content
           each etap, index in setting.tourEtappes 
             - var dat = new Intl.DateTimeFormat('nl-NL',{weekday:'short', day: 'numeric', month: 'short'}).format(new Date(etap.datum))
             if etap.nr
-              .ui.segment
-                h4.header.dag
-                  | #{etap.nr}
-                  |: #{dat}
-                  | -#{etap.van} - #{etap.naar}
+              .ui.bg.inverted.segment
+                .ui.two.column.grid.dag
+                  .twelve.wide.column
+                    h3.left.floated.header 
+                      |Rit #{etap.nr}
+                      | #{dat}
+                      | van #{etap.van} naar #{etap.naar} (#{etap.type}) 
+                  .four.wide.column
                 form(action="/admin/rituitslag" method="POST").ui.form
                   .ui.three.column.grid.blok.hideContent
                     input(type="hidden" name="ritnr" value=etap.nr)
                     .column
-                      +uitslag('ritUitsl', index+1)
+                      h3.ui.center.aligned.blue.header= "Rituitslag"
+                      +result('ritUitsl', index+1)
                     .column
-                      +uitslag('geel', index+1)
-                      +uitslag('groen', index+1)
+                      h3.ui.center.aligned.yellow.header= "Gele trui"
+                      +result('geel', index+1)
+                      h3.ui.center.aligned.green.header= "Groene trui"
+                      +result('groen', index+1)
                     .column
-                      +uitslag('bol', index+1)
-                      +uitslag('wit', index+1)
-                    .two.column.row
-                      .fluid.ui.buttons
-                        button.animated.ui.right.floated.positive.button
-                          .visible.content Opslaan
-                          .hidden.content   
-                            i.save.icon
+                      h3.ui.center.aligned.red.header= "Bolletjes trui"
+                      +result('bol', index+1)
+                      h3.ui.center.aligned.black.header= "Witte trui"
+                      +result('wit', index+1)
+                      button.animated.ui.right.floated.positive.button
+                        .visible.content Opslaan
+                        .hidden.content   
+                          i.save.icon
 
   script. 
-    var uitsl
-    function hideResult(){
-      uitsl.classList.toggle("hideContent");
+     function hideResult(el){
+      el.classList.toggle("hideContent");
     }
-    $('h4.header').click(function(){
-      uitsl = $(this).parent().find('.blok')[0]
-      hideResult()
+    $('.dag').click(function(){
+      //- alleen openen als de rit ervoor is ingevuld
+      if($('.dag').index(this) <= "#{uitslagenAantal}") {
+        var uitsl = $(this).parent().find('.blok')[0]
+        hideResult(uitsl)
+      } else {
+        alert ("De rit hiervoor heeft nog geen uitslag")
+      }
     })
     
-    
-    //- $('.ui.button').click(function(){
-    //-   console.log('button clicked:' , $(this).parent())
-    //-   var uitsl = $(this).parent().parent()[0]
-    //-   console.dir(uitsl)
-    //-   uitsl.classList.add('hideContent');
-    //- })

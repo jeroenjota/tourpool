@@ -10,6 +10,16 @@
       "name": "Launch Chrome against localhost",
       "url": "http://localhost:8080",
       "webRoot": "${workspaceFolder}"
-    }
+    },
+    {
+      "name": "Launch Tourpool",
+      "program": "${workspaceFolder}/app.js",
+      "request": "launch",
+      "skipFiles": [
+          "<node_internals>/**"
+      ],
+      "type": "pwa-node"
+  }
+
   ]
 }

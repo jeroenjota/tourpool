@@ -2,7 +2,7 @@
     --main-head-color: #1133af;
     --main-bg-color: #FFC324;
     --positive-color: #81da5e;
-    --or-color: #f1dea8;
+    --or-color: #f1e3bd;
 }
 
 h1.ui.header {
@@ -61,6 +61,34 @@ td.rennerrij {
 }
 
 .hideContent {
-    visibility: collapse !important;
     display: none !important;
+    opacity: 0;
+    transition: visibility 1s, opacity 1s linear;
+}
+
+form div.column {
+    border: 1px solid black;
+}
+
+form div.column.white {
+    background: white;
+}
+
+form div.column .header {
+    color: white;
+    text-align: center;
+}
+
+form div.row.white .header {
+    color: black;
+    text-align: center;
+}
+
+.dag {
+    cursor: pointer;
+}
+
+.ui.bg.inverted.segment {
+    background: var(--or-color);
+    color: var(--main-head-color);
 }

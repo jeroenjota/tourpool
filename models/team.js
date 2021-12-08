@@ -19,6 +19,10 @@ const TeamSchema = new Schema({
         unique: [true, 'Naam bestaat al']
     },
     renners: [{ type: Schema.Types.ObjectId, ref: 'Tourrenner' }],
+    punten: [{
+        etappe: Number,
+        pnt: Number
+    }],
     betaald: Boolean,
 }, { timestamps: true })
 

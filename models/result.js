@@ -7,25 +7,30 @@ const UitslagSchema = new Schema({
         ritnr: Number,
         ritUitsl: [{
             plaats: Number,
-            renner: { type: Schema.Types.ObjectId, ref: 'Tourrenner' }
+            renner: { type: Schema.Types.ObjectId, ref: 'Tourrenner' },
+            punten: Number
         }, ],
         geel: [{
             plaats: Number,
             renner: { type: Schema.Types.ObjectId, ref: 'Tourrenner' },
+            punten: Number,
             eind: Boolean
         }, ],
         groen: [{
             plaats: Number,
             renner: { type: Schema.Types.ObjectId, ref: 'Tourrenner' },
+            punten: Number,
             eind: Boolean
         }, ],
         bol: [{
             plaats: Number,
             renner: { type: Schema.Types.ObjectId, ref: 'Tourrenner' },
+            punten: Number,
             eind: Boolean
         }, ],
         wit: [{
             plaats: Number,
+            punten: Number,
             renner: { type: Schema.Types.ObjectId, ref: 'Tourrenner' }
         }, ]
     }]
