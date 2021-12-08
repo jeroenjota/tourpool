@@ -36,4 +36,7 @@ const UitslagSchema = new Schema({
     }]
 })
 
+UitslagSchema.set('toObject', { virtuals: true })
+UitslagSchema.set('toJSON', { virtuals: true })
+
 module.exports = mongoose.model('Result', UitslagSchema);

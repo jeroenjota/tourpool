@@ -26,6 +26,14 @@ const TeamSchema = new Schema({
     betaald: Boolean,
 }, { timestamps: true })
 
+TeamSchema.set('toObject', { virtuals: true })
+TeamSchema.set('toJSON', { virtuals: true })
 
-
+TeamSchema.virtual('ttlPnt').get(function() {
+    let ttl = 0
+    this.punten.forEach((etap) => {
+        ttl += etap.pnt
+    })
+    return ttl;
+})
 module.exports = mongoose.model('Team', TeamSchema)

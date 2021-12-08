@@ -50,7 +50,7 @@ block content
                         th(colspan="2")
                           //- dagen voor de tourstart niet meer updaten (setting.updateTotDgn)
                           if dgn >= 0
-                            a(href=ploegUrl) Team: #{team.teamname}
+                            a(href=ploegUrl) Team: #{team.teamname} (#{team.ttlPnt} pnt)
                           else  
                             | Team: #{team.teamname}
                       - var i=1
