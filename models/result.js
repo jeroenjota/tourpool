@@ -5,7 +5,7 @@ const UitslagSchema = new Schema({
     jaar: Number,
     etappes: [{
         ritnr: Number,
-        ritUitsl: [{
+        rit: [{
             plaats: Number,
             renner: { type: Schema.Types.ObjectId, ref: 'Tourrenner' },
             punten: Number

@@ -11,13 +11,11 @@ const poolSetting = {
     eindScoreLaatstPrijs: 10,
     punten: {
         etappe: {
-            uitslag: [15, 10, 7, 5, 3, 1],
-            truien: {
-                geel: [5, 3, 1],
-                groen: [3, 1],
-                bol: [3, 1],
-                wit: [3],
-            }
+            rit: [15, 10, 7, 5, 3, 1],
+            geel: [5, 3, 1],
+            groen: [3, 1],
+            bol: [3, 1],
+            wit: [3],
         },
         eindstand: {
             geel: [50, 35, 25, 20, 15, 5],

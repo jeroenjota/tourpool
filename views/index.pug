@@ -40,8 +40,8 @@ block content
         .ui.list 
           h4.ui.header 
             i.database.icon
-            | Etappeuitslag (1 - #{setting.punten.etappe.uitslag.length})
-          each pnt, index in setting.punten.etappe.uitslag
+            | Etappeuitslag (1 - #{setting.punten.etappe.rit.length})
+          each pnt, index in setting.punten.etappe.rit
             if index > 0
               | ; #{index+1}e pl: #[strong #{pnt}] pnt
             else  
@@ -50,25 +50,25 @@ block content
             i.th.lists.icon
             | Klassementen (eind van de etappe)
           .ui.item Gele trui: 
-            each pnt, index in setting.punten.etappe.truien.geel
+            each pnt, index in setting.punten.etappe.geel
               if index > 0
                 | ; #{index+1}e:  #[strong #{pnt}] pnt
               else 
                 |  #{index+1}e:  #[strong #{pnt}] pnt
           .ui.item Groene trui (sprinters): 
-            each pnt, index in setting.punten.etappe.truien.groen
+            each pnt, index in setting.punten.etappe.groen
               if index > 0
                 | ; #{index+1}e:  #[strong #{pnt}] pnt
               else 
                 |  #{index+1}e:  #[strong #{pnt}] pnt
           .ui.item Bolletjes trui (klimmers): 
-            each pnt, index in setting.punten.etappe.truien.bol
+            each pnt, index in setting.punten.etappe.bol
               if index > 0
                 | ; #{index+1}e:  #[strong #{pnt}] pnt
               else 
                 |  #{index+1}e:  #[strong #{pnt}] pnt
           .ui.item Witte trui (jongeren): 
-            each pnt, index in setting.punten.etappe.truien.wit
+            each pnt, index in setting.punten.etappe.wit
               if index > 0
                 | ; #{index+1}e:  #[strong #{pnt}] pnt
               else 

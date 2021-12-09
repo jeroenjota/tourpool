@@ -37,7 +37,7 @@ router.get('/togglepay/:id', isAdmin, wrapAsync(async(req, res, next) => {
 router.get('/rituitslag', wrapAsync(async(req, res, next) => {
     let result = await Result.findOne({ jaar: poolSetting.tourjaar })
     if (!result) {
-        console.log("Nieuwe uitslagen tabel")
+        // console.log("Nieuwe uitslagen tabel")
         let result = new Result({ jaar: poolSetting.tourjaar })
         try {
             result.save();
@@ -59,7 +59,7 @@ router.get('/rituitslag', wrapAsync(async(req, res, next) => {
             return [item.ritnr]
         })
     }
-    // console.log("Result: " + result)
+    console.log("Rit: " + result.etappes[0].rit)
     res.render('admin/rituitslag', { result, renners })
 }))
 
@@ -67,7 +67,7 @@ async function calculateScores(uitslag, ritnr) {
     // bereken de scores van de deelnemers
     // haal de uitslag op
 
-    const klassementen = ["ritUitsl", "geel", "groen", "bol", "wit"]
+    const klassementen = ["rit", "geel", "groen", "bol", "wit"]
     const etappe = uitslag.etappes[ritnr - 1]
         // haal de deelnemerRenners op
     const deelnPloegen = await Team.find({ jaar: poolSetting.tourjaar })
@@ -78,10 +78,10 @@ async function calculateScores(uitslag, ritnr) {
         let ttlPnt = 0
         klassementen.forEach(function(klsmnt) {
                 etappe[klsmnt].forEach(function(plaats) {
+                    // de renners zonder reserves
                     const ploeg = plg.renners.slice(0, poolSetting.rennerAant)
-                        // console.log("Ploegrenners: " + ploeg)
-                        // console.log("Hele ploeg: " + plg.renners)
                     ploeg.forEach((p) => {
+                        // moet met 'equals'vanwege mongo ID
                         if (p.equals(plaats.renner)) {
                             ttlPnt += plaats.punten
                         }
@@ -106,7 +106,9 @@ async function calculateScores(uitslag, ritnr) {
 }
 
 
-function setEtapResult(uitslag, etappe, pntArr) {
+function setEtapResult(uitslag, pntArr) {
+    // clear the array
+    let etappe = []
     for (let i = 0; i < uitslag.length; i++) {
         etappe.push({
             plaats: i + 1,
@@ -115,36 +117,38 @@ function setEtapResult(uitslag, etappe, pntArr) {
         })
     }
     console.log(etappe)
+    return etappe
 }
 
 router.post('/rituitslag', wrapAsync(async(req, res, next) => {
     const { etappes } = req.body
-    const { ritnr, ritUitsl, geel, groen, bol, wit } = req.body
+    const { ritnr } = req.body
+    console.log(req.body)
     const etappeAant = poolSetting.tourEtappes[poolSetting.tourEtappes.length - 1].nr
     let result = await Result.findOne({ jaar: poolSetting.tourjaar })
     if (!result || result.length === 0) {
-        // console.log("Geen uitslag gevonden")
+        // Nieuw record voor deze tour
         result = new Result({ jaar: poolSetting.tourjaar })
-    } else {
-        // dit GAAT NIET GOED ???
-        result.etappes.splice(ritnr - 1, 1)
     }
+    // kijk of de huidige etappe al is ingevoerd
+    if (!result.etappes[ritnr - 1]) {
+        result.etappes.push({ ritnr: ritnr })
+        console.log("Nieuwe etappe aangemaakt ")
+    }
+    // is dit de laatste etappe (dan moeten er andere trui punten worden gegeven)
     const eind = (ritnr == etappeAant)
-    result.etappes.push({
-        ritnr: ritnr,
-    })
-    setEtapResult(ritUitsl, result.etappes[ritnr - 1].ritUitsl, poolSetting.punten.etappe.uitslag)
-    let truien = ["geel", "groen", "bol", "wit"]
-    truien.forEach(function(trui) {
+        // en voeg ook de renners uit de uitslage bij de rit & truien toe
+    let klassementen = ["rit", "geel", "groen", "bol", "wit"]
+    klassementen.forEach(function(klassement) {
         if (!eind) {
-            setEtapResult(req.body[trui], result.etappes[ritnr - 1][trui], poolSetting.punten.etappe.truien[trui])
+            result.etappes[ritnr - 1][klassement] = setEtapResult(req.body[klassement], poolSetting.punten.etappe[klassement])
         } else {
-            setEtapResult(req.body[trui], result.etappes[ritnr - 1][trui], poolSetting.punten.eindstand[trui])
+            result.etappes[ritnr - 1][klassement] = setEtapResult(req.body[klassement], poolSetting.punten.eindstand[klassement])
         }
     })
 
     newUitsl = await result.save()
-        // console.log(newUitsl, ritnr)
+    console.log(newUitsl, ritnr)
     await calculateScores(newUitsl, ritnr)
         // const newUitslag = await result.save();
     res.redirect('/admin/rituitslag')

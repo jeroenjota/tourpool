@@ -1,11 +1,10 @@
-mixin result(type, etap, trui)
-  if type === 'ritUitsl'
+mixin result(type, etap)
+  if type === 'rit'
     - var hdr = "Etappeuitslag"
-    - var arr = setting.punten.etappe.uitslag    
   else 
     - var hdr = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase()
-    - var arr = setting.punten.etappe.truien[type]
   - var lbl = type+'[]'
+  - var arr = setting.punten.etappe[type]    
   
   
   .ui.fluid.raised.card
@@ -17,7 +16,7 @@ mixin result(type, etap, trui)
         else  
           - var sel = 0
         .inline.field 
-          label #{index+1}:
+          label #{index+1}: 
           select.fourteen.wide.field(id=ren name=lbl, value=sel)
             option(hidden selected) 
             each renner in renners
