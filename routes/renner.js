@@ -1,8 +1,9 @@
 const express = require('express');
 const con = require('../helpers/database');
 const router = express.Router();
-//create
 
+//create
+//WERKT NOG NIET (iig niet met POSTMAN)
 router.post("/", (req, res) => {
   console.log("Post route")
   const { vNaam, tNaam, aNaam } = req.body
