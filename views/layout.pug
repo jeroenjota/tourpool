@@ -1,0 +1,19 @@
+doctype html
+html
+  head
+    title = #{title}
+    link(rel="stylesheet", href="https://fonts.googleapis.com/css?family=Lora")
+    link(rel='stylesheet', href = '/stylesheets/jota.css')
+  body
+    header
+      h1 Jota Website
+      a(href='/') Home
+      | 
+      a(href='user/register') Registreer
+      | 
+      a(href='joke') Grapje
+      |
+      a(href='admin/initdb') Herstel database
+      |
+      a(href='admin/fakeUsers') voeg 50 gebruikers toe
+    block content

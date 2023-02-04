@@ -1,0 +1,12 @@
+extends layout
+block content
+  h1 Doe ook mee!
+  h2 Net als #{userCnt} anderen
+  form(method="POST" action = 'register')
+    input(type="text" class= "form" name="username" placeholder="Gebruikersnaam")
+    input(type="text" class= "form" name="vNaam" placeholder="Voornaam")
+    input(type="text" class= "form" name="tNaam" placeholder="tussenvoegsel")
+    input(type="text" class= "form" name="aNaam" placeholder="Achternaam")
+    input(type="email" class= "form" name="email" placeholder="Email adres")
+    input(type="password" class= "form" name="password" placeholder="Wachtwoord")
+    button= 'Ik doe mee'

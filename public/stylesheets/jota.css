@@ -1,0 +1,28 @@
+:root {
+  --main-head-color: #1133af;
+  --main-bg-color: #e6cf91;
+  --positive-color: #81da5e;
+  --or-color: #f1e3bd;
+  --link-bg: darkgreen;
+  --link-fg: rgb(227, 225, 159);
+}
+
+body {
+  padding: 50px;
+  font: 14px "Lora", serif;
+  background-image: url('/public/img/logogroot.png');
+  background-size: cover;
+  background-color: var(--main-bg-color);
+  color: var(--main-head-color);
+}
+
+a {
+  color: #95deab;
+  text-decoration: none;
+  font-size: larger;
+  background-color: var(--link-bg);
+  color: var(--link-fg);
+  padding: 5px;
+  margin-right: 6px;
+  border-radius: 8px;
+}
