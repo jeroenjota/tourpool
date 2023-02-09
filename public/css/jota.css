@@ -17,7 +17,7 @@
 }
 
 body {
-  font: 18px "Lora", serif;
+  font: 16px "Roboto", serif;
   background-color: var(--main-bg-color);
   color: var(--main-head-color);
   margin-left: 50px;
