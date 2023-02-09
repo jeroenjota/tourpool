@@ -3,17 +3,16 @@ const con = require('../helpers/database');
 const router = express.Router();
 
 //create
-//WERKT NOG NIET (iig niet met POSTMAN)
 router.post("/", (req, res) => {
-  console.log("Post route")
   const { vNaam, tNaam, aNaam } = req.body
-  console.log(req.body)
+  var rNaam = aNaam
   if (vNaam) {
-    var rNaam = aNaam + ', ' + vNaam.substring(0) + '. ' + tNaam
-    rNaam = rNaam.trim()
-  }
+    rNaam = aNaam + ', ' + vNaam.substring(0) + '. ' + tNaam
+  } else if (tNaam) { rNaam = aNaam + ', ' + tNaam }
+  rNaam = rNaam.trim()
+
   console.log([vNaam, tNaam, aNaam, rNaam])
-  qry = "UPDATE renners SET vNaam =?, tNaam =?, aNaam =?, rNaam= ? WHERE id = ?"
+  qry = "INSERT INTO renners (vNaam, tNaam, aNaam, rNaam) VALUES (?, ?, ?, ?)"
   con.db.query(qry, [vNaam, tNaam, aNaam, rNaam], (err, row) => {
     if (err) throw err
     if (row) {
@@ -24,12 +23,14 @@ router.post("/", (req, res) => {
     res.redirect("/")
   })
 })
+
 //retrieve
 router.get("/", (req, res) => {
   // alle renners
-  const qry = "Select * from renners"
+  const qry = "Select * from renners ORDER BY rNaam"
   con.db.query(qry, (err, rows) => {
-    res.send(rows)
+    if (err) { console.log("FOUT: " + err) }
+    res.render('renners.pug', { title: 'Renners', renners: rows })
   })
 })
 router.get("/:id", (req, res) => {

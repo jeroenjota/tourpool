@@ -44,14 +44,23 @@ CREATE TABLE renners (
 	updated_at DATETIME ON UPDATE now()
 ); 
 
-CREATE TABLE tourrenners (
+CREATE TABLE tourploegen (
+	tourPloeg_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
 	tour_id INT NOT NULL,
-	renner_id INT NOT NULL,
 	ploeg_id INT NOT NULL,
-	nummer SMALLINT,
+	ploegnummer SMALLINT DEFAULT 0,
 	FOREIGN KEY (tour_id) REFERENCES tours(id),
-	FOREIGN KEY (renner_id)  REFERENCES renners(id),
 	FOREIGN KEY (ploeg_id)  REFERENCES rennerploegen(id)
+);
+
+
+
+CREATE TABLE tourrenners (
+	renner_id INT NOT NULL,
+	tourploeg_id INT NOT NULL,
+	nummer SMALLINT,
+	FOREIGN KEY (renner_id)  REFERENCES renners(id),
+	FOREIGN KEY (tourploeg_id)  REFERENCES tourploegen(tourPloeg_id)
 );
 
 CREATE TABLE pools(
@@ -181,6 +190,30 @@ VALUES
 ('Trek - Segafredo','VS'),
 ('UAE Team Emirates','VAE')
 ;
+
+INSERT INTO tourploegen(tour_id, ploeg_id, ploegnummer) VALUES 
+(	1,1,15 ),
+(	1,2,22 ),
+(	1,3,16 ),
+(	1,4,19 ),
+(	1,5,6 ),
+(	1,6,2 ),
+(	1,7,8 ),
+(	1,8,9 ),
+(	1,9,10 ),
+(	1,10,11 ),
+(	1,11,12 ),
+(	1,12,13 ),
+(	1,13,14 ),
+(	1,14,3 ),
+(	1,15,1 ),
+(	1,16,17 ),
+(	1,17,4 ),
+(	1,18,7 ),
+(	1,19,5 ),
+(	1,20,18 ),
+(	1,21,20 ),
+(	1,22,21 );
 
 INSERT INTO renners (vNaam, tNaam, aNaam) 
 VALUES

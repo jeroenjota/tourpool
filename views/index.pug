@@ -1,6 +1,38 @@
 extends layout
 
 block content 
-  h1 Startpagina
-  p Welkom op de startpagina van #{title}
-  p We hebben momenteel #{userCnt} gebruikers geregistreerd
+  // Jumbotron
+  .pt-5.text-center
+    h1.mb-3 Startpagina
+    h4.mb-4 Welkom op de startpagina van #{title}
+    h5.mb-4 De tour vindt dit jaar plaats van #{tour[0].startdatum} tot #{tour[0].einddatum}
+  // Jumbotron
+  .p-1
+    h2.text-center Etappes
+    .row.justify-content-center
+      .col-auto
+        table.table-responsive
+          tr
+            th Nr
+            th Datum
+            th Van
+            th Naar
+            th kms
+            th rit
+          each etappe in tour
+            tr
+
+              if etappe.nummer > 0 
+                td #{etappe.nummer}
+              else
+                td
+              td #{etappe.datum}
+              td #{etappe.van}
+              td #{etappe.naar}
+              if etappe.afstand > 0
+                td  #{etappe.afstand}
+              else
+                td
+              td #{etappe.rittype}
+
+

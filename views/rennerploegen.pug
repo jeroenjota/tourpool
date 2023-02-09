@@ -1,0 +1,100 @@
+extends layout
+block content
+  .p-2
+    .container.main-bg-color.p-1
+      h1(id="head" onclick="emptyfields()") Nieuwe rennerploeg
+      form(method="POST" action='rennerploeg' class="")
+        .row.mb-0
+          .col
+            .form-outline.border-bottom.border-dark.mb-1
+              input.form-control(type="text" class= "" name="ploegNaam" id="ploegNaam")
+              label.form-label(for="ploegNaam", class = "") Ploegnaam
+          .col
+            .form-outline.border-bottom.border-dark.mb-1
+              input.form-control(type="text" class= "" name="land" id="ploegLand")
+              label.form-label(for="land", class = "") Land
+              input(type="text", class= "" name="id" id="teamid" hidden)
+        .row.m-3
+          .col
+            button(id="submit" type="button" class="btn btn-sm btn-outline-success") Opslaan
+
+  .container-fluid
+    h2 Deze #{rennerploegen.length} hebben we al
+    table.table-sm
+      thead
+        tr
+          th id
+          th ploeg naam
+          th Land
+          th Nr
+          th -
+        - var rij = 0
+      tbody
+        each ploeg in rennerploegen
+          - var onKlik = "fillfields('" + ploeg.ploegNaam + "' , '" + ploeg.land + "' , '" + ploeg.id + "')"
+          tr(onClick=onKlik)
+            td #{ploeg.id}
+            td #{ploeg.ploegNaam}
+            td #{ploeg.land}
+            td 
+              - var nr = 1
+              - var selId = "ID" + ploeg.id
+              - var act = "addPloegnrToLink(" + ploeg.id + ")"
+              - var onLd = "setOption(" + ploeg.id + ", " + ploeg.ploegnummer + ")"
+              select(name="ploegnummer" class="ploegumselect" id=selId onChange=act onload=onLd onClick=onKlik) 
+                - for (var i = 0; i<25; i++)
+                  -var optId = ('rij' + rij +'nr' + i)
+                  if ploeg.ploegnummer === i
+                    option(value=i selected=true)= i
+                  else
+                    option(value=i)= i
+            td 
+              - var ploegstr = 'rennerploeg/addtotour/' + ploeg.id + "/" + ploeg.ploegnummer
+              a(href=ploegstr id="link" + ploeg.id class="btn btn-sm btn-outline-success") Opslaan
+
+
+  script.
+    function addPloegnrToLink(id){
+      const $selectDropdown = document.getElementById('ID' + id)
+      var ploegNummer = $selectDropdown.options[$selectDropdown.selectedIndex].text
+      //- console.log("ID:" + id, "Ploegnr: " + ploegNummer)
+      var nwRef = 'rennerploeg/addtotour/' + id + '/' + ploegNummer
+      document.getElementById('link' + id).href = nwRef
+      // remomve ploegnummer from other selects
+      var slcts = document.getElementsByClassName('ploegumselect')
+      //- console.log("Aantal selects:" + slcts.length)
+      for (let i = 0; i < slcts.length; i++){
+        //- console.log("ID: " + id + " selectedIndex: " + (slcts[i].selectedIndex) + " ploegnr: " + ploegNummer)
+        //- console.log(i + " ID: " + slcts[i].id + " / ID" + id + " selectedIndex: " + slcts[i].selectedIndex + " ploegnr: " + ploegNummer)
+        document.getElementById('link' + id).classList.remove('disabled')
+        if (slcts[i].id !== 'ID' + id && ploegNummer !== 0 && slcts[i].selectedIndex == ploegNummer) {
+          alert(slcts[i].selectedIndex + " - Ploegnummer " + ploegNummer + " is al gebruikt")
+          document.getElementById('link' + id).classList.add('disabled')
+          break;
+        }
+      }
+    };
+
+    function fillfields(ploeg, land, id){
+      document.getElementById("ploegNaam").value = ploeg
+      document.getElementById("ploegLand").value = land
+      document.getElementById("teamid").value = id
+      document.getElementById("submit").innerHTML = "Bijwerken"
+    }
+
+    function setOption(is, nr){
+      console.log("ID:" + id, "Ploegnr: " + nr)
+      const $selectDropdown = document.getElementById('ID' + id)
+      $selectDropdown.value = nr
+    }
+
+    function emptyfields(){
+      document.getElementById("ploegNaam").value = ""
+      document.getElementById("ploegLand").value = ""
+      document.getElementById("teamid").value = "0"
+      document.getElementById("submit").innerHTML = "Opslaan"
+    }
+    //- function fillPloeg(nr){
+    //-   document.getElementById("ploegNaam").value = rennerploegen[nr].ploegNaam
+    //- }
+

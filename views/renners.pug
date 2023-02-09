@@ -1,0 +1,22 @@
+extends layout
+block content
+  h1 Nieuwe renner
+  form(method="POST" action = 'renner')
+    input(type="text" class= "form" name="vNaam" placeholder="Voornaam")
+    input(type="text" class= "form" name="tNaam" placeholder="tussenvoegsel")
+    input(type="text" class= "form" name="aNaam" placeholder="Achternaam")
+    //- input(type="text" class= "form" name="rNaam" placeholder="Roepnaam")
+    button= 'Sla op'
+  h2 Deze #{renners.length} hebben we al
+  table
+    tr
+      th Voornaam
+      th tussenvoegsel
+      th Achternaam
+      th Roepnaam
+    each renner in renners
+      tr
+        td #{renner.vNaam}
+        td #{renner.tNaam}
+        td #{renner.aNaam}
+        td #{renner.rNaam}

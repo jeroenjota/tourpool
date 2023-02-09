@@ -1,19 +1,66 @@
 doctype html
 html
   head
+    meta(charset='UTF-8')
+    meta(name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no")
+    meta(http-equiv="x-ua-compatible" content="ie=edge")
     title = #{title}
-    link(rel="stylesheet", href="https://fonts.googleapis.com/css?family=Lora")
-    link(rel='stylesheet', href = '/stylesheets/jota.css')
-  body
-    header
-      h1 Jota Website
-      a(href='/') Home
-      | 
-      a(href='user/register') Registreer
-      | 
-      a(href='joke') Grapje
-      |
-      a(href='admin/initdb') Herstel database
-      |
-      a(href='admin/fakeUsers') voeg 50 gebruikers toe
-    block content
+    link(rel="icon" href="img/logo_small.jpg")
+    // font Awesome
+    link(rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css')
+    // Google Fonts Roboto
+    link(rel='stylesheet' href='https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap')
+    // MDB
+    link(rel='stylesheet' href='css/mdb.min.css')
+    link(rel='stylesheet' href ='css/jota.css')
+    script(type='text/javascript' src='js/mdb.min.js')
+    // Custom scripts
+    script(type='text/javascript').
+
+  body.main
+    nav.navbar.navbar-expand-lg.navbar-light.fixed-top.navbar-bg-color
+      .container-fluid
+        a.navbar-brand(href='https://www.jota.nl' target='blank')
+          img.jotalogo(src="img/jotalogo.png" width="50px")
+        a.navbar-brand(href='#')
+          | Tourpool
+        button.navbar-toggler(type="button" data-mdb-toggle="collapse" data-mdb-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation")
+          i(class="fas fa-bars")
+
+        .collapse.navbar-collapse#navbarSupportedContent
+          ul.navbar-nav.me.auto.mb-2.mb-lg-0
+            li.nav-item
+              a.nav-link(href='/') Home
+            li.nav-item
+              a.nav-link(href='user') Gebruikers
+            li.nav-item
+              a.nav-link(href='rennerploeg') Rennerploegen
+            li.nav-item
+              a.nav-link(href='renner') Renners
+            li.nav-item
+              a.nav-link(href='admin/initdb') Herstel database
+            li.nav-item
+              a.nav-link(href='admin/fakeUsers') voeg 50 gebruikers toe
+        .d-flex.align-items-center
+          a.text-reset.me-3(href="#")
+            i.fas.fa-user
+          .dropdown
+            a.dropdown-toggle.d-flex.align-items-center.hidden-arrow(href="#" id="navbarDropdownMenuAvatar"
+            role="button" data-mdb-toggle="dropdown" aria-expanded="false")
+              img(src="https://mdbcdn.b-cdn.net/img/new/avatars/2.webp" class="rounded-circle" height="25"
+              alt="Black and White Portrait of a Man" loading="lazy")
+            ul(class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdownMenuAvatar")
+              li
+                a.dropdown-item(href="#") Mijn profiel
+              li
+                a.dropdown-item(href="#") Instellingen
+              li
+                a.dropdown-item(href="#") Logout
+
+    .container.navbar-bg-color
+      block content
+
+  footer.text-center.text-lg-start.text-muted.fixed-bottom.navbar-bg-color
+    .p-1.text-center
+      p © #{new Date().getFullYear()} 
+        a(href="http://www.jota.nl") Jota Services 

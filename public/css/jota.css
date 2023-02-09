@@ -1,0 +1,45 @@
+:root {
+  --main-head-color: #1133af;
+  --main-bg-color: #e6cf91;
+  --positive-color: #81da5e;
+  --or-color: #f1e3bd;
+  --link-bg: rgb(189, 73, 0);
+  --link-fg: rgb(227, 225, 159);
+  --navbar-bg: #f4e479;
+}
+
+.main-bg-color {
+  background-color: var(--main-bg-color);
+}
+
+.navbar-bg-color {
+  background-color: var(--navbar-bg);
+}
+
+body {
+  font: 18px "Lora", serif;
+  background-color: var(--main-bg-color);
+  color: var(--main-head-color);
+  margin-left: 50px;
+  margin-right: 50px;
+  margin-top: 100px;
+}
+
+.label {
+  color: var(--main-head-color);
+  font-size: large;
+}
+
+.jotalogo {
+  margin: 0px 10px;
+}
+
+.main {
+  background: linear-gradient(rgba(228, 223, 146, 0.902), #e4df92e6), url('../img/logo_small.jpg');
+  background-size: cover;
+  height: 100%;
+  /* width: 80%; */
+  color: #022a99;
+  /* text-shadow: 3px 5px 2px #474747; */
+  /* text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.6); */
+}

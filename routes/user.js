@@ -2,26 +2,16 @@ const express = require('express');
 const con = require('../helpers/database');
 const router = express.Router();
 
+// read
 router.get("/", (req, res) => {
-  // vindt aantal gebruikers in database
-  const qry = 'SELECT COUNT(*) aant FROM users'
+  const qry = 'SELECT * FROM users order by isAdmin DESC, aNaam, vNaam'
   con.db.query(qry, (err, rows) => {
     if (err) { console.log("FOUT: " + err) }
-    const aantal = rows[0].aant
-    res.render('register', { title: 'Registreer', userCnt: aantal })
+    res.render('users', { title: 'Gebruikers', users: rows })
   })
 });
 
-router.get("/register", (req, res) => {
-  // vindt aantal gebruikers in database
-  const qry = 'SELECT COUNT(*) aant FROM users'
-  con.db.query(qry, (err, rows) => {
-    if (err) { console.log("FOUT: " + err) }
-    const aantal = rows[0].aant
-    res.render('register', { title: 'Registreer', userCnt: aantal })
-  })
-})
-
+//read 1
 router.get("/:id", async function (req, res) {
   try {
     const userQry = "SELECT id, username, vNaam, tNaam, aNaam, email from users WHERE id = ?"
@@ -32,8 +22,8 @@ router.get("/:id", async function (req, res) {
   }
   res.send("Gevonden" + rows[0].username)
 })
-
-router.post('/register', async function (req, res) {
+// Create
+router.post('/', async function (req, res) {
   try {
     var { username, vNaam, tNaam, aNaam, email, password } = req.body
     const pw = await con.hashPassword(password, 10)
@@ -47,9 +37,12 @@ router.post('/register', async function (req, res) {
     }
     const qry = "INSERT INTO users SET ? "
     con.db.query(qry, nwReg, (err, row) => {
-      if (err) { console.log(err) }
-      // res.status(200).send(username + ' is toegevoegd')
-      res.redirect("/")
+      if (err) throw err;
+      if (row) {
+        console.log("Gebruiker toegevoegd", row)
+      } else {
+        console.log("Gebruiker toevoegen niet gelukt")
+      }
     })
   } catch {
     console.log('Database probleem')

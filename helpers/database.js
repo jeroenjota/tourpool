@@ -45,11 +45,11 @@ const init = async function () {
         vNaam: process.env.ADMVNAAM,
         aNaam: process.env.ADMANAAM,
         email: process.env.ADMEMAIL,
-        password: pw
+        password: pw,
+        isAdmin: 1
       }
       console.log("admin")
       var addAdmin = "INSERT INTO users SET ?"
-      console.log("admin aangemaakt")
       db.query(addAdmin, admin, (err, result) => {
         if (err) throw err
         console.log("Admin " + process.env.DB_USER + " toegevoegd");
@@ -61,11 +61,13 @@ const init = async function () {
 
 const fakeusers = () => {
   var data = []
+
   for (var i = 0; i < 50; i++) {
+    faker.locale = 'nl'
     data.push([
       faker.helpers.unique(faker.internet.userName).slice(0, 32),
       faker.name.firstName().slice(0, 32),
-      faker.name.middleName().slice(0, 12),
+      faker.name.middleName().slice(0, 4),
       faker.name.lastName().slice(0, 32),
       faker.helpers.unique(faker.internet.email),
       faker.internet.password(12),

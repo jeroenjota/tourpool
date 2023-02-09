@@ -12,6 +12,8 @@ var jokeRouter = require('./routes/joke')
 var userRouter = require('./routes/user')
 var adminRouter = require('./routes/admin')
 var rennerRouter = require('./routes/renner')
+var ploegRouter = require('./routes/rennerploeg')
+
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -25,6 +27,7 @@ app.use('/joke', jokeRouter)
 app.use('/user', userRouter)
 app.use('/admin', adminRouter)
 app.use('/renner', rennerRouter)
+app.use('/rennerploeg', ploegRouter)
 
 
 app.listen(PORT, () => {
