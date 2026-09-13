@@ -1,0 +1,10 @@
+{
+  "chat.tools.terminal.autoApprove": {
+    "docker exec": true,
+    "npx tsx": true,
+    "/^node --input-type=module -e \"\nimport mariadb from 'mariadb';\nconst p = mariadb\\.createPool\\(\\{ host: '127\\.0\\.0\\.1', port: 3306, user: 'root', password: 'root9046', database: 'tourpool' \\}\\);\nconst res = await p\\.query\\('SELECT tourID, naam FROM tblTours'\\);\nconsole\\.log\\('Type of res:', typeof res, Array\\.isArray\\(res\\)\\);\nconsole\\.log\\('Number of rows:', res\\.length\\);\nconsole\\.log\\('Sample row:', res\\[0\\]\\);\nawait p\\.end\\(\\);\n\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  }
+}
