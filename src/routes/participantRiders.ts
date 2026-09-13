@@ -14,20 +14,45 @@ const updateParticipantRiderSchema = z.object({
   positie: z.number().int().nullable().optional()
 });
 
+const bulkUpdateSchema = z.object({
+  riders: z.array(z.object({
+    rennerID: z.number().int(),
+    positie: z.number().int().nullable().optional()
+  }))
+});
+
 participantRidersRouter.get('/', async (request, response, next) => {
   try {
     const { deelnID, rennerID } = request.query;
-    let query = 'SELECT deelnID, rennerID, positie FROM tblDeelnemRenners';
+    let query = `
+      SELECT 
+        dr.deelnID, 
+        dr.rennerID, 
+        dr.positie,
+        r.anaam,
+        r.vnaam,
+        r.tnaam,
+        r.landID AS rennerLand,
+        pr.Rugnummer,
+        p.naam AS ploegNaam,
+        p.ploegCode
+      FROM tblDeelnemRenners dr
+      JOIN tblRenners r ON dr.rennerID = r.rennerID
+      LEFT JOIN tblDeelnemers d ON dr.deelnID = d.deelnID
+      LEFT JOIN tblPools pl ON d.poolID = pl.poolID
+      LEFT JOIN tblPloegRenners pr ON (dr.rennerID = pr.rennerID AND pl.tourID = pr.tourID)
+      LEFT JOIN tblPloegen p ON pr.ploegID = p.ploegID
+    `;
     const params: unknown[] = [];
     const conditions: string[] = [];
 
     if (deelnID !== undefined && deelnID !== '') {
-      conditions.push('deelnID = ?');
+      conditions.push('dr.deelnID = ?');
       params.push(Number(deelnID));
     }
 
     if (rennerID !== undefined && rennerID !== '') {
-      conditions.push('rennerID = ?');
+      conditions.push('dr.rennerID = ?');
       params.push(Number(rennerID));
     }
 
@@ -35,10 +60,34 @@ participantRidersRouter.get('/', async (request, response, next) => {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    query += ' ORDER BY deelnID, positie, rennerID';
+    query += ' ORDER BY dr.deelnID, dr.positie, dr.rennerID';
 
     const rows = await pool.query(query, params);
     response.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+participantRidersRouter.put('/batch/:deelnID', async (request, response, next) => {
+  try {
+    const deelnID = Number(request.params.deelnID);
+    const payload = bulkUpdateSchema.parse(request.body);
+
+    // Verwijder oude opstelling voor deze deelnemer
+    await pool.query('DELETE FROM tblDeelnemRenners WHERE deelnID = ?', [deelnID]);
+
+    // Voeg nieuwe renners toe
+    for (let i = 0; i < payload.riders.length; i++) {
+      const r = payload.riders[i];
+      const positie = r.positie ?? (i + 1);
+      await pool.query(
+        'INSERT INTO tblDeelnemRenners (deelnID, rennerID, positie) VALUES (?, ?, ?)',
+        [deelnID, r.rennerID, positie]
+      );
+    }
+
+    response.json({ deelnID, count: payload.riders.length });
   } catch (error) {
     next(error);
   }

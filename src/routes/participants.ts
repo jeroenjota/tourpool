@@ -8,7 +8,11 @@ const createParticipantSchema = z.object({
   poolID: z.number().int(),
   adrID: z.number().int(),
   roepnaam: z.string().max(255).nullable().optional(),
-  Betaald: z.union([z.boolean(), z.number().int().min(0).max(1)]).nullable().optional()
+  Betaald: z.union([z.boolean(), z.number().int().min(0).max(1)]).nullable().optional(),
+  riders: z.array(z.object({
+    rennerID: z.number().int(),
+    positie: z.number().int().nullable().optional()
+  })).optional()
 });
 
 const updateParticipantSchema = createParticipantSchema.partial();
@@ -106,9 +110,22 @@ participantsRouter.post('/', async (request, response, next) => {
       [payload.poolID, payload.adrID, payload.roepnaam ?? null, betaaldVal]
     );
 
+    const deelnID = Number((result as { insertId: number | bigint }).insertId);
+
+    if (payload.riders && payload.riders.length > 0) {
+      for (let i = 0; i < payload.riders.length; i++) {
+        const r = payload.riders[i];
+        const positie = r.positie ?? (i + 1);
+        await pool.query(
+          'INSERT INTO tblDeelnemRenners (deelnID, rennerID, positie) VALUES (?, ?, ?)',
+          [deelnID, r.rennerID, positie]
+        );
+      }
+    }
+
     response.status(201).json({
       ...payload,
-      deelnID: Number((result as { insertId: number | bigint }).insertId)
+      deelnID
     });
   } catch (error) {
     next(error);

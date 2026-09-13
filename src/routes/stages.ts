@@ -33,7 +33,7 @@ stagesRouter.get('/', async (request, response, next) => {
       params.push(tour.trim());
     }
 
-    query += ' ORDER BY tour, etappeNr';
+    query += ' ORDER BY tour, datum, etappeNr';
 
     const rows = await pool.query(query, params);
     response.json(rows);
