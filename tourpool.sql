@@ -448,7 +448,22 @@ INSERT INTO `tblDeelnemRenners` VALUES
 (27,212,12),
 (27,216,1),
 (27,217,13),
-(27,228,10);
+(27,228,10),
+(28,1,12),
+(28,9,14),
+(28,14,1),
+(28,15,2),
+(28,23,13),
+(28,29,11),
+(28,34,8),
+(28,39,9),
+(28,44,6),
+(28,145,10),
+(28,152,5),
+(28,159,15),
+(28,165,3),
+(28,190,7),
+(28,256,4);
 /*!40000 ALTER TABLE `tblDeelnemRenners` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
@@ -507,7 +522,7 @@ CREATE TABLE `tblDeelnemers` (
   KEY `tblDeelnemers_tblPools_FK` (`poolID`),
   CONSTRAINT `tblDeelnemers_tblAdressen_FK` FOREIGN KEY (`adrID`) REFERENCES `tblAdressen` (`adrID`),
   CONSTRAINT `tblDeelnemers_tblPools_FK` FOREIGN KEY (`poolID`) REFERENCES `tblPools` (`poolID`)
-) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -518,29 +533,30 @@ LOCK TABLES `tblDeelnemers` WRITE;
 /*!40000 ALTER TABLE `tblDeelnemers` DISABLE KEYS */;
 set autocommit=0;
 INSERT INTO `tblDeelnemers` VALUES
-(5,1,8,'Edwin Korsten',1),
-(6,1,19,'Jeannette Beusker',1),
-(7,1,41,'Frans Claus',1),
-(8,1,46,'Patrick Klein Breteler',1),
-(9,1,50,'Bart Kwant',1),
-(10,1,66,'Miranda Tjan',0),
-(11,1,118,'René Kroezen',1),
-(12,1,128,'Joke Slikker',1),
-(13,1,131,'Ted Bruijnzeels',0),
-(14,1,133,'Ron Geurts',1),
-(15,1,141,'Paul  Bierling',0),
+(5,1,8,'Edwin K',1),
+(6,1,19,'Jeannette B',1),
+(7,1,41,'Claus',1),
+(8,1,46,'PatrickKB',1),
+(9,1,50,'Kwant',1),
+(10,1,66,'Miranda',0),
+(11,1,118,'René K',1),
+(12,1,128,'Slik',1),
+(13,1,131,'Bruijn',0),
+(14,1,133,'Ron G',1),
+(15,1,141,'Paul  B',0),
 (16,1,160,'Ton Verheul',1),
 (17,1,169,'Ellie Klijn',1),
-(18,1,171,'Jan Boekel',1),
-(19,1,178,'Timo Jansen',1),
-(20,1,184,'Sten Weingartner',1),
-(21,1,185,'Jeroen Pijtak',1),
-(22,1,191,'Winny Jansen',1),
-(23,1,192,'Corry Verschuur',1),
-(24,1,196,'Joop Baars',0),
-(25,1,209,'Ton  Boon',1),
-(26,1,218,'Wim Boekel',1),
-(27,1,2495,'Jeroen Verstegen',0);
+(18,1,171,'Jan B',1),
+(19,1,178,'Timo J',1),
+(20,1,184,'StenW',1),
+(21,1,185,'Pijtak',1),
+(22,1,191,'Winny',1),
+(23,1,192,'Corry V',1),
+(24,1,196,'Joop B',0),
+(25,1,209,'Ton  B',1),
+(26,1,218,'Wim B',1),
+(27,1,2495,'JeroenJota',1),
+(28,1,2495,'JeroenZelf',0);
 /*!40000 ALTER TABLE `tblDeelnemers` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
@@ -558,7 +574,7 @@ CREATE TABLE `tblEtappeUitslag` (
   `uitslagType` varchar(10) NOT NULL,
   `plaats` int(11) NOT NULL,
   `rennerID` int(11) NOT NULL,
-  KEY `tblEtappeUitslag_tblTours_FK` (`tourID`),
+  PRIMARY KEY (`tourID`,`etappeNr`,`uitslagType`,`plaats`),
   KEY `tblEtappeUitslag_tblRenners_FK` (`rennerID`),
   CONSTRAINT `tblEtappeUitslag_tblRenners_FK` FOREIGN KEY (`rennerID`) REFERENCES `tblRenners` (`rennerID`),
   CONSTRAINT `tblEtappeUitslag_tblTours_FK` FOREIGN KEY (`tourID`) REFERENCES `tblTours` (`tourID`)
@@ -572,6 +588,17 @@ CREATE TABLE `tblEtappeUitslag` (
 LOCK TABLES `tblEtappeUitslag` WRITE;
 /*!40000 ALTER TABLE `tblEtappeUitslag` DISABLE KEYS */;
 set autocommit=0;
+INSERT INTO `tblEtappeUitslag` VALUES
+(1,1,'geel',1,1),
+(1,1,'rit',1,1),
+(1,1,'rit',7,5),
+(1,1,'rit',5,23),
+(1,1,'bol',1,34),
+(1,1,'rit',3,34),
+(1,1,'rit',4,35),
+(1,1,'rit',6,44),
+(1,1,'rit',2,48),
+(1,1,'groen',1,49);
 /*!40000 ALTER TABLE `tblEtappeUitslag` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
@@ -898,7 +925,7 @@ LOCK TABLES `tblOpties` WRITE;
 /*!40000 ALTER TABLE `tblOpties` DISABLE KEYS */;
 set autocommit=0;
 INSERT INTO `tblOpties` VALUES
-(1,10.00,15,5,7,3,3,3,1,3,1,1,1,0.50,0.35,0.15,0.00,10.00);
+(1,10.00,15,5,7,1,1,1,0,3,1,1,1,0.50,0.35,0.15,0.00,10.00);
 /*!40000 ALTER TABLE `tblOpties` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
@@ -1538,8 +1565,9 @@ CREATE TABLE `tblStandaardPunten` (
   `prestatieID` int(11) NOT NULL AUTO_INCREMENT,
   `Omschrijving` varchar(100) DEFAULT NULL,
   `punten` int(11) NOT NULL DEFAULT 0,
+  `volgorde` int(11) DEFAULT NULL,
   PRIMARY KEY (`prestatieID`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=31 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1549,6 +1577,28 @@ CREATE TABLE `tblStandaardPunten` (
 LOCK TABLES `tblStandaardPunten` WRITE;
 /*!40000 ALTER TABLE `tblStandaardPunten` DISABLE KEYS */;
 set autocommit=0;
+INSERT INTO `tblStandaardPunten` VALUES
+(1,'etapPl1',10,1),
+(2,'etapPl2',7,2),
+(3,'etapPl3',5,3),
+(4,'etapPl4',4,4),
+(5,'etapPl5',3,5),
+(6,'etapPl6',2,6),
+(7,'etapPl7',1,7),
+(8,'etapGeel1',3,20),
+(9,'etapGeel2',2,21),
+(10,'etapGeel3',1,22),
+(14,'etapGroenPl1',1,30),
+(17,'etapBolPl1',1,40),
+(20,'etapWitPl1',1,50),
+(21,'eindGeelPl1',50,70),
+(22,'eindGeelPl2',30,71),
+(23,'eindGeelPl3',15,72),
+(24,'eindGroenPl1',15,80),
+(25,'eindBolPl1',15,90),
+(27,'eindWitPl1',15,100),
+(28,'eindGeelPl4',10,73),
+(29,'eindGeelPl5',5,74);
 /*!40000 ALTER TABLE `tblStandaardPunten` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
@@ -1698,4 +1748,4 @@ USE `tourpool`;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
--- Dump completed on 2026-09-13 17:11:54
+-- Dump completed on 2026-09-13 23:35:01

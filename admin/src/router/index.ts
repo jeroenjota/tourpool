@@ -9,6 +9,7 @@ import ToursView from '../views/ToursView.vue';
 import ParticipantsView from '../views/ParticipantsView.vue';
 import AddressesView from '../views/AddressesView.vue';
 import OptionsView from '../views/OptionsView.vue';
+import StandardPointsView from '../views/StandardPointsView.vue';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -62,6 +63,11 @@ export const router = createRouter({
       path: '/options',
       name: 'options',
       component: OptionsView
+    },
+    {
+      path: '/standard-points',
+      name: 'standard-points',
+      component: StandardPointsView
     }
   ]
 });

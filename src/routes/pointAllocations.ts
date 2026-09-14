@@ -8,18 +8,20 @@ const createPointAllocationSchema = z.object({
   prestatieID: z.number().int(),
   poolID: z.number().int(),
   Omschrijving: z.string().max(100).nullable().optional(),
-  Punten: z.number().int().nullable().optional()
+  Punten: z.number().int().nullable().optional(),
+  volgorde: z.number().int().nullable().optional()
 });
 
 const updatePointAllocationSchema = z.object({
   Omschrijving: z.string().max(100).nullable().optional(),
-  Punten: z.number().int().nullable().optional()
+  Punten: z.number().int().nullable().optional(),
+  volgorde: z.number().int().nullable().optional()  
 });
 
 pointAllocationsRouter.get('/', async (request, response, next) => {
   try {
     const { poolID, prestatieID } = request.query;
-    let query = 'SELECT prestatieID, poolID, Omschrijving, Punten FROM tblPuntenToekenning';
+    let query = 'SELECT prestatieID, poolID, Omschrijving, Punten, volgorde FROM tblPuntenToekenning ORDER BY volgorde';
     const params: unknown[] = [];
     const conditions: string[] = [];
 
@@ -52,7 +54,7 @@ pointAllocationsRouter.get('/:prestatieID/:poolID', async (request, response, ne
     const poolID = Number(request.params.poolID);
 
     const rows = await pool.query(
-      'SELECT prestatieID, poolID, Omschrijving, Punten FROM tblPuntenToekenning WHERE prestatieID = ? AND poolID = ?',
+      'SELECT prestatieID, poolID, Omschrijving, Punten, volgorde FROM tblPuntenToekenning WHERE prestatieID = ? AND poolID = ? ORDER BY volgorde',
       [prestatieID, poolID]
     );
     const item = (rows as Array<Record<string, unknown>>)[0];
@@ -72,8 +74,8 @@ pointAllocationsRouter.post('/', async (request, response, next) => {
   try {
     const payload = createPointAllocationSchema.parse(request.body);
     await pool.query(
-      'INSERT INTO tblPuntenToekenning (prestatieID, poolID, Omschrijving, Punten) VALUES (?, ?, ?, ?)',
-      [payload.prestatieID, payload.poolID, payload.Omschrijving ?? null, payload.Punten ?? null]
+      'INSERT INTO tblPuntenToekenning (prestatieID, poolID, Omschrijving, Punten, volgorde) VALUES (?, ?, ?, ?, ?)',
+      [payload.prestatieID, payload.poolID, payload.Omschrijving ?? null, payload.Punten ?? null, payload.volgorde ?? null  ]
     );
 
     response.status(201).json(payload);
@@ -89,7 +91,7 @@ pointAllocationsRouter.put('/:prestatieID/:poolID', async (request, response, ne
     const payload = updatePointAllocationSchema.parse(request.body);
 
     const rows = await pool.query(
-      'SELECT prestatieID, poolID, Omschrijving, Punten FROM tblPuntenToekenning WHERE prestatieID = ? AND poolID = ?',
+      'SELECT prestatieID, poolID, Omschrijving, Punten, volgorde FROM tblPuntenToekenning WHERE prestatieID = ? AND poolID = ?',
       [prestatieID, poolID]
     );
     const current = (rows as Array<Record<string, unknown>>)[0];
@@ -101,12 +103,13 @@ pointAllocationsRouter.put('/:prestatieID/:poolID', async (request, response, ne
 
     const updated = {
       Omschrijving: payload.Omschrijving !== undefined ? payload.Omschrijving : current.Omschrijving,
-      Punten: payload.Punten !== undefined ? payload.Punten : current.Punten
+      Punten: payload.Punten !== undefined ? payload.Punten : current.Punten,
+      volgorde: payload.volgorde !== undefined ? payload.volgorde : current.volgorde
     };
 
     await pool.query(
-      'UPDATE tblPuntenToekenning SET Omschrijving = ?, Punten = ? WHERE prestatieID = ? AND poolID = ?',
-      [updated.Omschrijving, updated.Punten, prestatieID, poolID]
+      'UPDATE tblPuntenToekenning SET Omschrijving = ?, Punten = ?, volgorde = ? WHERE prestatieID = ? AND poolID = ?',
+      [updated.Omschrijving, updated.Punten, updated.volgorde ?? null, prestatieID, poolID]
     );
 
     response.json({ prestatieID, poolID, ...updated });

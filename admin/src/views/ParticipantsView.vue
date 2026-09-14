@@ -12,8 +12,9 @@ import {
   UserCheck, 
   CreditCard, 
   Mail, 
-  MapPin,
-  Bike
+  MapPin, 
+  Bike,
+  GripVertical
 } from '@lucide/vue';
 
 interface Pool {
@@ -98,6 +99,13 @@ const filterPaidStatus = ref<'all' | 'paid' | 'unpaid'>('all');
 const addModalOpen = ref(false);
 const editModalOpen = ref(false);
 const manageRidersModalOpen = ref(false);
+
+// Drag & drop state for selected riders
+const addRiderDragIdx = ref<number | null>(null);
+const addRiderDragOverIdx = ref<number | null>(null);
+
+const manageRiderDragIdx = ref<number | null>(null);
+const manageRiderDragOverIdx = ref<number | null>(null);
 
 // State for Adding Participant
 const addForm = ref<{
@@ -282,6 +290,47 @@ const removeRiderFromAddForm = (rennerID: number) => {
     .map((r, idx) => ({ ...r, positie: idx + 1 }));
 };
 
+// Drag handlers for Add Form
+const onAddRiderDragStart = (e: DragEvent, idx: number) => {
+  addRiderDragIdx.value = idx;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(idx));
+  }
+};
+
+const onAddRiderDragOver = (e: DragEvent, idx: number) => {
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  addRiderDragOverIdx.value = idx;
+};
+
+const onAddRiderDragLeave = (_e: DragEvent, idx: number) => {
+  if (addRiderDragOverIdx.value === idx) addRiderDragOverIdx.value = null;
+};
+
+const onAddRiderDrop = (dropIdx: number) => {
+  if (addRiderDragIdx.value === null || addRiderDragIdx.value === dropIdx) {
+    addRiderDragIdx.value = null;
+    addRiderDragOverIdx.value = null;
+    return;
+  }
+
+  const list = [...addForm.value.selectedRiders];
+  const [dragged] = list.splice(addRiderDragIdx.value, 1);
+  list.splice(dropIdx, 0, dragged);
+
+  // Re-index positie 1..N
+  addForm.value.selectedRiders = list.map((r, i) => ({ ...r, positie: i + 1 }));
+  addRiderDragIdx.value = null;
+  addRiderDragOverIdx.value = null;
+};
+
+const onAddRiderDragEnd = () => {
+  addRiderDragIdx.value = null;
+  addRiderDragOverIdx.value = null;
+};
+
 const getRiderDetails = (rennerID: number) => {
   return tourRiders.value.find(r => r.rennerID === rennerID);
 };
@@ -394,6 +443,47 @@ const removeRiderFromManaging = (rennerID: number) => {
   managingSelectedRiders.value = managingSelectedRiders.value
     .filter(r => r.rennerID !== rennerID)
     .map((r, idx) => ({ ...r, positie: idx + 1 }));
+};
+
+// Drag handlers for Manage Modal
+const onManageRiderDragStart = (e: DragEvent, idx: number) => {
+  manageRiderDragIdx.value = idx;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(idx));
+  }
+};
+
+const onManageRiderDragOver = (e: DragEvent, idx: number) => {
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  manageRiderDragOverIdx.value = idx;
+};
+
+const onManageRiderDragLeave = (_e: DragEvent, idx: number) => {
+  if (manageRiderDragOverIdx.value === idx) manageRiderDragOverIdx.value = null;
+};
+
+const onManageRiderDrop = (dropIdx: number) => {
+  if (manageRiderDragIdx.value === null || manageRiderDragIdx.value === dropIdx) {
+    manageRiderDragIdx.value = null;
+    manageRiderDragOverIdx.value = null;
+    return;
+  }
+
+  const list = [...managingSelectedRiders.value];
+  const [dragged] = list.splice(manageRiderDragIdx.value, 1);
+  list.splice(dropIdx, 0, dragged);
+
+  // Re-index positie 1..N
+  managingSelectedRiders.value = list.map((r, i) => ({ ...r, positie: i + 1 }));
+  manageRiderDragIdx.value = null;
+  manageRiderDragOverIdx.value = null;
+};
+
+const onManageRiderDragEnd = () => {
+  manageRiderDragIdx.value = null;
+  manageRiderDragOverIdx.value = null;
 };
 
 const saveManagingRiders = async () => {
@@ -829,9 +919,20 @@ const deleteParticipant = async (p: Participant) => {
                   <div 
                     v-for="(item, idx) in addForm.selectedRiders" 
                     :key="item.rennerID"
-                    class="my-0.5 flex items-center justify-between rounded border border-slate-200/70 bg-white px-1 py-1.5 text-xs"
+                    draggable="true"
+                    @dragstart="onAddRiderDragStart($event, idx)"
+                    @dragover="onAddRiderDragOver($event, idx)"
+                    @dragleave="onAddRiderDragLeave($event, idx)"
+                    @drop="onAddRiderDrop(idx)"
+                    @dragend="onAddRiderDragEnd"
+                    class="my-0.5 flex cursor-grab items-center justify-between rounded border bg-white px-1.5 py-1.5 text-xs transition active:cursor-grabbing"
+                    :class="[
+                      addRiderDragIdx === idx ? 'opacity-40 border-dashed border-amber-400 bg-amber-50/50' : '',
+                      addRiderDragOverIdx === idx && addRiderDragIdx !== idx ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-400/50 scale-[1.01]' : 'border-slate-200/70 hover:border-slate-300'
+                    ]"
                   >
-                    <div class="flex min-w-0 flex-1 items-center gap-2 pr-1">
+                    <div class="flex min-w-0 flex-1 items-center gap-1.5 pr-1">
+                      <GripVertical class="h-3.5 w-3.5 shrink-0 text-slate-400" />
                       <span 
                         class="w-6 shrink-0 rounded px-1 py-0.5 text-center font-mono text-[10px] font-bold"
                         :class="idx < targetRiderCount ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'"
@@ -927,9 +1028,20 @@ const deleteParticipant = async (p: Participant) => {
                 <div 
                   v-for="(item, idx) in managingSelectedRiders" 
                   :key="item.rennerID"
-                  class="my-0.5 flex items-center justify-between rounded border border-slate-200/70 bg-white px-1 py-1.5 text-xs"
+                  draggable="true"
+                  @dragstart="onManageRiderDragStart($event, idx)"
+                  @dragover="onManageRiderDragOver($event, idx)"
+                  @dragleave="onManageRiderDragLeave($event, idx)"
+                  @drop="onManageRiderDrop(idx)"
+                  @dragend="onManageRiderDragEnd"
+                  class="my-0.5 flex cursor-grab items-center justify-between rounded border bg-white px-1.5 py-1.5 text-xs transition active:cursor-grabbing"
+                  :class="[
+                    manageRiderDragIdx === idx ? 'opacity-40 border-dashed border-amber-400 bg-amber-50/50' : '',
+                    manageRiderDragOverIdx === idx && manageRiderDragIdx !== idx ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-400/50 scale-[1.01]' : 'border-slate-200/70 hover:border-slate-300'
+                  ]"
                 >
-                  <div class="flex min-w-0 flex-1 items-center gap-2 pr-1">
+                  <div class="flex min-w-0 flex-1 items-center gap-1.5 pr-1">
+                    <GripVertical class="h-3.5 w-3.5 shrink-0 text-slate-400" />
                     <span 
                       class="w-6 shrink-0 rounded px-1 py-0.5 text-center font-mono text-[10px] font-bold"
                       :class="idx < targetRiderCount ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'"

@@ -10,7 +10,8 @@ import {
   Contact, 
   Sliders, 
   LayoutDashboard,
-  UserCheck
+  UserCheck,
+  Award
 } from '@lucide/vue';
 
 const route = useRoute();
@@ -26,6 +27,7 @@ const navItems = [
   { name: 'Pools', path: '/pools', icon: Trophy },
   { name: 'Pool Deelnemers', path: '/participants', icon: UserCheck },
   { name: 'Pool Opties', path: '/options', icon: Sliders },
+  { name: 'Standaard Punten', path: '/standard-points', icon: Award },
 ];
 </script>
 

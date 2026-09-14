@@ -16,30 +16,58 @@ const updateStageResultSchema = z.object({
   rennerID: z.number().int()
 });
 
+const bulkSaveSchema = z.object({
+  tourID: z.number().int(),
+  etappeNr: z.number().int(),
+  results: z.array(z.object({
+    uitslagType: z.string().max(10),
+    plaats: z.number().int(),
+    rennerID: z.number().int()
+  }))
+});
+
 stageResultsRouter.get('/', async (request, response, next) => {
   try {
     const { tourID, etappeNr, uitslagType, rennerID } = request.query;
-    let query = 'SELECT tourID, etappeNr, uitslagType, plaats, rennerID FROM tblEtappeUitslag';
+    let query = `
+      SELECT 
+        eu.tourID, 
+        eu.etappeNr, 
+        eu.uitslagType, 
+        eu.plaats, 
+        eu.rennerID,
+        r.anaam,
+        r.vnaam,
+        r.tnaam,
+        r.landID AS rennerLand,
+        pr.Rugnummer,
+        p.naam AS ploegNaam,
+        p.ploegCode
+      FROM tblEtappeUitslag eu
+      JOIN tblRenners r ON eu.rennerID = r.rennerID
+      LEFT JOIN tblPloegRenners pr ON (eu.rennerID = pr.rennerID AND eu.tourID = pr.tourID)
+      LEFT JOIN tblPloegen p ON pr.ploegID = p.ploegID
+    `;
     const params: unknown[] = [];
     const conditions: string[] = [];
 
     if (tourID !== undefined && tourID !== '') {
-      conditions.push('tourID = ?');
+      conditions.push('eu.tourID = ?');
       params.push(Number(tourID));
     }
 
     if (etappeNr !== undefined && etappeNr !== '') {
-      conditions.push('etappeNr = ?');
+      conditions.push('eu.etappeNr = ?');
       params.push(Number(etappeNr));
     }
 
     if (typeof uitslagType === 'string' && uitslagType.trim() !== '') {
-      conditions.push('uitslagType = ?');
+      conditions.push('eu.uitslagType = ?');
       params.push(uitslagType.trim());
     }
 
     if (rennerID !== undefined && rennerID !== '') {
-      conditions.push('rennerID = ?');
+      conditions.push('eu.rennerID = ?');
       params.push(Number(rennerID));
     }
 
@@ -47,10 +75,40 @@ stageResultsRouter.get('/', async (request, response, next) => {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    query += ' ORDER BY tourID, etappeNr, uitslagType, plaats';
+    query += ' ORDER BY eu.tourID, eu.etappeNr, eu.uitslagType, eu.plaats';
 
     const rows = await pool.query(query, params);
     response.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+stageResultsRouter.put('/batch', async (request, response, next) => {
+  try {
+    const payload = bulkSaveSchema.parse(request.body);
+
+    // Verwijder alle bestaande uitslagen van deze etappe voor deze tour
+    await pool.query(
+      'DELETE FROM tblEtappeUitslag WHERE tourID = ? AND etappeNr = ?',
+      [payload.tourID, payload.etappeNr]
+    );
+
+    // Voeg alle nieuwe uitslagen in
+    for (const item of payload.results) {
+      if (item.rennerID) {
+        await pool.query(
+          'INSERT INTO tblEtappeUitslag (tourID, etappeNr, uitslagType, plaats, rennerID) VALUES (?, ?, ?, ?, ?)',
+          [payload.tourID, payload.etappeNr, item.uitslagType, item.plaats, item.rennerID]
+        );
+      }
+    }
+
+    response.json({
+      tourID: payload.tourID,
+      etappeNr: payload.etappeNr,
+      count: payload.results.length
+    });
   } catch (error) {
     next(error);
   }

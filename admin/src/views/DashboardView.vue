@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { apiFetch } from '../services/api';
-import { Bike, Shield, MapPin, Trophy, Users, UserCheck, Contact } from '@lucide/vue';
+import { Bike, Shield, MapPin, Trophy, Users, UserCheck, Contact, Award } from '@lucide/vue';
 
 const stats = ref({
   riders: 0,
@@ -10,20 +10,22 @@ const stats = ref({
   pools: 0,
   teamRiders: 0,
   addresses: 0,
-  participants: 0
+  participants: 0,
+  standardPoints: 0
 });
 const loading = ref(true);
 
 onMounted(async () => {
   try {
-    const [riders, teams, stages, pools, teamRiders, addresses, participants] = await Promise.all([
+    const [riders, teams, stages, pools, teamRiders, addresses, participants, stdPoints] = await Promise.all([
       apiFetch<any[]>('/riders'),
       apiFetch<any[]>('/teams'),
       apiFetch<any[]>('/stages'),
       apiFetch<any[]>('/pools'),
       apiFetch<any[]>('/team-riders'),
       apiFetch<any[]>('/addresses'),
-      apiFetch<any[]>('/participants')
+      apiFetch<any[]>('/participants'),
+      apiFetch<any[]>('/standard-points')
     ]);
 
     stats.value = {
@@ -33,7 +35,8 @@ onMounted(async () => {
       pools: pools.length,
       teamRiders: teamRiders.length,
       addresses: addresses.length,
-      participants: participants.length
+      participants: participants.length,
+      standardPoints: stdPoints.length
     };
   } catch (err) {
     console.error('Error fetching dashboard stats:', err);
@@ -49,7 +52,8 @@ const cards = [
   { label: 'Etappes', key: 'stages', icon: MapPin, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200' },
   { label: 'Actieve Pools', key: 'pools', icon: Trophy, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
   { label: 'Adresboek (Contacten)', key: 'addresses', icon: Contact, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200' },
-  { label: 'Pool Deelnemers', key: 'participants', icon: UserCheck, color: 'text-teal-600', bg: 'bg-teal-50', border: 'border-teal-200' }
+  { label: 'Pool Deelnemers', key: 'participants', icon: UserCheck, color: 'text-teal-600', bg: 'bg-teal-50', border: 'border-teal-200' },
+  { label: 'Standaard Punten', key: 'standardPoints', icon: Award, color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200' }
 ];    
 </script>
 
