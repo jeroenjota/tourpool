@@ -34,6 +34,7 @@ participantRidersRouter.get('/', async (request, response, next) => {
         r.tnaam,
         r.landID AS rennerLand,
         pr.Rugnummer,
+        pr.nietGestartEtappe,
         p.naam AS ploegNaam,
         p.ploegCode
       FROM tblDeelnemRenners dr

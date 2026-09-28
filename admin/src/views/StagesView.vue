@@ -1,14 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { apiFetch } from '../services/api';
-import { 
-  RefreshCw, 
-  X, 
-  Save, 
-  CheckCircle2, 
-  AlertCircle,
-  ChevronRight 
-} from '@lucide/vue';
+import { ref, computed, onMounted } from "vue";
+import { apiFetch } from "../services/api";
+import { RefreshCw, X, Save, Check, Plus } from "@lucide/vue";
 
 interface Stage {
   tour: string;
@@ -18,6 +11,11 @@ interface Stage {
   Finish?: string | null;
   kms?: number | null;
   type?: string | null;
+}
+
+interface Tour {
+  tourID: number;
+  naam: string;
 }
 
 interface TourRider {
@@ -43,6 +41,11 @@ interface PoolOption {
   AantalKlasWit?: number | null;
 }
 
+interface Pool {
+  poolID: number;
+  tourID: number;
+}
+
 interface StageResultItem {
   tourID: number;
   etappeNr: number;
@@ -59,11 +62,29 @@ interface StageResultItem {
 }
 
 const stages = ref<Stage[]>([]);
+const tours = ref<Tour[]>([]);
+const selectedTourID = ref<number | null>(null);
 const tourRiders = ref<TourRider[]>([]);
 const poolOptions = ref<PoolOption | null>(null);
 const allStageResults = ref<StageResultItem[]>([]);
 const loading = ref(true);
 const saving = ref(false);
+const createStageModalOpen = ref(false);
+const stageForm = ref<{
+  etappeNr: number | "";
+  datum: string;
+  Start: string;
+  Finish: string;
+  kms: number | "";
+  type: string;
+}>({
+  etappeNr: 1,
+  datum: "",
+  Start: "",
+  Finish: "",
+  kms: "",
+  type: "vlak",
+});
 
 // Modal state voor uitslag invoeren
 const modalOpen = ref(false);
@@ -81,7 +102,7 @@ const resultForm = ref<{
   geel: [],
   bol: [],
   groen: [],
-  wit: []
+  wit: [],
 });
 
 const targetCounts = computed(() => ({
@@ -89,17 +110,32 @@ const targetCounts = computed(() => ({
   geel: poolOptions.value?.AantalKlasGeel ?? 3,
   bol: poolOptions.value?.AantalKlasBol ?? 3,
   groen: poolOptions.value?.AantalKlasGroen ?? 3,
-  wit: poolOptions.value?.AantalKlasWit ?? 1
+  wit: poolOptions.value?.AantalKlasWit ?? 1,
 }));
 
 const fetchData = async () => {
   loading.value = true;
   try {
-    const [stagesRes, ridersRes, optionsRes, resultsRes] = await Promise.all([
-      apiFetch<Stage[]>('/stages'),
-      apiFetch<TourRider[]>('/team-riders?tourID=1'),
-      apiFetch<PoolOption[]>('/options').catch(() => []),
-      apiFetch<StageResultItem[]>('/stage-results?tourID=1')
+    tours.value = await apiFetch<Tour[]>("/tours");
+    if (!tours.value.some((tour) => tour.tourID === selectedTourID.value)) {
+      selectedTourID.value = tours.value[0]?.tourID ?? null;
+    }
+
+    if (selectedTourID.value === null) {
+      stages.value = [];
+      tourRiders.value = [];
+      poolOptions.value = null;
+      allStageResults.value = [];
+      return;
+    }
+
+    const tourID = selectedTourID.value;
+    const [stagesRes, ridersRes, poolsRes, optionsRes, resultsRes] = await Promise.all([
+      apiFetch<Stage[]>(`/stages?tour=${tourID}`),
+      apiFetch<TourRider[]>(`/team-riders?tourID=${tourID}`),
+      apiFetch<Pool[]>("/pools"),
+      apiFetch<PoolOption[]>("/options").catch(() => []),
+      apiFetch<StageResultItem[]>(`/stage-results?tourID=${tourID}`),
     ]);
 
     stages.value = stagesRes.sort((a, b) => {
@@ -109,100 +145,137 @@ const fetchData = async () => {
     });
 
     tourRiders.value = ridersRes;
-    poolOptions.value = optionsRes[0] || null;
+    const tourPool = poolsRes.find((pool) => pool.tourID === tourID);
+    poolOptions.value = optionsRes.find((options) => options.poolID === tourPool?.poolID) || null;
     allStageResults.value = resultsRes;
   } catch (err) {
-    console.error('Error fetching stage data:', err);
+    console.error("Error fetching stage data:", err);
   } finally {
     loading.value = false;
   }
 };
 
+const onTourChange = () => {
+  stages.value = [];
+  tourRiders.value = [];
+  poolOptions.value = null;
+  allStageResults.value = [];
+  void fetchData();
+};
+
 onMounted(fetchData);
+
+const openCreateStageModal = () => {
+  const lastStageNumber = stages.value.reduce(
+    (highest, stage) => Math.max(highest, stage.etappeNr ?? 0),
+    0,
+  );
+  stageForm.value = {
+    etappeNr: lastStageNumber + 1,
+    datum: "",
+    Start: "",
+    Finish: "",
+    kms: "",
+    type: "vlak",
+  };
+  createStageModalOpen.value = true;
+};
+
+const saveStage = async () => {
+  if (selectedTourID.value === null) return;
+
+  const isRestDay = stageForm.value.type === "rustdag";
+  if (!isRestDay && stageForm.value.etappeNr === "") return;
+  saving.value = true;
+
+  try {
+    await apiFetch("/stages", {
+      method: "POST",
+      body: JSON.stringify({
+        tour: String(selectedTourID.value),
+        etappeNr: isRestDay ? null : Number(stageForm.value.etappeNr),
+        datum: stageForm.value.datum,
+        Start: isRestDay ? null : stageForm.value.Start.trim(),
+        Finish: isRestDay ? null : stageForm.value.Finish.trim(),
+        kms: isRestDay || stageForm.value.kms === "" ? null : Number(stageForm.value.kms),
+        type: stageForm.value.type,
+      }),
+    });
+    createStageModalOpen.value = false;
+    await fetchData();
+  } catch (err) {
+    alert(`Fout bij toevoegen etappe: ${err instanceof Error ? err.message : err}`);
+  } finally {
+    saving.value = false;
+  }
+};
 
 // Gesorteerde lijst van renners voor in de dropdowns
 const sortedTourRiders = computed(() => {
   return [...tourRiders.value].sort((a, b) => {
-    const aName = a.anaam || '';
-    const bName = b.anaam || '';
-    return aName.localeCompare(bName, 'nl');
+    const aName = a.anaam || "";
+    const bName = b.anaam || "";
+    return aName.localeCompare(bName, "nl");
   });
 });
 
 const formatRiderOption = (r: TourRider) => {
-  const given = [r.vnaam, r.tnaam].filter(Boolean).join(' ');
+  const given = [r.vnaam, r.tnaam].filter(Boolean).join(" ");
   const namePart = given ? `${r.anaam}, ${given}` : r.anaam;
   const parts = [namePart];
   if (r.Rugnummer) parts.push(`(#${r.Rugnummer})`);
   if (r.ploegCode) parts.push(`[${r.ploegCode}]`);
-  return parts.join(' ');
+  return parts.join(" ");
 };
 
 const formatStageDate = (d?: string | null) => {
-  if (!d) return '-';
+  if (!d) return "-";
   const date = new Date(d);
-  return date.toLocaleDateString('nl-NL', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
+  return date.toLocaleDateString("nl-NL", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
   });
 };
 
-const getTypeBadgeClass = (type?: string | null) => {
-  const t = (type || '').toLowerCase();
-  if (t === 'bergen') return 'bg-rose-50 text-rose-700 border-rose-200';
-  if (t === 'heuvels') return 'bg-amber-50 text-amber-700 border-amber-200';
-  if (t === 'vlak') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  if (t === 'itt' || t === 'ttt') return 'bg-indigo-50 text-indigo-700 border-indigo-200';
-  if (t === 'rustdag') return 'bg-slate-100 text-slate-600 border-slate-200 font-normal italic';
-  return 'bg-slate-100 text-slate-700 border-slate-200';
-};
-
-// Controleer of een etappe al een uitslag heeft
-const getStageResultsCount = (etappeNr?: number | null) => {
-  if (!etappeNr) return 0;
-  return allStageResults.value.filter(r => r.etappeNr === etappeNr).length;
-};
-
-const hasStageCompleteResult = (etappeNr?: number | null) => {
-  if (!etappeNr) return false;
-  const count = getStageResultsCount(etappeNr);
-  const required = (
-    targetCounts.value.rit +
-    targetCounts.value.geel +
-    targetCounts.value.bol +
-    targetCounts.value.groen +
-    targetCounts.value.wit
+const isRestDay = (stage: Stage) => stage.type?.toLowerCase() === "rustdag";
+const hasStageResults = (stage: Stage) =>
+  Boolean(
+    stage.etappeNr &&
+      allStageResults.value.some(
+        (result) => result.etappeNr === stage.etappeNr,
+      ),
   );
-  return count >= required;
-};
 
 // Modal openen om uitslag in te voeren
 const openResultModal = (s: Stage) => {
-  if (s.type === 'rustdag' || !s.etappeNr) return;
+  if (isRestDay(s) || !s.etappeNr) return;
 
   activeStage.value = s;
 
   // Initialiseer form arrays op basis van optie-aantallen
-  const initCategory = (key: 'rit' | 'geel' | 'bol' | 'groen' | 'wit', count: number) => {
+  const initCategory = (
+    key: "rit" | "geel" | "bol" | "groen" | "wit",
+    count: number,
+  ) => {
     const existing = allStageResults.value.filter(
-      r => r.etappeNr === s.etappeNr && r.uitslagType.toLowerCase() === key
+      (r) => r.etappeNr === s.etappeNr && r.uitslagType.toLowerCase() === key,
     );
     const arr: (number | null)[] = [];
     for (let pos = 1; pos <= count; pos++) {
-      const match = existing.find(r => r.plaats === pos);
+      const match = existing.find((r) => r.plaats === pos);
       arr.push(match ? match.rennerID : null);
     }
     return arr;
   };
 
   resultForm.value = {
-    rit: initCategory('rit', targetCounts.value.rit),
-    geel: initCategory('geel', targetCounts.value.geel),
-    bol: initCategory('bol', targetCounts.value.bol),
-    groen: initCategory('groen', targetCounts.value.groen),
-    wit: initCategory('wit', targetCounts.value.wit)
+    rit: initCategory("rit", targetCounts.value.rit),
+    geel: initCategory("geel", targetCounts.value.geel),
+    bol: initCategory("bol", targetCounts.value.bol),
+    groen: initCategory("groen", targetCounts.value.groen),
+    wit: initCategory("wit", targetCounts.value.wit),
   };
 
   modalOpen.value = true;
@@ -213,41 +286,49 @@ const saveResults = async () => {
   saving.value = true;
 
   try {
-    const resultsPayload: Array<{ uitslagType: string; plaats: number; rennerID: number }> = [];
+    const resultsPayload: Array<{
+      uitslagType: string;
+      plaats: number;
+      rennerID: number;
+    }> = [];
 
-    const appendResults = (key: 'rit' | 'geel' | 'bol' | 'groen' | 'wit') => {
+    const appendResults = (key: "rit" | "geel" | "bol" | "groen" | "wit") => {
       const arr = resultForm.value[key];
       for (let i = 0; i < arr.length; i++) {
         if (arr[i]) {
           resultsPayload.push({
             uitslagType: key,
             plaats: i + 1,
-            rennerID: Number(arr[i])
+            rennerID: Number(arr[i]),
           });
         }
       }
     };
 
-    appendResults('rit');
-    appendResults('geel');
-    appendResults('bol');
-    appendResults('groen');
-    appendResults('wit');
+    appendResults("rit");
+    appendResults("geel");
+    appendResults("bol");
+    appendResults("groen");
+    appendResults("wit");
 
-    await apiFetch('/stage-results/batch', {
-      method: 'PUT',
+    await apiFetch("/stage-results/batch", {
+      method: "PUT",
       body: JSON.stringify({
-        tourID: 1,
+        tourID: selectedTourID.value,
         etappeNr: activeStage.value.etappeNr,
-        results: resultsPayload
-      })
+        results: resultsPayload,
+      }),
     });
 
-    alert(`Uitslag voor Etappe #${activeStage.value.etappeNr} succesvol opgeslagen!`);
+    alert(
+      `Uitslag voor Etappe #${activeStage.value.etappeNr} succesvol opgeslagen!`,
+    );
     modalOpen.value = false;
     await fetchData();
   } catch (err) {
-    alert(`Fout bij opslaan uitslag: ${err instanceof Error ? err.message : err}`);
+    alert(
+      `Fout bij opslaan uitslag: ${err instanceof Error ? err.message : err}`,
+    );
   } finally {
     saving.value = false;
   }
@@ -257,145 +338,282 @@ const saveResults = async () => {
 <template>
   <div class="space-y-6">
     <!-- Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3 bg-yellow-300">
       <div>
-        <h2 class="text-xl font-bold text-slate-900">Etappe-overzicht & Uitslagen</h2>
-        <p class="text-xs text-slate-500">Klik op een etappekaart om de daguitslag en klassementstruien in te voeren</p>
+        <h2 class="mt-2 text-xl font-bold text-slate-900">
+          Etappe-overzicht & Uitslagen
+        </h2>
+        <p class="text-xs text-slate-500">
+          Klik op een etapperij om de daguitslag en klassementstruien in te voeren
+        </p>
       </div>
-      <button 
-        @click="fetchData" 
-        class="shadow-xs rounded-lg border border-slate-200 bg-white p-2.5 text-slate-600 transition hover:bg-slate-50"
-        title="Verversen"
-      >
-        <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />
-      </button>
-    </div>
-
-    <!-- Cards Grid (3 kolommen op groot scherm, 2 op tablet, 1 op mobiel) -->
-    <div v-if="loading && stages.length === 0" class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
-      Etappes laden...
-    </div>
-    <div v-else class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
-      <div 
-        v-for="s in stages" 
-        :key="s.datum || s.etappeNr || Math.random()" 
-        @click="openResultModal(s)"
-        class="group relative flex flex-col justify-between rounded-xl border p-4 transition shadow-xs"
-        :class="[
-          s.type === 'rustdag'
-            ? 'border-slate-200 bg-slate-50/60 cursor-default opacity-80'
-            : 'border-slate-200 bg-white hover:border-amber-400 hover:shadow-sm cursor-pointer'
-        ]"
-      >
-        <!-- Top row: Datum & Type -->
-        <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-          <span class="text-xs font-semibold capitalize text-slate-600">
-            {{ formatStageDate(s.datum) }}
-          </span>
-          <span class="rounded border px-2 py-0.5 text-[11px] font-semibold capitalize" :class="getTypeBadgeClass(s.type)">
-            {{ s.type || 'Vlak' }}
-          </span>
-        </div>
-
-        <!-- Middle: Etappe Nr & Route -->
-        <div class="py-3">
-          <div class="flex items-center gap-2">
-            <span 
-              v-if="s.etappeNr" 
-              class="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 font-mono text-xs font-bold text-amber-800"
-            >
-              Etappe #{{ s.etappeNr }}
-            </span>
-            <span v-else class="font-medium text-slate-400 text-xs italic">
-              Rustdag
-            </span>
-            <span v-if="s.kms" class="font-mono text-xs font-medium text-slate-500">
-              ({{ s.kms }} km)
-            </span>
-          </div>
-
-          <div v-if="s.Start || s.Finish" class="mt-2 text-sm text-slate-900 font-medium leading-snug">
-            <span>{{ s.Start || '?' }}</span>
-            <span class="text-slate-400 mx-1.5 font-normal">➔</span>
-            <span>{{ s.Finish || '?' }}</span>
-          </div>
-        </div>
-
-        <!-- Bottom: Status Uitslag -->
-        <div v-if="s.type !== 'rustdag'" class="flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs">
-          <div class="flex items-center gap-1.5">
-            <span 
-              v-if="hasStageCompleteResult(s.etappeNr)"
-              class="flex items-center gap-1 text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5 text-[11px]"
-            >
-              <CheckCircle2 class="h-3.5 w-3.5" />
-              <span>Uitslag compleet</span>
-            </span>
-            <span 
-              v-else-if="getStageResultsCount(s.etappeNr) > 0"
-              class="flex items-center gap-1 text-amber-700 font-semibold bg-amber-50 border border-amber-200 rounded px-2 py-0.5 text-[11px]"
-            >
-              <AlertCircle class="h-3.5 w-3.5" />
-              <span>Deels ingevoerd ({{ getStageResultsCount(s.etappeNr) }})</span>
-            </span>
-            <span v-else class="text-slate-400">
-              Nog geen uitslag
-            </span>
-          </div>
-
-          <span class="text-xs font-semibold text-amber-700 group-hover:translate-x-0.5 transition flex items-center">
-            Invoeren <ChevronRight class="h-3.5 w-3.5 ml-0.5" />
-          </span>
-        </div>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          :disabled="loading || selectedTourID === null"
+          class="flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+          @click="openCreateStageModal">
+          <Plus class="h-4 w-4" />
+          <span>Etappe toevoegen</span>
+        </button>
+        <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
+          <span>Tour</span>
+          <select
+            v-model="selectedTourID"
+            :disabled="loading || tours.length === 0"
+            class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-amber-500 focus:outline-none disabled:opacity-60"
+            @change="onTourChange">
+            <option v-for="tour in tours" :key="tour.tourID" :value="tour.tourID">
+              {{ tour.naam }}
+            </option>
+          </select>
+        </label>
+        <button
+          @click="fetchData"
+          class="shadow-xs rounded-lg border border-slate-200 bg-white p-2.5 text-slate-600 transition hover:bg-slate-50"
+          title="Verversen">
+          <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />
+        </button>
       </div>
     </div>
 
-    <!-- Footer count -->
-    <div class="shadow-xs flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500">
-      <span>Totaal <strong>{{ stages.length }}</strong> rittendagen getoond (3 kolommen op desktop)</span>
-      <span class="text-slate-400">Klik op een etappe om de uitslag en truien in te vullen</span>
+    <div
+      class="shadow-xs overflow-x-auto rounded-xl border border-yellow-800 bg-white">
+      <table class="min-w-120 w-full border-collapse border text-left text-sm">
+        <thead
+          class="bg-yellow-300 text-xs font-semibold uppercase text-slate-600">
+          <tr>
+            <th scope="col" class="px-4 py-2">Etappe</th>
+            <th scope="col" class="px-4 py-2">Datum</th>
+            <th scope="col" class="px-4 py-2">Parcours</th>
+            <th scope="col" class="px-4 py-2">Lengte</th>
+            <th scope="col" class="px-4 py-2">Type</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200">
+          <tr v-if="loading && stages.length === 0">
+            <td colspan="5" class="px-4 py-10 text-center text-slate-400">
+              Etappes laden...
+            </td>
+          </tr>
+          <tr v-else-if="stages.length === 0">
+            <td colspan="5" class="px-4 py-10 text-center text-slate-400">
+              Geen etappes gevonden.
+            </td>
+          </tr>
+          <tr
+            v-for="s in stages"
+            :key="`${s.tour}-${s.datum}-${s.etappeNr}`"
+            :class="
+              isRestDay(s)
+                ? 'bg-yellow-50/70'
+                : hasStageResults(s)
+                ? 'cursor-pointer bg-yellow-200 hover:bg-emerald-100'
+                : 'cursor-pointer bg-yellow-100 hover:bg-yellow-200'
+            "
+            @click="openResultModal(s)">
+            <td class="whitespace-nowrap px-4 py-2 font-medium">
+              <span class="inline-flex items-center gap-2">
+                <button
+                  v-if="!isRestDay(s) && s.etappeNr"
+                  type="button"
+                  class="font-semibold text-amber-700 hover:text-amber-900 hover:underline"
+                  :aria-label="`Uitslag invoeren voor etappe ${s.etappeNr}`"
+                  @click.stop="openResultModal(s)">
+                  {{ s.etappeNr }}
+                </button>
+                <Check
+                  v-if="hasStageResults(s)"
+                  class="h-4 w-4 text-emerald-700"
+                  aria-label="Uitslag ingevoerd" />
+              </span>
+            </td>
+            <td class="whitespace-nowrap px-4 py-2 text-slate-700">
+              {{ formatStageDate(s.datum) }}
+            </td>
+            <td class="px-4 py-2 font-medium text-slate-900">
+              <span v-if="isRestDay(s)">Rustdag</span>
+              <span v-else>{{ s.Start || "?" }} - {{ s.Finish || "?" }}</span>
+            </td>
+            <td class="whitespace-nowrap px-4 py-2 text-slate-700">
+              <span v-if="!isRestDay(s) && s.kms != null">{{ s.kms }} km</span>
+            </td>
+            <td class="px-4 py-2 capitalize text-slate-700">
+              {{ isRestDay(s) ? "" : s.type }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Etappe toevoegen -->
+    <div
+      v-if="createStageModalOpen"
+      class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <form
+        class="w-full max-w-xl space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+        @submit.prevent="saveStage">
+        <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+          <div>
+            <h3 class="text-lg font-bold text-slate-900">Etappe toevoegen</h3>
+            <p class="text-sm text-slate-500">{{ tours.find((tour) => tour.tourID === selectedTourID)?.naam }}</p>
+          </div>
+          <button
+            type="button"
+            class="text-slate-400 hover:text-slate-700"
+            aria-label="Sluiten"
+            @click="createStageModalOpen = false">
+            <X class="h-5 w-5" />
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label class="block text-xs font-semibold text-slate-700">
+            Etappenummer
+            <input
+              v-model.number="stageForm.etappeNr"
+              type="number"
+              min="1"
+              :required="stageForm.type !== 'rustdag'"
+              :disabled="stageForm.type === 'rustdag'"
+              class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:border-amber-500 focus:outline-none disabled:bg-slate-100"
+              placeholder="Leeg voor rustdag" />
+          </label>
+          <label class="block text-xs font-semibold text-slate-700">
+            Datum
+            <input
+              v-model="stageForm.datum"
+              type="date"
+              required
+              class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:border-amber-500 focus:outline-none" />
+          </label>
+          <label class="block text-xs font-semibold text-slate-700">
+            Start
+            <input
+              v-model="stageForm.Start"
+              type="text"
+              :required="stageForm.type !== 'rustdag'"
+              :disabled="stageForm.type === 'rustdag'"
+              class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:border-amber-500 focus:outline-none disabled:bg-slate-100" />
+          </label>
+          <label class="block text-xs font-semibold text-slate-700">
+            Finish
+            <input
+              v-model="stageForm.Finish"
+              type="text"
+              :required="stageForm.type !== 'rustdag'"
+              :disabled="stageForm.type === 'rustdag'"
+              class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:border-amber-500 focus:outline-none disabled:bg-slate-100" />
+          </label>
+          <label class="block text-xs font-semibold text-slate-700">
+            Lengte (km)
+            <input
+              v-model.number="stageForm.kms"
+              type="number"
+              min="0"
+              step="0.1"
+              :disabled="stageForm.type === 'rustdag'"
+              class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:border-amber-500 focus:outline-none disabled:bg-slate-100" />
+          </label>
+          <label class="block text-xs font-semibold text-slate-700">
+            Type
+            <select
+              v-model="stageForm.type"
+              required
+              class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:border-amber-500 focus:outline-none">
+              <option value="vlak">Vlak</option>
+              <option value="heuvels">Heuvels</option>
+              <option value="bergen">Bergen</option>
+              <option value="ITT">ITT</option>
+              <option value="TTT">TTT</option>
+              <option value="rustdag">Rustdag</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="flex justify-end gap-3 border-t border-slate-200 pt-4">
+          <button
+            type="button"
+            class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+            @click="createStageModalOpen = false">
+            Annuleren
+          </button>
+          <button
+            type="submit"
+            :disabled="saving"
+            class="flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50">
+            <Save class="h-4 w-4" />
+            <span>{{ saving ? "Opslaan..." : "Etappe opslaan" }}</span>
+          </button>
+        </div>
+      </form>
     </div>
 
     <!-- Modal: Uitslag invoeren per categorie -->
-    <div v-if="modalOpen && activeStage" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div class="w-full max-w-4xl space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl max-h-[92vh] flex flex-col">
+    <div
+      v-if="modalOpen && activeStage"
+      class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div
+        class="flex max-h-[92vh] w-full max-w-4xl flex-col space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
         <!-- Modal Header -->
-        <div class="flex items-center justify-between border-b border-slate-200 pb-4 shrink-0">
+        <div
+          class="flex shrink-0 items-center justify-between border-b border-slate-200 pb-4">
           <div>
             <div class="flex items-center gap-2">
-              <span class="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 font-mono text-xs font-bold text-amber-800">
+              <span
+                class="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 font-mono text-xs font-bold text-amber-800">
                 Etappe #{{ activeStage.etappeNr }}
               </span>
-              <h3 class="text-lg font-bold text-slate-900">Uitslag & Truiendragers invoeren</h3>
+              <h3 class="text-lg font-bold text-slate-900">
+                Uitslag & Truiendragers invoeren
+              </h3>
             </div>
-            <p class="text-xs text-slate-500 mt-0.5">
-              {{ formatStageDate(activeStage.datum) }} • {{ activeStage.Start }} ➔ {{ activeStage.Finish }} ({{ activeStage.kms }} km)
+            <p class="mt-0.5 text-xs text-slate-500">
+              {{ formatStageDate(activeStage.datum) }} •
+              {{ activeStage.Start }} ➔ {{ activeStage.Finish }} ({{
+                activeStage.kms
+              }}
+              km)
             </p>
           </div>
-          <button @click="modalOpen = false" class="text-slate-400 hover:text-slate-700"><X class="h-5 w-5" /></button>
+          <button
+            @click="modalOpen = false"
+            class="text-slate-400 hover:text-slate-700">
+            <X class="h-5 w-5" />
+          </button>
         </div>
 
         <!-- Modal Body: Categorieën Grid -->
-        <div class="space-y-6 overflow-y-auto flex-1 pr-1">
+        <div class="flex-1 space-y-6 overflow-y-auto pr-1">
           <!-- 1. Rit (Daguitslag) -->
-          <div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-            <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+          <div
+            class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <div
+              class="flex items-center justify-between border-b border-slate-200 pb-2">
               <div class="flex items-center gap-2">
                 <span class="text-lg">🏁</span>
-                <h4 class="text-sm font-bold text-slate-900">Daguitslag (Top {{ targetCounts.rit }})</h4>
+                <h4 class="text-sm font-bold text-slate-900">
+                  Daguitslag (Top {{ targetCounts.rit }})
+                </h4>
               </div>
-              <span class="text-xs font-semibold text-slate-500">Type 'rit'</span>
+              <span class="text-xs font-semibold text-slate-500"
+                >Type 'rit'</span
+              >
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div v-for="pos in targetCounts.rit" :key="`rit-${pos}`">
-                <label class="mb-1 block text-xs font-semibold text-slate-700">Plaats {{ pos }}</label>
-                <select 
-                  v-model="resultForm.rit[pos - 1]"
-                  class="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-amber-500 focus:outline-none shadow-2xs"
+                <label class="mb-1 block text-xs font-semibold text-slate-700"
+                  >Plaats {{ pos }}</label
                 >
+                <select
+                  v-model="resultForm.rit[pos - 1]"
+                  class="shadow-2xs w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-amber-500 focus:outline-none">
                   <option :value="null">-- Kies renner --</option>
-                  <option v-for="r in sortedTourRiders" :key="`rit-${pos}-${r.rennerID}`" :value="r.rennerID">
+                  <option
+                    v-for="r in sortedTourRiders"
+                    :key="`rit-${pos}-${r.rennerID}`"
+                    :value="r.rennerID">
                     {{ formatRiderOption(r) }}
                   </option>
                 </select>
@@ -404,25 +622,35 @@ const saveResults = async () => {
           </div>
 
           <!-- 2. Klassementstruien Grid -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
             <!-- Gele trui -->
-            <div class="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4">
-              <div class="flex items-center justify-between border-b border-amber-200 pb-2">
+            <div
+              class="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+              <div
+                class="flex items-center justify-between border-b border-amber-200 pb-2">
                 <div class="flex items-center gap-2">
                   <span class="text-lg">🟡</span>
-                  <h4 class="text-sm font-bold text-amber-900">Gele trui (Top {{ targetCounts.geel }})</h4>
+                  <h4 class="text-sm font-bold text-amber-900">
+                    Gele trui (Top {{ targetCounts.geel }})
+                  </h4>
                 </div>
-                <span class="text-xs font-semibold text-amber-700">Type 'geel'</span>
+                <span class="text-xs font-semibold text-amber-700"
+                  >Type 'geel'</span
+                >
               </div>
               <div class="space-y-2">
                 <div v-for="pos in targetCounts.geel" :key="`geel-${pos}`">
-                  <label class="mb-1 block text-xs font-semibold text-amber-900">Geel #{{ pos }}</label>
-                  <select 
-                    v-model="resultForm.geel[pos - 1]"
-                    class="w-full rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-amber-500 focus:outline-none shadow-2xs"
+                  <label class="mb-1 block text-xs font-semibold text-amber-900"
+                    >Geel #{{ pos }}</label
                   >
+                  <select
+                    v-model="resultForm.geel[pos - 1]"
+                    class="shadow-2xs w-full rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-amber-500 focus:outline-none">
                     <option :value="null">-- Kies renner --</option>
-                    <option v-for="r in sortedTourRiders" :key="`geel-${pos}-${r.rennerID}`" :value="r.rennerID">
+                    <option
+                      v-for="r in sortedTourRiders"
+                      :key="`geel-${pos}-${r.rennerID}`"
+                      :value="r.rennerID">
                       {{ formatRiderOption(r) }}
                     </option>
                   </select>
@@ -431,23 +659,33 @@ const saveResults = async () => {
             </div>
 
             <!-- Bolletjestrui -->
-            <div class="space-y-3 rounded-xl border border-rose-200 bg-rose-50/40 p-4">
-              <div class="flex items-center justify-between border-b border-rose-200 pb-2">
+            <div
+              class="space-y-3 rounded-xl border border-rose-200 bg-rose-50/40 p-4">
+              <div
+                class="flex items-center justify-between border-b border-rose-200 pb-2">
                 <div class="flex items-center gap-2">
                   <span class="text-lg">🔴</span>
-                  <h4 class="text-sm font-bold text-rose-900">Bolletjestrui (Top {{ targetCounts.bol }})</h4>
+                  <h4 class="text-sm font-bold text-rose-900">
+                    Bolletjestrui (Top {{ targetCounts.bol }})
+                  </h4>
                 </div>
-                <span class="text-xs font-semibold text-rose-700">Type 'bol'</span>
+                <span class="text-xs font-semibold text-rose-700"
+                  >Type 'bol'</span
+                >
               </div>
               <div class="space-y-2">
                 <div v-for="pos in targetCounts.bol" :key="`bol-${pos}`">
-                  <label class="mb-1 block text-xs font-semibold text-rose-900">Bol #{{ pos }}</label>
-                  <select 
-                    v-model="resultForm.bol[pos - 1]"
-                    class="w-full rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-rose-500 focus:outline-none shadow-2xs"
+                  <label class="mb-1 block text-xs font-semibold text-rose-900"
+                    >Bol #{{ pos }}</label
                   >
+                  <select
+                    v-model="resultForm.bol[pos - 1]"
+                    class="shadow-2xs w-full rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-rose-500 focus:outline-none">
                     <option :value="null">-- Kies renner --</option>
-                    <option v-for="r in sortedTourRiders" :key="`bol-${pos}-${r.rennerID}`" :value="r.rennerID">
+                    <option
+                      v-for="r in sortedTourRiders"
+                      :key="`bol-${pos}-${r.rennerID}`"
+                      :value="r.rennerID">
                       {{ formatRiderOption(r) }}
                     </option>
                   </select>
@@ -456,23 +694,34 @@ const saveResults = async () => {
             </div>
 
             <!-- Groene trui -->
-            <div class="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
-              <div class="flex items-center justify-between border-b border-emerald-200 pb-2">
+            <div
+              class="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+              <div
+                class="flex items-center justify-between border-b border-emerald-200 pb-2">
                 <div class="flex items-center gap-2">
                   <span class="text-lg">🟢</span>
-                  <h4 class="text-sm font-bold text-emerald-900">Groene trui (Top {{ targetCounts.groen }})</h4>
+                  <h4 class="text-sm font-bold text-emerald-900">
+                    Groene trui (Top {{ targetCounts.groen }})
+                  </h4>
                 </div>
-                <span class="text-xs font-semibold text-emerald-700">Type 'groen'</span>
+                <span class="text-xs font-semibold text-emerald-700"
+                  >Type 'groen'</span
+                >
               </div>
               <div class="space-y-2">
                 <div v-for="pos in targetCounts.groen" :key="`groen-${pos}`">
-                  <label class="mb-1 block text-xs font-semibold text-emerald-900">Groen #{{ pos }}</label>
-                  <select 
-                    v-model="resultForm.groen[pos - 1]"
-                    class="w-full rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-emerald-500 focus:outline-none shadow-2xs"
+                  <label
+                    class="mb-1 block text-xs font-semibold text-emerald-900"
+                    >Groen #{{ pos }}</label
                   >
+                  <select
+                    v-model="resultForm.groen[pos - 1]"
+                    class="shadow-2xs w-full rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-emerald-500 focus:outline-none">
                     <option :value="null">-- Kies renner --</option>
-                    <option v-for="r in sortedTourRiders" :key="`groen-${pos}-${r.rennerID}`" :value="r.rennerID">
+                    <option
+                      v-for="r in sortedTourRiders"
+                      :key="`groen-${pos}-${r.rennerID}`"
+                      :value="r.rennerID">
                       {{ formatRiderOption(r) }}
                     </option>
                   </select>
@@ -481,23 +730,33 @@ const saveResults = async () => {
             </div>
 
             <!-- Witte trui -->
-            <div class="space-y-3 rounded-xl border border-slate-300 bg-slate-100/60 p-4">
-              <div class="flex items-center justify-between border-b border-slate-300 pb-2">
+            <div
+              class="space-y-3 rounded-xl border border-slate-300 bg-slate-100/60 p-4">
+              <div
+                class="flex items-center justify-between border-b border-slate-300 pb-2">
                 <div class="flex items-center gap-2">
                   <span class="text-lg">⚪</span>
-                  <h4 class="text-sm font-bold text-slate-900">Witte trui (Top {{ targetCounts.wit }})</h4>
+                  <h4 class="text-sm font-bold text-slate-900">
+                    Witte trui (Top {{ targetCounts.wit }})
+                  </h4>
                 </div>
-                <span class="text-xs font-semibold text-slate-600">Type 'wit'</span>
+                <span class="text-xs font-semibold text-slate-600"
+                  >Type 'wit'</span
+                >
               </div>
               <div class="space-y-2">
                 <div v-for="pos in targetCounts.wit" :key="`wit-${pos}`">
-                  <label class="mb-1 block text-xs font-semibold text-slate-700">Wit #{{ pos }}</label>
-                  <select 
-                    v-model="resultForm.wit[pos - 1]"
-                    class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-500 focus:outline-none shadow-2xs"
+                  <label class="mb-1 block text-xs font-semibold text-slate-700"
+                    >Wit #{{ pos }}</label
                   >
+                  <select
+                    v-model="resultForm.wit[pos - 1]"
+                    class="shadow-2xs w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-slate-500 focus:outline-none">
                     <option :value="null">-- Kies renner --</option>
-                    <option v-for="r in sortedTourRiders" :key="`wit-${pos}-${r.rennerID}`" :value="r.rennerID">
+                    <option
+                      v-for="r in sortedTourRiders"
+                      :key="`wit-${pos}-${r.rennerID}`"
+                      :value="r.rennerID">
                       {{ formatRiderOption(r) }}
                     </option>
                   </select>
@@ -508,15 +767,19 @@ const saveResults = async () => {
         </div>
 
         <!-- Modal Footer -->
-        <div class="flex justify-end gap-3 border-t border-slate-200 pt-4 shrink-0">
-          <button @click="modalOpen = false" class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Annuleren</button>
-          <button 
-            @click="saveResults" 
+        <div
+          class="flex shrink-0 justify-end gap-3 border-t border-slate-200 pt-4">
+          <button
+            @click="modalOpen = false"
+            class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">
+            Annuleren
+          </button>
+          <button
+            @click="saveResults"
             :disabled="saving"
-            class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50 flex items-center gap-2"
-          >
+            class="shadow-xs flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50">
             <Save class="h-4 w-4" />
-            <span>{{ saving ? 'Opslaan...' : 'Uitslag Opslaan' }}</span>
+            <span>{{ saving ? "Opslaan..." : "Uitslag Opslaan" }}</span>
           </button>
         </div>
       </div>

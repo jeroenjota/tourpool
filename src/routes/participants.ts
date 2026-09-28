@@ -17,6 +17,47 @@ const createParticipantSchema = z.object({
 
 const updateParticipantSchema = createParticipantSchema.partial();
 
+const generateRoepnaam = async (connection: Awaited<ReturnType<typeof pool.getConnection>>, poolID: number, adrID: number) => {
+  const addressRows = await connection.query(
+    'SELECT vNaam, aNaam FROM tblAdressen WHERE adrID = ?',
+    [adrID]
+  ) as Array<{ vNaam?: string | null; aNaam?: string | null }>;
+  const address = addressRows[0];
+
+  if (!address) {
+    return 'Deelnemer';
+  }
+
+  const firstName = (address.vNaam || 'Deelnemer').trim();
+  const lastName = (address.aNaam || '').trim();
+  const existingRows = await connection.query(
+    'SELECT roepnaam FROM tblDeelnemers WHERE poolID = ? AND roepnaam IS NOT NULL',
+    [poolID]
+  ) as Array<{ roepnaam?: string | null }>;
+  const existingNames = new Set(existingRows.map(row => row.roepnaam?.trim().toLocaleLowerCase()).filter(Boolean));
+  const normalizedFirstName = firstName.toLocaleLowerCase();
+  const normalizedLastName = lastName.toLocaleLowerCase();
+
+  for (let length = 1; length <= lastName.length; length++) {
+    const candidate = `${firstName} ${lastName.slice(0, length)}`;
+    if (!existingNames.has(candidate.toLocaleLowerCase())) {
+      return candidate;
+    }
+  }
+
+  const fullName = lastName ? `${firstName} ${lastName}` : firstName;
+  if (!existingNames.has(`${normalizedFirstName} ${normalizedLastName}`.trim())) {
+    return fullName;
+  }
+
+  let suffix = 2;
+  while (existingNames.has(`${fullName} ${suffix}`.toLocaleLowerCase())) {
+    suffix++;
+  }
+
+  return `${fullName} ${suffix}`;
+};
+
 participantsRouter.get('/', async (request, response, next) => {
   try {
     const { poolID, adrID } = request.query;
@@ -101,13 +142,17 @@ participantsRouter.get('/:deelnID', async (request, response, next) => {
 });
 
 participantsRouter.post('/', async (request, response, next) => {
+  const connection = await pool.getConnection();
+
   try {
     const payload = createParticipantSchema.parse(request.body);
     const betaaldVal = payload.Betaald === undefined || payload.Betaald === null ? null : (payload.Betaald ? 1 : 0);
+    const roepnaam = payload.roepnaam?.trim() || await generateRoepnaam(connection, payload.poolID, payload.adrID);
 
-    const result = await pool.query(
+    await connection.beginTransaction();
+    const result = await connection.query(
       'INSERT INTO tblDeelnemers (poolID, adrID, roepnaam, Betaald) VALUES (?, ?, ?, ?)',
-      [payload.poolID, payload.adrID, payload.roepnaam ?? null, betaaldVal]
+      [payload.poolID, payload.adrID, roepnaam, betaaldVal]
     );
 
     const deelnID = Number((result as { insertId: number | bigint }).insertId);
@@ -116,19 +161,25 @@ participantsRouter.post('/', async (request, response, next) => {
       for (let i = 0; i < payload.riders.length; i++) {
         const r = payload.riders[i];
         const positie = r.positie ?? (i + 1);
-        await pool.query(
+        await connection.query(
           'INSERT INTO tblDeelnemRenners (deelnID, rennerID, positie) VALUES (?, ?, ?)',
           [deelnID, r.rennerID, positie]
         );
       }
     }
 
+    await connection.commit();
+
     response.status(201).json({
       ...payload,
+      roepnaam,
       deelnID
     });
   } catch (error) {
+    await connection.rollback();
     next(error);
+  } finally {
+    connection.release();
   }
 });
 

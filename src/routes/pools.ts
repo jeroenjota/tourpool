@@ -14,9 +14,29 @@ const createPoolSchema = z.object({
 
 const updatePoolSchema = createPoolSchema.partial();
 
+const toMariaDbDateTime = (value: string | null | undefined) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toISOString().slice(0, 19).replace('T', ' ');
+};
+
 poolsRouter.get('/', async (_request, response, next) => {
   try {
-    const rows = await pool.query('SELECT poolID, tourID, Naam, Org, StartInschr, EindInschr FROM tblPools ORDER BY poolID DESC');
+    const rows = await pool.query(`
+      SELECT
+        p.poolID,
+        p.tourID,
+        p.Naam,
+        p.Org,
+        p.StartInschr,
+        p.EindInschr,
+        t.naam AS tourNaam,
+        t.StartDatum AS tourStartDatum
+      FROM tblPools p
+      LEFT JOIN tblTours t ON t.tourID = p.tourID
+      ORDER BY COALESCE(t.StartDatum, '9999-12-31') ASC, p.poolID DESC
+    `);
     response.json(rows);
   } catch (error) {
     next(error);
@@ -41,19 +61,85 @@ poolsRouter.get('/:poolID', async (request, response, next) => {
 });
 
 poolsRouter.post('/', async (request, response, next) => {
+  const connection = await pool.getConnection();
+
   try {
     const payload = createPoolSchema.parse(request.body);
-    const result = await pool.query(
+    await connection.beginTransaction();
+    // Get the last options for the most recently created pool
+    const optionRows = await connection.query(`
+      SELECT
+        o.inleg,
+        o.PloegRennerAantal,
+        o.PloegReserveAantal,
+        o.AantalEtapPlaatsen,
+        o.AantalKlasGeel,
+        o.AantalKlasGroen,
+        o.AantalKlasBol,
+        o.AantalKlasWit,
+        o.AantalEindKlasGeel,
+        o.AantalEindKlasGroen,
+        o.AantalEindKlasBol,
+        o.AantalEindKlasWit,
+        o.PrijsNr1Percentage,
+        o.PrijsNr2Percentage,
+        o.PrijsNr3Percentage,
+        o.PrijsNr4Percentage,
+        o.PrijsNrLaatstBedrag
+      FROM tblOpties o
+      INNER JOIN tblPools p ON p.poolID = o.poolID
+      ORDER BY p.poolID DESC
+      LIMIT 1
+    `) as Array<Record<string, number | null>>;
+    const lastOptions = optionRows[0];
+    // Add new pool
+    const result = await connection.query(
       'INSERT INTO tblPools (tourID, Naam, Org, StartInschr, EindInschr) VALUES (?, ?, ?, ?, ?)',
-      [payload.tourID, payload.Naam ?? null, payload.Org ?? null, payload.StartInschr ?? null, payload.EindInschr ?? null]
+      [payload.tourID, payload.Naam ?? null, payload.Org ?? null, toMariaDbDateTime(payload.StartInschr), toMariaDbDateTime(payload.EindInschr)]
     );
+    const poolID = Number((result as { insertId: number | bigint }).insertId);
+    // Add new options for the newly created pool
+    await connection.query(
+      `INSERT INTO tblOpties (
+        poolID, inleg, PloegRennerAantal, PloegReserveAantal, AantalEtapPlaatsen,
+        AantalKlasGeel, AantalKlasGroen, AantalKlasBol, AantalKlasWit,
+        AantalEindKlasGeel, AantalEindKlasGroen, AantalEindKlasBol, AantalEindKlasWit,
+        PrijsNr1Percentage, PrijsNr2Percentage, PrijsNr3Percentage, PrijsNr4Percentage, PrijsNrLaatstBedrag
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        poolID,
+        lastOptions?.inleg ?? 0,
+        lastOptions?.PloegRennerAantal ?? 0,
+        lastOptions?.PloegReserveAantal ?? 0,
+        lastOptions?.AantalEtapPlaatsen ?? 0,
+        lastOptions?.AantalKlasGeel ?? 0,
+        lastOptions?.AantalKlasGroen ?? 0,
+        lastOptions?.AantalKlasBol ?? 0,
+        lastOptions?.AantalKlasWit ?? 0,
+        lastOptions?.AantalEindKlasGeel ?? 0,
+        lastOptions?.AantalEindKlasGroen ?? 0,
+        lastOptions?.AantalEindKlasBol ?? 0,
+        lastOptions?.AantalEindKlasWit ?? 0,
+        lastOptions?.PrijsNr1Percentage ?? 0,
+        lastOptions?.PrijsNr2Percentage ?? 0,
+        lastOptions?.PrijsNr3Percentage ?? 0,
+        lastOptions?.PrijsNr4Percentage ?? 0,
+        lastOptions?.PrijsNrLaatstBedrag ?? 0
+      ]
+    );
+
+    await connection.commit();
 
     response.status(201).json({
       ...payload,
-      poolID: Number((result as { insertId: number | bigint }).insertId)
+      poolID
     });
   } catch (error) {
+    await connection.rollback();
     next(error);
+  } finally {
+    connection.release();
   }
 });
 
@@ -80,7 +166,7 @@ poolsRouter.put('/:poolID', async (request, response, next) => {
 
     await pool.query(
       'UPDATE tblPools SET tourID = ?, Naam = ?, Org = ?, StartInschr = ?, EindInschr = ? WHERE poolID = ?',
-      [updatedPool.tourID, updatedPool.Naam, updatedPool.Org, updatedPool.StartInschr, updatedPool.EindInschr, poolID]
+      [updatedPool.tourID, updatedPool.Naam, updatedPool.Org, toMariaDbDateTime(String(updatedPool.StartInschr ?? '')), toMariaDbDateTime(String(updatedPool.EindInschr ?? '')), poolID]
     );
 
     response.json({ poolID, ...updatedPool });
@@ -90,11 +176,25 @@ poolsRouter.put('/:poolID', async (request, response, next) => {
 });
 
 poolsRouter.delete('/:poolID', async (request, response, next) => {
+  const connection = await pool.getConnection();
+
   try {
     const poolID = Number(request.params.poolID);
-    await pool.query('DELETE FROM tblPools WHERE poolID = ?', [poolID]);
+    await connection.beginTransaction();
+    await connection.query('DELETE FROM tblPuntenToekenning WHERE poolID = ?', [poolID]);
+    await connection.query('DELETE FROM tblOpties WHERE poolID = ?', [poolID]);
+    await connection.query(
+      'DELETE dp FROM tblDeelnemerPunten dp INNER JOIN tblDeelnemers d ON d.deelnID = dp.deelnemID WHERE d.poolID = ?',
+      [poolID]
+    );
+    await connection.query('DELETE FROM tblDeelnemers WHERE poolID = ?', [poolID]);
+    await connection.query('DELETE FROM tblPools WHERE poolID = ?', [poolID]);
+    await connection.commit();
     response.status(204).send();
   } catch (error) {
+    await connection.rollback();
     next(error);
+  } finally {
+    connection.release();
   }
 });

@@ -6,7 +6,7 @@ export const stagesRouter = Router();
 
 const createStageSchema = z.object({
   tour: z.string().max(10),
-  etappeNr: z.number().int(),
+  etappeNr: z.number().int().nullable().optional(),
   datum: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   Start: z.string().max(100).nullable().optional(),
   Finish: z.string().max(100).nullable().optional(),
@@ -69,7 +69,7 @@ stagesRouter.post('/', async (request, response, next) => {
     const payload = createStageSchema.parse(request.body);
     await pool.query(
       'INSERT INTO tblEtappes (tour, etappeNr, datum, Start, Finish, kms, type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [payload.tour, payload.etappeNr, payload.datum ?? null, payload.Start ?? null, payload.Finish ?? null, payload.kms ?? null, payload.type ?? null]
+      [payload.tour, payload.etappeNr ?? null, payload.datum ?? null, payload.Start ?? null, payload.Finish ?? null, payload.kms ?? null, payload.type ?? null]
     );
 
     response.status(201).json(payload);

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { apiFetch } from '../services/api';
-import { Plus, Trash2, X, RefreshCw, UserPlus, Users, Search } from '@lucide/vue';
+import { Plus, Trash2, X, RefreshCw, UserPlus, Users, Search, Edit2, Check } from '@lucide/vue';
 
 interface Tour {
   tourID: number;
@@ -56,14 +56,15 @@ const teamRiders = ref<TeamRiderItem[]>([]);
 const loading = ref(true);
 
 const searchQuery = ref('');
+const editingRiderKey = ref<string | null>(null);
+const editingRugnummer = ref<number | ''>('');
 
 // Modal states
 const addRiderModalOpen = ref(false);
 const activeTeamForRider = ref<TourTeamItem | null>(null);
-const newRiderForm = ref<{ rennerID: number | null; Rugnummer: number | ''; nietGestartEtappe: number | null }>({
+const newRiderForm = ref<{ rennerID: number | null; Rugnummer: number | '' }>({
   rennerID: null,
-  Rugnummer: '',
-  nietGestartEtappe: null
+  Rugnummer: ''
 });
 
 const addTeamModalOpen = ref(false);
@@ -223,8 +224,7 @@ const openAddRiderModal = (team: TourTeamItem) => {
 
   newRiderForm.value = {
     rennerID: availableRidersForTeam.value[0]?.rennerID || null,
-    Rugnummer: nextNr,
-    nietGestartEtappe: null
+    Rugnummer: nextNr
   };
   addRiderModalOpen.value = true;
 };
@@ -239,14 +239,43 @@ const addRiderToTeam = async () => {
         tourID: selectedTourID.value,
         ploegID: activeTeamForRider.value.ploegID,
         rennerID: Number(newRiderForm.value.rennerID),
-        Rugnummer: Number(newRiderForm.value.Rugnummer),
-        nietGestartEtappe: newRiderForm.value.nietGestartEtappe ? Number(newRiderForm.value.nietGestartEtappe) : null
+        Rugnummer: Number(newRiderForm.value.Rugnummer)
       })
     });
     addRiderModalOpen.value = false;
     await fetchTourData();
   } catch (err) {
     alert(`Fout bij toevoegen renner: ${err instanceof Error ? err.message : err}`);
+  }
+};
+
+const getRiderKey = (r: TeamRiderItem) => `${r.tourID}-${r.ploegID}-${r.rennerID}`;
+
+const startEditingRugnummer = (r: TeamRiderItem) => {
+  editingRiderKey.value = getRiderKey(r);
+  editingRugnummer.value = r.Rugnummer;
+};
+
+const cancelEditingRugnummer = () => {
+  editingRiderKey.value = null;
+  editingRugnummer.value = '';
+};
+
+const saveRugnummer = async (r: TeamRiderItem) => {
+  if (editingRugnummer.value === '' || Number(editingRugnummer.value) < 1) {
+    alert('Vul een geldig rugnummer in.');
+    return;
+  }
+
+  try {
+    await apiFetch(`/team-riders/${r.tourID}/${r.ploegID}/${r.rennerID}`, {
+      method: 'PUT',
+      body: JSON.stringify({ Rugnummer: Number(editingRugnummer.value) })
+    });
+    r.Rugnummer = Number(editingRugnummer.value);
+    cancelEditingRugnummer();
+  } catch (err) {
+    alert(`Fout bij wijzigen rugnummer: ${err instanceof Error ? err.message : err}`);
   }
 };
 
@@ -375,7 +404,31 @@ const removeRiderFromTeam = async (r: TeamRiderItem) => {
             class="group/rider flex items-center justify-between rounded px-1 py-2 text-sm transition hover:bg-slate-50/80"
           >
             <div class="flex min-w-0 flex-1 items-center gap-2.5">
-              <span class="w-8 shrink-0 rounded border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-center font-mono text-xs font-bold text-amber-700">
+              <div v-if="editingRiderKey === getRiderKey(r)" class="flex shrink-0 items-center gap-1">
+                <input
+                  v-model.number="editingRugnummer"
+                  type="number"
+                  min="1"
+                  class="w-16 rounded border border-amber-400 bg-white px-1.5 py-0.5 text-center font-mono text-xs font-bold text-slate-900 focus:outline-none"
+                  @keyup.enter="saveRugnummer(r)"
+                  @keyup.esc="cancelEditingRugnummer"
+                />
+                <button
+                  @click="saveRugnummer(r)"
+                  class="rounded p-1 text-emerald-600 hover:bg-emerald-50"
+                  title="Rugnummer opslaan"
+                >
+                  <Check class="h-3.5 w-3.5" />
+                </button>
+                <button
+                  @click="cancelEditingRugnummer"
+                  class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  title="Annuleren"
+                >
+                  <X class="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <span v-else class="w-8 shrink-0 rounded border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-center font-mono text-xs font-bold text-amber-700">
                 {{ r.Rugnummer }}
               </span>
               <span class="truncate text-xs font-medium text-slate-800" :title="formatRiderName(r)">
@@ -386,13 +439,23 @@ const removeRiderFromTeam = async (r: TeamRiderItem) => {
               </span>
             </div>
 
-            <button 
-              @click="removeRiderFromTeam(r)"
-              class="rounded p-1 text-slate-400 opacity-0 transition hover:bg-rose-50 hover:text-rose-600 group-hover/rider:opacity-100"
-              title="Renner verwijderen"
-            >
-              <Trash2 class="h-3.5 w-3.5" />
-            </button>
+            <div class="flex shrink-0 items-center gap-1 opacity-0 transition group-hover/rider:opacity-100">
+              <button
+                v-if="editingRiderKey !== getRiderKey(r)"
+                @click="startEditingRugnummer(r)"
+                class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                title="Rugnummer wijzigen"
+              >
+                <Edit2 class="h-3.5 w-3.5" />
+              </button>
+              <button
+                @click="removeRiderFromTeam(r)"
+                class="rounded p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                title="Renner verwijderen"
+              >
+                <Trash2 class="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -442,7 +505,7 @@ const removeRiderFromTeam = async (r: TeamRiderItem) => {
             </select>
           </div>
 
-          <div class="grid grid-cols-2 gap-3">
+          <div>
             <div>
               <label class="mb-1 block text-xs font-semibold text-slate-700">Rugnummer *</label>
               <input 
@@ -450,15 +513,6 @@ const removeRiderFromTeam = async (r: TeamRiderItem) => {
                 type="number"
                 class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" 
                 placeholder="bv. 101"
-              />
-            </div>
-            <div>
-              <label class="mb-1 block text-xs font-semibold text-slate-700">Opgave etappe</label>
-              <input 
-                v-model.number="newRiderForm.nietGestartEtappe" 
-                type="number"
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" 
-                placeholder="Optioneel"
               />
             </div>
           </div>

@@ -4,6 +4,98 @@ import { pool } from '../db.js';
 
 export const stageResultsRouter = Router();
 
+type DatabaseConnection = Awaited<ReturnType<typeof pool.getConnection>>;
+
+const calculateParticipantPoints = async (connection: DatabaseConnection, tourID: number, etappeNr: number) => {
+  const poolRows = await connection.query(`
+    SELECT p.poolID, o.PloegRennerAantal, o.PloegReserveAantal, o.AantalEtapPlaatsen,
+      o.AantalKlasGeel, o.AantalKlasGroen, o.AantalKlasBol, o.AantalKlasWit
+    FROM tblPools p
+    LEFT JOIN tblOpties o ON o.poolID = p.poolID
+    WHERE p.tourID = ?
+  `) as Array<Record<string, number | null>>;
+  const resultRows = await connection.query(
+    'SELECT uitslagType, plaats, rennerID FROM tblEtappeUitslag WHERE tourID = ? AND etappeNr = ?',
+    [tourID, etappeNr]
+  ) as Array<{ uitslagType: string; plaats: number; rennerID: number }>;
+
+  for (const poolRow of poolRows) {
+    const poolID = Number(poolRow.poolID);
+    const activeRiderCount = Math.max(
+      Number(poolRow.PloegRennerAantal ?? 0) - Number(poolRow.PloegReserveAantal ?? 0),
+      0
+    );
+    const categoryLimits = {
+      rit: Number(poolRow.AantalEtapPlaatsen ?? 0),
+      geel: Number(poolRow.AantalKlasGeel ?? 0),
+      groen: Number(poolRow.AantalKlasGroen ?? 0),
+      bol: Number(poolRow.AantalKlasBol ?? 0),
+      wit: Number(poolRow.AantalKlasWit ?? 0)
+    };
+    const pointRows = await connection.query(`
+      SELECT sp.Omschrijving, COALESCE(pa.Punten, sp.punten, 0) AS Punten
+      FROM tblStandaardPunten sp
+      LEFT JOIN tblPuntenToekenning pa
+        ON pa.prestatieID = sp.prestatieID AND pa.poolID = ?
+      WHERE sp.Omschrijving LIKE 'etap%'
+    `, [poolID]) as Array<{ Omschrijving: string; Punten: number | null }>;
+    const points = new Map(pointRows.map(row => [row.Omschrijving, Number(row.Punten ?? 0)]));
+    const participants = await connection.query(
+      'SELECT deelnID FROM tblDeelnemers WHERE poolID = ?',
+      [poolID]
+    ) as Array<{ deelnID: number }>;
+    const participantRiders = await connection.query(`
+      SELECT dr.deelnID, dr.rennerID
+      FROM tblDeelnemRenners dr
+      INNER JOIN tblDeelnemers d ON d.deelnID = dr.deelnID
+      WHERE d.poolID = ? AND dr.positie <= ?
+    `, [poolID, activeRiderCount]) as Array<{ deelnID: number; rennerID: number }>;
+    const ridersByParticipant = new Map<number, Set<number>>();
+
+    for (const rider of participantRiders) {
+      const riderSet = ridersByParticipant.get(rider.deelnID) ?? new Set<number>();
+      riderSet.add(rider.rennerID);
+      ridersByParticipant.set(rider.deelnID, riderSet);
+    }
+
+    await connection.query(
+      `DELETE dp FROM tblDeelnemerPunten dp
+       INNER JOIN tblDeelnemers d ON d.deelnID = dp.deelnemID
+       WHERE d.poolID = ? AND dp.etappeNr = ?`,
+      [poolID, etappeNr]
+    );
+
+    for (const participant of participants) {
+      const riderSet = ridersByParticipant.get(participant.deelnID) ?? new Set<number>();
+      const categoryPoints = { rit: 0, geel: 0, groen: 0, bol: 0, wit: 0 };
+      const pointNamePrefixes = {
+        rit: 'etapPl',
+        geel: 'etapGeel',
+        groen: 'etapGroenPl',
+        bol: 'etapBolPl',
+        wit: 'etapWitPl'
+      };
+
+      for (const category of Object.keys(categoryLimits) as Array<keyof typeof categoryLimits>) {
+        for (const result of resultRows) {
+          if (result.uitslagType.toLowerCase() !== category || result.plaats > categoryLimits[category]) continue;
+          if (riderSet.has(result.rennerID)) {
+            categoryPoints[category] += points.get(`${pointNamePrefixes[category]}${result.plaats}`) ?? 0;
+          }
+        }
+      }
+
+      const etapPnt = Object.values(categoryPoints).reduce((total, value) => total + value, 0);
+      await connection.query(
+        `INSERT INTO tblDeelnemerPunten
+          (deelnemID, etappeNr, ritPnt, geelPnt, groenPnt, bolPnt, witPnt, etapPnt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [participant.deelnID, etappeNr, categoryPoints.rit, categoryPoints.geel, categoryPoints.groen, categoryPoints.bol, categoryPoints.wit, etapPnt]
+      );
+    }
+  }
+};
+
 const createStageResultSchema = z.object({
   tourID: z.number().int(),
   etappeNr: z.number().int(),
@@ -85,11 +177,14 @@ stageResultsRouter.get('/', async (request, response, next) => {
 });
 
 stageResultsRouter.put('/batch', async (request, response, next) => {
+  const connection = await pool.getConnection();
+
   try {
     const payload = bulkSaveSchema.parse(request.body);
+    await connection.beginTransaction();
 
     // Verwijder alle bestaande uitslagen van deze etappe voor deze tour
-    await pool.query(
+    await connection.query(
       'DELETE FROM tblEtappeUitslag WHERE tourID = ? AND etappeNr = ?',
       [payload.tourID, payload.etappeNr]
     );
@@ -97,12 +192,15 @@ stageResultsRouter.put('/batch', async (request, response, next) => {
     // Voeg alle nieuwe uitslagen in
     for (const item of payload.results) {
       if (item.rennerID) {
-        await pool.query(
+        await connection.query(
           'INSERT INTO tblEtappeUitslag (tourID, etappeNr, uitslagType, plaats, rennerID) VALUES (?, ?, ?, ?, ?)',
           [payload.tourID, payload.etappeNr, item.uitslagType, item.plaats, item.rennerID]
         );
       }
     }
+
+    await calculateParticipantPoints(connection, payload.tourID, payload.etappeNr);
+    await connection.commit();
 
     response.json({
       tourID: payload.tourID,
@@ -110,7 +208,10 @@ stageResultsRouter.put('/batch', async (request, response, next) => {
       count: payload.results.length
     });
   } catch (error) {
+    await connection.rollback();
     next(error);
+  } finally {
+    connection.release();
   }
 });
 

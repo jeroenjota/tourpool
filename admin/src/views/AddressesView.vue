@@ -117,7 +117,7 @@ const deleteAddress = async (id: number) => {
 <template>
   <div class="space-y-6">
     <!-- Header -->
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div class="flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
       <div class="shrink-0">
         <h2 class="text-xl font-bold text-slate-900">Adresboek</h2>
         <p class="text-xs text-slate-500">Centraal bestand van contact- en NAW-gegevens van deelnemers (tblAdressen)</p>

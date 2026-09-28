@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { apiFetch } from '../services/api';
 import { Save } from '@lucide/vue';
+import { useActivePoolStore } from '../stores/activePool';
 
 interface OptionItem {
   poolID: number;
@@ -27,6 +28,7 @@ interface OptionItem {
 const options = ref<OptionItem | null>(null);
 const loading = ref(true);
 const saving = ref(false);
+const activePoolStore = useActivePoolStore();
 
 const prizePercentages = ref({
   p1: 0,
@@ -57,8 +59,14 @@ const totalPercentage = computed(() => {
 const fetchOptions = async () => {
   loading.value = true;
   try {
-    const list = await apiFetch<OptionItem[]>('/options');
-    options.value = list[0] || null;
+    if (!activePoolStore.activePoolID) {
+      const pools = await apiFetch<{ poolID: number }[]>('/pools');
+      if (pools[0]) activePoolStore.setActivePool(pools[0].poolID);
+    }
+
+    options.value = activePoolStore.activePoolID
+      ? await apiFetch<OptionItem>(`/options/${activePoolStore.activePoolID}`).catch(() => null)
+      : null;
     if (options.value) {
       prizePercentages.value = {
         p1: normalizeToPercent(options.value.PrijsNr1Percentage),

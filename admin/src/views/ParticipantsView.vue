@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { apiFetch } from '../services/api';
+import { useActivePoolStore } from '../stores/activePool';
 import { 
   Plus, 
   Trash2, 
@@ -12,9 +13,11 @@ import {
   UserCheck, 
   CreditCard, 
   Mail, 
-  MapPin, 
   Bike,
-  GripVertical
+  GripVertical,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from '@lucide/vue';
 
 interface Pool {
@@ -56,6 +59,13 @@ interface PoolOption {
   PloegReserveAantal?: number | null;
 }
 
+interface Stage {
+  etappeNr?: number | null;
+  datum?: string | null;
+  Start?: string | null;
+  Finish?: string | null;
+}
+
 interface TourRider {
   tourID: number;
   ploegID: number;
@@ -64,6 +74,7 @@ interface TourRider {
   ploegLand?: string | null;
   rennerID: number;
   Rugnummer: number;
+  nietGestartEtappe?: number | null;
   anaam: string;
   vnaam?: string | null;
   tnaam?: string | null;
@@ -79,26 +90,34 @@ interface ParticipantRiderItem {
   tnaam?: string | null;
   rennerLand?: string | null;
   Rugnummer?: number | null;
+  nietGestartEtappe?: number | null;
   ploegNaam?: string | null;
   ploegCode?: string | null;
 }
 
 const pools = ref<Pool[]>([]);
-const selectedPoolID = ref<number | null>(null);
+const activePoolStore = useActivePoolStore();
+const selectedPoolID = ref<number | null>(activePoolStore.activePoolID);
 const allAddresses = ref<Address[]>([]);
 const participants = ref<Participant[]>([]);
 const poolOption = ref<PoolOption | null>(null);
+const stages = ref<Stage[]>([]);
 const tourRiders = ref<TourRider[]>([]);
 const participantRidersMap = ref<Record<number, ParticipantRiderItem[]>>({});
 const loading = ref(true);
 
 const searchQuery = ref('');
 const filterPaidStatus = ref<'all' | 'paid' | 'unpaid'>('all');
+const participantSort = ref<{ key: 'roepnaam' | 'naam'; direction: 'asc' | 'desc' } | null>({
+  key: 'roepnaam',
+  direction: 'asc'
+});
 
 // Modal states
 const addModalOpen = ref(false);
 const editModalOpen = ref(false);
 const manageRidersModalOpen = ref(false);
+const selectedStageNumber = ref<number | null>(null);
 
 // Drag & drop state for selected riders
 const addRiderDragIdx = ref<number | null>(null);
@@ -128,9 +147,10 @@ const managingParticipant = ref<Participant | null>(null);
 const managingSelectedRiders = ref<Array<{ rennerID: number; positie: number }>>([]);
 const savingRiders = ref(false);
 
-const targetRiderCount = computed(() => poolOption.value?.PloegRennerAantal ?? 15);
+const totalRiderCount = computed(() => poolOption.value?.PloegRennerAantal ?? 15);
 const targetReserveCount = computed(() => poolOption.value?.PloegReserveAantal ?? 5);
-const maxTotalRiders = computed(() => targetRiderCount.value + targetReserveCount.value);
+const targetRiderCount = computed(() => Math.max(totalRiderCount.value - targetReserveCount.value, 0));
+const maxTotalRiders = computed(() => totalRiderCount.value);
 
 const fetchInitialData = async () => {
   loading.value = true;
@@ -144,6 +164,7 @@ const fetchInitialData = async () => {
 
     if (pools.value.length > 0 && !selectedPoolID.value) {
       selectedPoolID.value = pools.value[0].poolID;
+      activePoolStore.setActivePool(selectedPoolID.value);
     }
 
     await fetchPoolData();
@@ -157,12 +178,17 @@ const fetchInitialData = async () => {
 const fetchPoolData = async () => {
   if (!selectedPoolID.value) return;
   try {
-    const [partsRes, optionsRes] = await Promise.all([
+    const [partsRes, optionsRes, stagesRes] = await Promise.all([
       apiFetch<Participant[]>(`/participants?poolID=${selectedPoolID.value}`),
-      apiFetch<PoolOption[]>(`/options?poolID=${selectedPoolID.value}`).catch(() => [])
+      apiFetch<PoolOption[]>(`/options?poolID=${selectedPoolID.value}`).catch(() => []),
+      apiFetch<Stage[]>(`/stages?tour=${activePool.value?.tourID ?? ''}`).catch(() => [])
     ]);
     participants.value = partsRes;
     poolOption.value = optionsRes.find(o => o.poolID === selectedPoolID.value) || null;
+    stages.value = stagesRes
+      .filter(stage => stage.etappeNr != null)
+      .sort((a, b) => (a.etappeNr || 0) - (b.etappeNr || 0));
+    selectedStageNumber.value = stages.value.at(-1)?.etappeNr ?? null;
 
     // Haal de renners van de actieve tour op
     if (activePool.value?.tourID) {
@@ -186,12 +212,13 @@ const fetchPoolData = async () => {
 
 onMounted(fetchInitialData);
 
-const onPoolChange = async (poolID: number) => {
+watch(() => activePoolStore.activePoolID, async (poolID) => {
+  if (!poolID || poolID === selectedPoolID.value) return;
   selectedPoolID.value = poolID;
   loading.value = true;
   await fetchPoolData();
   loading.value = false;
-};
+});
 
 const activePool = computed(() => {
   return pools.value.find(p => p.poolID === selectedPoolID.value) || null;
@@ -199,7 +226,7 @@ const activePool = computed(() => {
 
 const formatFullName = (p: { vNaam?: string | null; tNaam?: string | null; aNaam?: string | null }) => {
   const given = [p.vNaam, p.tNaam].filter(Boolean).join(' ');
-  return given ? `${p.aNaam}, ${given}` : (p.aNaam || '-');
+  return given ? `${given} ${p.aNaam}` : (p.aNaam || '-');
 };
 
 // Alle adressen gesorteerd voor de dropdown
@@ -207,9 +234,25 @@ const sortedAddresses = computed(() => {
   return [...allAddresses.value].sort((a, b) => (a.aNaam || '').localeCompare(b.aNaam || ''));
 });
 
+const toggleParticipantSort = (key: 'roepnaam' | 'naam') => {
+  if (participantSort.value?.key !== key) {
+    participantSort.value = { key, direction: 'asc' };
+    return;
+  }
+
+  participantSort.value = participantSort.value.direction === 'asc'
+    ? { key, direction: 'desc' }
+    : null;
+};
+
+const participantSortIcon = (key: 'roepnaam' | 'naam') => {
+  if (participantSort.value?.key !== key) return ArrowUpDown;
+  return participantSort.value.direction === 'asc' ? ArrowUp : ArrowDown;
+};
+
 // Gefilterde deelnemers
 const filteredParticipants = computed(() => {
-  let list = participants.value;
+  let list = [...participants.value];
 
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase().trim();
@@ -228,7 +271,25 @@ const filteredParticipants = computed(() => {
     list = list.filter(p => !p.Betaald);
   }
 
+  if (participantSort.value) {
+    const { key, direction } = participantSort.value;
+    list.sort((a, b) => {
+      const aValue = key === 'roepnaam' ? (a.roepnaam || '') : formatFullName(a);
+      const bValue = key === 'roepnaam' ? (b.roepnaam || '') : formatFullName(b);
+      const comparison = aValue.localeCompare(bValue, 'nl', { sensitivity: 'base' });
+      return direction === 'asc' ? comparison : -comparison;
+    });
+  }
+
   return list;
+});
+
+const participantColumns = computed(() => {
+  const midpoint = Math.ceil(filteredParticipants.value.length / 2);
+  return [
+    filteredParticipants.value.slice(0, midpoint),
+    filteredParticipants.value.slice(midpoint)
+  ];
 });
 
 // Statistieken
@@ -270,7 +331,10 @@ const filteredAvailableRidersForAdd = computed(() => {
       String(r.Rugnummer).includes(q)
     );
   }
-  return list;
+  return list.sort((a, b) => {
+    const lastNameOrder = a.anaam.localeCompare(b.anaam, 'nl', { sensitivity: 'base' });
+    return lastNameOrder || (a.vnaam || '').localeCompare(b.vnaam || '', 'nl', { sensitivity: 'base' });
+  });
 });
 
 const addRiderToAddForm = (r: TourRider) => {
@@ -278,16 +342,17 @@ const addRiderToAddForm = (r: TourRider) => {
     alert(`Het maximum aantal renners (${maxTotalRiders.value}) is bereikt.`);
     return;
   }
-  addForm.value.selectedRiders.push({
+  addForm.value.selectedRiders = sortSelectedRiders([...addForm.value.selectedRiders, {
     rennerID: r.rennerID,
     positie: addForm.value.selectedRiders.length + 1
-  });
+  }], 1);
 };
 
 const removeRiderFromAddForm = (rennerID: number) => {
-  addForm.value.selectedRiders = addForm.value.selectedRiders
-    .filter(r => r.rennerID !== rennerID)
-    .map((r, idx) => ({ ...r, positie: idx + 1 }));
+  addForm.value.selectedRiders = sortSelectedRiders(
+    addForm.value.selectedRiders.filter(r => r.rennerID !== rennerID),
+    1
+  );
 };
 
 // Drag handlers for Add Form
@@ -320,8 +385,11 @@ const onAddRiderDrop = (dropIdx: number) => {
   const [dragged] = list.splice(addRiderDragIdx.value, 1);
   list.splice(dropIdx, 0, dragged);
 
-  // Re-index positie 1..N
-  addForm.value.selectedRiders = list.map((r, i) => ({ ...r, positie: i + 1 }));
+  // Eerst de nieuwe handmatige volgorde vastleggen, daarna uitvallers onderaan houden.
+  addForm.value.selectedRiders = sortSelectedRiders(
+    list.map((r, index) => ({ ...r, positie: index + 1 })),
+    1
+  );
   addRiderDragIdx.value = null;
   addRiderDragOverIdx.value = null;
 };
@@ -335,6 +403,32 @@ const getRiderDetails = (rennerID: number) => {
   return tourRiders.value.find(r => r.rennerID === rennerID);
 };
 
+const isRiderOutAtSelectedStage = (rennerID: number) => {
+  const dropoutStage = getRiderDetails(rennerID)?.nietGestartEtappe;
+  return dropoutStage != null && selectedStageNumber.value != null && dropoutStage <= selectedStageNumber.value;
+};
+
+const sortSelectedRiders = (
+  riders: Array<{ rennerID: number; positie: number }>,
+  stageNumber = selectedStageNumber.value
+) => {
+  return [...riders]
+    .sort((a, b) => {
+      const aDropoutStage = getRiderDetails(a.rennerID)?.nietGestartEtappe;
+      const bDropoutStage = getRiderDetails(b.rennerID)?.nietGestartEtappe;
+      const aOut = aDropoutStage != null && stageNumber != null && aDropoutStage <= stageNumber;
+      const bOut = bDropoutStage != null && stageNumber != null && bDropoutStage <= stageNumber;
+      if (aOut !== bOut) return Number(aOut) - Number(bOut);
+
+      if (aOut && bOut) {
+        return (aDropoutStage ?? Number.MAX_SAFE_INTEGER) - (bDropoutStage ?? Number.MAX_SAFE_INTEGER) || a.positie - b.positie;
+      }
+
+      return a.positie - b.positie;
+    })
+    .map((rider, index) => ({ ...rider, positie: index + 1 }));
+};
+
 // --- MODALS OPENEN & SLUITEN ---
 
 const openAddModal = () => {
@@ -345,23 +439,7 @@ const openAddModal = () => {
     selectedRiders: []
   };
   riderSearchQuery.value = '';
-  onAddressSelectChange();
   addModalOpen.value = true;
-};
-
-const onAddressSelectChange = () => {
-  if (!addForm.value.adrID) return;
-  const sel = allAddresses.value.find(a => a.adrID === addForm.value.adrID);
-  if (!sel) return;
-
-  const existingCount = participants.value.filter(p => p.adrID === addForm.value.adrID).length;
-  const baseName = sel.vNaam || sel.aNaam || '';
-
-  if (existingCount > 0) {
-    addForm.value.roepnaam = `${baseName} ${existingCount + 1}`;
-  } else {
-    addForm.value.roepnaam = baseName;
-  }
 };
 
 const addParticipant = async () => {
@@ -371,14 +449,12 @@ const addParticipant = async () => {
   }
 
   const trimmedRoepnaam = addForm.value.roepnaam.trim();
-  if (!trimmedRoepnaam) {
-    alert('Vul een roepnaam/teamnaam in voor deze deelname.');
-    return;
-  }
 
-  const duplicate = participants.value.find(
-    p => p.adrID === addForm.value.adrID && (p.roepnaam || '').trim().toLowerCase() === trimmedRoepnaam.toLowerCase()
-  );
+  const duplicate = trimmedRoepnaam
+    ? participants.value.find(
+      p => p.adrID === addForm.value.adrID && (p.roepnaam || '').trim().toLowerCase() === trimmedRoepnaam.toLowerCase()
+    )
+    : undefined;
   if (duplicate) {
     alert(`Dit adres doet al mee onder de roepnaam "${duplicate.roepnaam}". Kies een andere roepnaam voor de extra deelname (bijv. "${trimmedRoepnaam} 2").`);
     return;
@@ -390,7 +466,7 @@ const addParticipant = async () => {
       body: JSON.stringify({
         poolID: selectedPoolID.value,
         adrID: Number(addForm.value.adrID),
-        roepnaam: trimmedRoepnaam,
+        roepnaam: trimmedRoepnaam || null,
         Betaald: addForm.value.Betaald ? 1 : 0,
         riders: addForm.value.selectedRiders
       })
@@ -406,7 +482,10 @@ const addParticipant = async () => {
 const openManageRidersModal = (p: Participant) => {
   managingParticipant.value = p;
   const current = participantRidersMap.value[p.deelnID] || [];
-  managingSelectedRiders.value = current.map(r => ({ rennerID: r.rennerID, positie: r.positie }));
+  managingSelectedRiders.value = sortSelectedRiders(
+    current.map(r => ({ rennerID: r.rennerID, positie: r.positie })),
+    1
+  );
   riderSearchQuery.value = '';
   manageRidersModalOpen.value = true;
 };
@@ -425,7 +504,10 @@ const filteredAvailableRidersForManage = computed(() => {
       String(r.Rugnummer).includes(q)
     );
   }
-  return list;
+  return list.sort((a, b) => {
+    const lastNameOrder = a.anaam.localeCompare(b.anaam, 'nl', { sensitivity: 'base' });
+    return lastNameOrder || (a.vnaam || '').localeCompare(b.vnaam || '', 'nl', { sensitivity: 'base' });
+  });
 });
 
 const addRiderToManaging = (r: TourRider) => {
@@ -433,16 +515,17 @@ const addRiderToManaging = (r: TourRider) => {
     alert(`Het maximum aantal renners (${maxTotalRiders.value}) is bereikt.`);
     return;
   }
-  managingSelectedRiders.value.push({
+  managingSelectedRiders.value = sortSelectedRiders([...managingSelectedRiders.value, {
     rennerID: r.rennerID,
     positie: managingSelectedRiders.value.length + 1
-  });
+  }], 1);
 };
 
 const removeRiderFromManaging = (rennerID: number) => {
-  managingSelectedRiders.value = managingSelectedRiders.value
-    .filter(r => r.rennerID !== rennerID)
-    .map((r, idx) => ({ ...r, positie: idx + 1 }));
+  managingSelectedRiders.value = sortSelectedRiders(
+    managingSelectedRiders.value.filter(r => r.rennerID !== rennerID),
+    1
+  );
 };
 
 // Drag handlers for Manage Modal
@@ -475,8 +558,11 @@ const onManageRiderDrop = (dropIdx: number) => {
   const [dragged] = list.splice(manageRiderDragIdx.value, 1);
   list.splice(dropIdx, 0, dragged);
 
-  // Re-index positie 1..N
-  managingSelectedRiders.value = list.map((r, i) => ({ ...r, positie: i + 1 }));
+  // Eerst de nieuwe handmatige volgorde vastleggen, daarna uitvallers onderaan houden.
+  managingSelectedRiders.value = sortSelectedRiders(
+    list.map((r, index) => ({ ...r, positie: index + 1 })),
+    1
+  );
   manageRiderDragIdx.value = null;
   manageRiderDragOverIdx.value = null;
 };
@@ -560,7 +646,7 @@ const deleteParticipant = async (p: Participant) => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-2">
     <!-- Header -->
     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div>
@@ -586,30 +672,6 @@ const deleteParticipant = async (p: Participant) => {
           <span>Deelnemer toevoegen</span>
         </button>
       </div>
-    </div>
-
-    <!-- Pool Tabs / Selector -->
-    <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
-      <button
-        v-for="p in pools"
-        :key="p.poolID"
-        @click="onPoolChange(p.poolID)"
-        class="flex items-center gap-2.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition"
-        :class="[
-          selectedPoolID === p.poolID
-            ? 'border-amber-500/80 bg-amber-500 text-slate-950 shadow-xs'
-            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-        ]"
-      >
-        <Trophy class="h-4 w-4" />
-        <span>{{ p.Naam }}</span>
-        <span 
-          class="py-0.2 rounded-full px-2 font-mono text-xs font-bold"
-          :class="selectedPoolID === p.poolID ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-100 text-slate-600'"
-        >
-          {{ p.poolID === selectedPoolID ? `${participants.length} dln` : `#${p.poolID}` }}
-        </span>
-      </button>
     </div>
 
     <!-- Active Pool Summary Banner -->
@@ -698,107 +760,106 @@ const deleteParticipant = async (p: Participant) => {
 
     <!-- Deelnemers Table -->
     <div class="shadow-xs overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm text-slate-700">
-          <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <tr>
-              <th class="px-5 py-3.5">ID</th>
-              <th class="px-5 py-3.5">Deelnemer (Adres)</th>
-              <th class="px-5 py-3.5">Roepnaam in Pool</th>
-              <th class="px-5 py-3.5">Opstelling (Renners)</th>
-              <th class="px-5 py-3.5">Contact</th>
-              <th class="px-5 py-3.5">Betaalstatus</th>
-              <th class="px-5 py-3.5 text-right">Acties</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-100">
-            <tr v-if="loading && participants.length === 0">
-              <td colspan="7" class="px-5 py-8 text-center text-slate-400">Deelnemers laden...</td>
-            </tr>
-            <tr v-else-if="filteredParticipants.length === 0">
-              <td colspan="7" class="px-5 py-8 text-center text-slate-400">
-                Geen deelnemers gevonden voor deze selectie.
-              </td>
-            </tr>
-            <tr v-for="p in filteredParticipants" :key="p.deelnID" class="transition hover:bg-slate-50/80">
-              <td class="px-5 py-3 font-mono text-xs text-slate-400">#{{ p.deelnID }}</td>
-              <td class="px-5 py-3">
-                <div class="font-semibold text-slate-900">{{ formatFullName(p) }}</div>
-                <div class="font-mono text-xs text-slate-400">Adr #{{ p.adrID }}</div>
-              </td>
-              <td class="px-5 py-3">
-                <span v-if="p.roepnaam" class="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                  {{ p.roepnaam }}
-                </span>
-                <span v-else class="text-xs italic text-slate-400">-</span>
-              </td>
-              
-              <!-- Renners Opstelling Badge & Button -->
-              <td class="px-5 py-3">
-                <button
-                  @click="openManageRidersModal(p)"
-                  class="flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition"
-                  :class="[
-                    (participantRidersMap[p.deelnID]?.length || 0) >= targetRiderCount
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                      : (participantRidersMap[p.deelnID]?.length || 0) > 0
-                        ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                        : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
-                  ]"
-                  title="Klik om rennersopstelling te bekijken of te wijzigen"
-                >
-                  <Bike class="h-3.5 w-3.5" />
-                  <span>{{ participantRidersMap[p.deelnID]?.length || 0 }} / {{ targetRiderCount }} renners</span>
-                  <span v-if="(participantRidersMap[p.deelnID]?.length || 0) > targetRiderCount" class="text-[10px] text-emerald-600">
-                    (+{{ (participantRidersMap[p.deelnID]?.length || 0) - targetRiderCount }} res)
-                  </span>
-                </button>
-              </td>
+      <div v-if="loading && participants.length === 0" class="px-2 py-8 text-center text-slate-400">
+        Deelnemers laden...
+      </div>
+      <div v-else-if="filteredParticipants.length === 0" class="px-2 py-8 text-center text-slate-400">
+        Geen deelnemers gevonden voor deze selectie.
+      </div>
+      <div v-else class="grid grid-cols-1 gap-x-6 divide-y divide-slate-100 md:grid-cols-2 md:divide-y-0">
+        <div v-for="(column, columnIndex) in participantColumns" :key="columnIndex" class="col-span-1 min-w-0">
+          <div class="participant-header-fields grid grid-cols-6 border-b border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 md:px-2">
+            <button @click="toggleParticipantSort('roepnaam')" class="flex items-center gap-0.5 text-left hover:text-slate-800" title="Sorteer op roepnaam">Roepnaam <component :is="participantSortIcon('roepnaam')" class="h-3 w-3" /></button>
+            <button @click="toggleParticipantSort('naam')" class="flex items-center gap-0.5 text-left hover:text-slate-800" title="Sorteer op naam">Naam <component :is="participantSortIcon('naam')" class="h-3 w-3" /></button>
+            <span>Renners</span>
+            <span>Contact</span>
+            <span>Status</span>
+            <span>Acties</span>
+          </div>
+          <div
+            v-for="p in column"
+            :key="p.deelnID"
+            class="participant-fields grid grid-cols-6 gap-x-1 border-b border-slate-100 px-3 py-1 text-sm text-slate-700 transition hover:bg-slate-50/80 md:px-2"
+          >
+          <!-- Roepnaam -->
+          <div class="min-w-0" title="Roepnaam">
+            <span v-if="p.roepnaam" class="block truncate rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-xs font-semibold text-amber-800">
+              {{ p.roepnaam }}
+            </span>
+            <span v-else class="text-xs italic text-slate-400">-</span>
+          </div>
 
-              <td class="space-y-0.5 px-5 py-3 text-xs text-slate-600">
-                <div v-if="p.plaats" class="flex items-center gap-1.5">
-                  <MapPin class="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                  <span>{{ p.plaats }}</span>
-                </div>
-                <div v-if="p.email" class="flex items-center gap-1.5">
-                  <Mail class="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                  <a :href="`mailto:${p.email}`" class="text-amber-700 hover:underline">{{ p.email }}</a>
-                </div>
-              </td>
-              <td class="px-5 py-3">
-                <button
-                  @click="togglePaid(p)"
-                  class="shadow-2xs flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition"
-                  :class="[
-                    p.Betaald
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                      : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                  ]"
-                  title="Klik om status te wijzigen"
-                >
-                  <span class="h-1.5 w-1.5 rounded-full" :class="p.Betaald ? 'bg-emerald-500' : 'bg-amber-500'"></span>
-                  <span>{{ p.Betaald ? 'Betaald' : 'Nog betalen' }}</span>
-                </button>
-              </td>
-              <td class="space-x-2 px-5 py-3 text-right">
-                <button 
-                  @click="openEditModal(p)" 
-                  class="rounded p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-                  title="Bewerken"
-                >
-                  <Edit2 class="h-4 w-4" />
-                </button>
-                <button 
-                  @click="deleteParticipant(p)" 
-                  class="rounded p-1.5 text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"
-                  title="Verwijderen uit pool"
-                >
-                  <Trash2 class="h-4 w-4" />
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+          <!-- Naam -->
+          <div class="min-w-0" title="Naam">
+            <div class="truncate text-xs font-semibold text-slate-900">{{ formatFullName(p) }}</div>
+          </div>
+
+          <!-- Opstelling -->
+          <div class="min-w-0" title="Opstelling (renners)">
+            <button
+              @click="openManageRidersModal(p)"
+              class="flex max-w-full cursor-pointer items-center gap-1 rounded-lg border px-1.5 py-0.5 text-xs font-semibold transition"
+              :class="[
+                (participantRidersMap[p.deelnID]?.length || 0) >= maxTotalRiders
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                  : (participantRidersMap[p.deelnID]?.length || 0) > 0
+                    ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+              ]"
+              title="Klik om rennersopstelling te bekijken of te wijzigen"
+            >
+              <Bike class="h-3 w-3" />
+              <span>{{ participantRidersMap[p.deelnID]?.length || 0 }}/{{ maxTotalRiders }}</span>
+            </button>
+          </div>
+
+          <!-- Contact -->
+          <div class="min-w-0" title="Contact">
+            <div v-if="p.email" class="flex min-w-0 items-center gap-1 text-[11px] text-slate-600">
+              <Mail class="h-3 w-3 shrink-0 text-slate-400" />
+              <a :href="`mailto:${p.email}`" class="truncate text-xs text-amber-700 hover:underline">{{ p.email }}</a>
+            </div>
+            <span v-else class="text-xs text-slate-400">-</span>
+          </div>
+
+          <!-- Betaalstatus -->
+          <div class="min-w-0" title="Betaalstatus">
+            <button
+              @click="togglePaid(p)"
+              class="shadow-2xs flex max-w-full cursor-pointer items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs font-semibold transition"
+              :class="[
+                p.Betaald
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+              ]"
+              title="Klik om status te wijzigen"
+            >
+              <span class="h-1.5 w-1.5 rounded-full" :class="p.Betaald ? 'bg-emerald-500' : 'bg-amber-500'"></span>
+              <span class="truncate">{{ p.Betaald ? 'Betaald' : 'Open' }}</span>
+            </button>
+          </div>
+
+          <!-- Acties -->
+          <div class="min-w-0" title="Acties">
+            <div class="flex items-center gap-1">
+            <button
+              @click="openEditModal(p)"
+              class="rounded p-0.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              title="Bewerken"
+            >
+              <Edit2 class="h-3.5 w-3.5" />
+            </button>
+            <button
+              @click="deleteParticipant(p)"
+              class="rounded p-0.5 text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"
+              title="Verwijderen uit pool"
+            >
+              <Trash2 class="h-3.5 w-3.5" />
+            </button>
+            </div>
+          </div>
+          </div>
+        </div>
       </div>
 
       <!-- Footer count -->
@@ -826,7 +887,6 @@ const deleteParticipant = async (p: Participant) => {
               <label class="mb-1 block text-xs font-semibold text-slate-700">Selecteer adres uit adresboek *</label>
               <select 
                 v-model="addForm.adrID" 
-                @change="onAddressSelectChange"
                 class="shadow-2xs w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:outline-none"
               >
                 <option :value="null" disabled>Kies een persoon...</option>
@@ -837,7 +897,7 @@ const deleteParticipant = async (p: Participant) => {
             </div>
 
             <div>
-              <label class="mb-1 block text-xs font-semibold text-slate-700">Roepnaam / Teamnaam in Pool *</label>
+              <label class="mb-1 block text-xs font-semibold text-slate-700">Roepnaam / Teamnaam in Pool (optioneel)</label>
               <input 
                 v-model="addForm.roepnaam" 
                 class="shadow-2xs w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:outline-none" 
@@ -874,7 +934,7 @@ const deleteParticipant = async (p: Participant) => {
 
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
               <!-- Beschikbare renners -->
-              <div class="flex h-72 flex-col rounded-xl border border-slate-200 bg-white p-3">
+              <div class="flex h-[min(70vh,42rem)] flex-col rounded-xl border border-slate-200 bg-white p-3">
                 <div class="relative mb-2 shrink-0">
                   <Search class="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
                   <input 
@@ -890,9 +950,10 @@ const deleteParticipant = async (p: Participant) => {
                     class="group flex items-center justify-between rounded px-1 py-1.5 text-xs transition hover:bg-slate-50"
                   >
                     <div class="min-w-0 flex-1 pr-2">
-                      <span class="mr-1.5 font-mono text-[10px] text-slate-400">#{{ r.Rugnummer }}</span>
                       <strong class="font-semibold text-slate-900">{{ r.anaam }}</strong>, {{ r.vnaam || '' }}
+                      <span v-if="r.rennerLand" class="ml-1 text-slate-500">({{ r.rennerLand }})</span>
                       <span v-if="r.ploegCode" class="ml-1 font-mono text-[10px] text-amber-700">[{{ r.ploegCode }}]</span>
+                      <span v-if="r.Rugnummer" class="ml-1 text-slate-500">{{ r.Rugnummer }}</span>
                     </div>
                     <button 
                       @click="addRiderToAddForm(r)"
@@ -906,7 +967,7 @@ const deleteParticipant = async (p: Participant) => {
               </div>
 
               <!-- Gekozen renners -->
-              <div class="flex h-72 flex-col rounded-xl border border-slate-200 bg-slate-50/50 p-3">
+              <div class="flex h-[min(70vh,42rem)] flex-col rounded-xl border border-slate-200 bg-slate-50/50 p-3">
                 <div class="mb-2 flex shrink-0 items-center justify-between border-b border-slate-200 pb-1 text-xs font-semibold text-slate-700">
                   <span>Opstelling ({{ addForm.selectedRiders.length }})</span>
                   <span class="text-[10px] text-slate-400">1..{{ targetRiderCount }} basis, daarna reserves</span>
@@ -926,6 +987,7 @@ const deleteParticipant = async (p: Participant) => {
                     @drop="onAddRiderDrop(idx)"
                     @dragend="onAddRiderDragEnd"
                     class="my-0.5 flex cursor-grab items-center justify-between rounded border bg-white px-1.5 py-1.5 text-xs transition active:cursor-grabbing"
+                    :style="idx >= targetRiderCount ? { backgroundColor: '#f1f5f9' } : undefined"
                     :class="[
                       addRiderDragIdx === idx ? 'opacity-40 border-dashed border-amber-400 bg-amber-50/50' : '',
                       addRiderDragOverIdx === idx && addRiderDragIdx !== idx ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-400/50 scale-[1.01]' : 'border-slate-200/70 hover:border-slate-300'
@@ -935,12 +997,21 @@ const deleteParticipant = async (p: Participant) => {
                       <GripVertical class="h-3.5 w-3.5 shrink-0 text-slate-400" />
                       <span 
                         class="w-6 shrink-0 rounded px-1 py-0.5 text-center font-mono text-[10px] font-bold"
-                        :class="idx < targetRiderCount ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'"
+                        :class="isRiderOutAtSelectedStage(item.rennerID) ? 'bg-rose-100 text-rose-700' : idx < targetRiderCount ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'"
                       >
-                        {{ idx < targetRiderCount ? idx + 1 : `R${idx + 1 - targetRiderCount}` }}
+                        {{ isRiderOutAtSelectedStage(item.rennerID) ? 'X' : idx < targetRiderCount ? idx + 1 : `R${idx + 1 - targetRiderCount}` }}
                       </span>
                       <span class="truncate font-medium text-slate-800">
                         {{ getRiderDetails(item.rennerID)?.anaam }}, {{ getRiderDetails(item.rennerID)?.vnaam }}
+                      </span>
+                      <span v-if="getRiderDetails(item.rennerID)?.rennerLand" class="text-slate-500">
+                        ({{ getRiderDetails(item.rennerID)?.rennerLand }})
+                      </span>
+                      <span v-if="getRiderDetails(item.rennerID)?.Rugnummer" class="text-slate-500">
+                        nr. {{ getRiderDetails(item.rennerID)?.Rugnummer }}
+                      </span>
+                      <span v-if="isRiderOutAtSelectedStage(item.rennerID)" class="font-semibold text-rose-600">
+                        niet gestart in {{ getRiderDetails(item.rennerID)?.nietGestartEtappe }}
                       </span>
                     </div>
                     <button 
@@ -968,9 +1039,21 @@ const deleteParticipant = async (p: Participant) => {
     <div v-if="manageRidersModalOpen && managingParticipant" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div class="flex max-h-[90vh] w-full max-w-3xl flex-col space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
         <div class="flex shrink-0 items-center justify-between border-b border-slate-200 pb-4">
-          <div>
-            <h3 class="text-lg font-bold text-slate-900">Ploegopstelling beheren</h3>
-            <p class="text-xs text-slate-500">{{ formatFullName(managingParticipant) }} ({{ managingParticipant.roepnaam }}) • Pool doel: {{ targetRiderCount }} renners</p>
+          <>
+            <h3 class="text-lg font-bold text-slate-900">Ploegopstelling {{ managingParticipant.roepnaam }}</h3>
+            <p class="text-xs text-slate-500"></p>
+            <label class="mt-2 flex items-center gap-2 text-xs font-semibold text-slate-700">
+              <span>Opstelling t/m etappe:</span>
+              <select
+                v-model.number="selectedStageNumber"
+                class="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-800 focus:border-amber-500 focus:outline-none"
+              >
+                <option v-for="stage in stages" :key="stage.etappeNr ?? 0" :value="stage.etappeNr">
+                  Etappe {{ stage.etappeNr }}
+                </option>
+              </select>
+            </label>
+            </
           </div>
           <button @click="manageRidersModalOpen = false" class="text-slate-400 hover:text-slate-700"><X class="h-5 w-5" /></button>
         </div>
@@ -978,7 +1061,7 @@ const deleteParticipant = async (p: Participant) => {
         <div class="flex-1 space-y-4 overflow-y-auto pr-1">
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
             <!-- Beschikbare renners -->
-            <div class="flex h-80 flex-col rounded-xl border border-slate-200 bg-white p-3">
+            <div class="flex h-[min(70vh,42rem)] flex-col rounded-xl border border-slate-200 bg-white p-3">
               <div class="relative mb-2 shrink-0">
                 <Search class="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
                 <input 
@@ -994,9 +1077,10 @@ const deleteParticipant = async (p: Participant) => {
                   class="group flex items-center justify-between rounded px-1 py-1.5 text-xs transition hover:bg-slate-50"
                 >
                   <div class="min-w-0 flex-1 pr-2">
-                    <span class="mr-1.5 font-mono text-[10px] text-slate-400">#{{ r.Rugnummer }}</span>
                     <strong class="font-semibold text-slate-900">{{ r.anaam }}</strong>, {{ r.vnaam || '' }}
+                    <span v-if="r.rennerLand" class="ml-1 text-slate-500">({{ r.rennerLand }})</span>
                     <span v-if="r.ploegCode" class="ml-1 font-mono text-[10px] text-amber-700">[{{ r.ploegCode }}]</span>
+                    <span v-if="r.Rugnummer" class="ml-1 text-slate-500">{{ r.Rugnummer }}</span>
                   </div>
                   <button 
                     @click="addRiderToManaging(r)"
@@ -1010,7 +1094,7 @@ const deleteParticipant = async (p: Participant) => {
             </div>
 
             <!-- Gekozen renners -->
-            <div class="flex h-80 flex-col rounded-xl border border-slate-200 bg-slate-50/50 p-3">
+            <div class="flex h-[min(70vh,42rem)] flex-col rounded-xl border border-slate-200 bg-slate-50/50 p-3">
               <div class="mb-2 flex shrink-0 items-center justify-between border-b border-slate-200 pb-1 text-xs font-semibold text-slate-700">
                 <span>Geselecteerd ({{ managingSelectedRiders.length }} / {{ maxTotalRiders }})</span>
                 <span 
@@ -1035,6 +1119,7 @@ const deleteParticipant = async (p: Participant) => {
                   @drop="onManageRiderDrop(idx)"
                   @dragend="onManageRiderDragEnd"
                   class="my-0.5 flex cursor-grab items-center justify-between rounded border bg-white px-1.5 py-1.5 text-xs transition active:cursor-grabbing"
+                  :style="idx >= targetRiderCount ? { backgroundColor: '#f1f5f9' } : undefined"
                   :class="[
                     manageRiderDragIdx === idx ? 'opacity-40 border-dashed border-amber-400 bg-amber-50/50' : '',
                     manageRiderDragOverIdx === idx && manageRiderDragIdx !== idx ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-400/50 scale-[1.01]' : 'border-slate-200/70 hover:border-slate-300'
@@ -1044,15 +1129,23 @@ const deleteParticipant = async (p: Participant) => {
                     <GripVertical class="h-3.5 w-3.5 shrink-0 text-slate-400" />
                     <span 
                       class="w-6 shrink-0 rounded px-1 py-0.5 text-center font-mono text-[10px] font-bold"
-                      :class="idx < targetRiderCount ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'"
+                      :class="isRiderOutAtSelectedStage(item.rennerID) ? 'bg-rose-100 text-rose-700' : idx < targetRiderCount ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'"
                     >
-                      {{ idx < targetRiderCount ? idx + 1 : `R${idx + 1 - targetRiderCount}` }}
+                      {{ isRiderOutAtSelectedStage(item.rennerID) ? 'X' : idx < targetRiderCount ? idx + 1 : `R${idx + 1 - targetRiderCount}` }}
                     </span>
                     <span class="truncate font-medium text-slate-800">
                       {{ getRiderDetails(item.rennerID)?.anaam }}, {{ getRiderDetails(item.rennerID)?.vnaam }}
                     </span>
+                    <span v-if="getRiderDetails(item.rennerID)?.rennerLand" class="text-slate-500">
+                      ({{ getRiderDetails(item.rennerID)?.rennerLand }})
+                    </span>
                     <span v-if="getRiderDetails(item.rennerID)?.ploegCode" class="font-mono text-[10px] text-slate-400">
                       [{{ getRiderDetails(item.rennerID)?.ploegCode }}]
+                    </span>
+                    <span v-if="getRiderDetails(item.rennerID)?.Rugnummer" class="text-slate-500">
+{{ getRiderDetails(item.rennerID)?.Rugnummer }}
+                    </span>
+                    <span v-if="isRiderOutAtSelectedStage(item.rennerID)" class="font-semibold text-rose-600">{{ getRiderDetails(item.rennerID)?.nietGestartEtappe }}
                     </span>
                   </div>
                   <button 
@@ -1123,3 +1216,10 @@ const deleteParticipant = async (p: Participant) => {
     </div>
   </div>
 </template>
+
+<style>
+.participant-fields,
+.participant-header-fields {
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 0.55fr) minmax(0, 1.8fr) minmax(0, 0.65fr) minmax(0, 0.65fr);
+}
+</style>

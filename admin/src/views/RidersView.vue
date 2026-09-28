@@ -103,9 +103,10 @@ const formatRiderName = (r: Rider) => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="flex h-[calc(100vh-4rem)] min-h-0 flex-col gap-6">
     <!-- Action header met gecentreerd zoekvak -->
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div class="shrink-0 bg-slate-50">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div class="shrink-0">
         <h2 class="text-xl font-bold text-slate-900">Rennersoverzicht</h2>
         <p class="text-xs text-slate-500">Beheer alle wielrenners in de Tourpool database</p>
@@ -154,41 +155,44 @@ const formatRiderName = (r: Rider) => {
         </button>
       </div>
     </div>
+    </div>
 
     <!-- Cards Grid (1 col mobile, 2 cols tablet, 4 cols desktop) -->
-    <div v-if="loading && riders.length === 0" class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
-      Renners laden...
-    </div>
-    <div v-else-if="riders.length === 0" class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
-      Geen renners gevonden voor deze selectie.
-    </div>
-    <div v-else class="grid grid-cols-1 gap-1 sm:grid-cols-3 xl:grid-cols-6">
-      <div 
-        v-for="rider in riders" 
-        :key="rider.rennerID"
-        class="shadow-xs group flex items-center justify-between gap-1 rounded-xl border border-slate-200 bg-white p-2 transition hover:border-slate-400 hover:shadow-sm"
-      >
-        <div class="min-w-0 flex-1">
-          <h3 class="truncate text-sm font-medium leading-snug text-slate-900" :title="formatRiderName(rider)">
-            {{ formatRiderName(rider) }}
-          </h3>
-        </div>
+    <div class="min-h-0 flex-1 overflow-y-auto pr-1">
+      <div v-if="loading && riders.length === 0" class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
+        Renners laden...
+      </div>
+      <div v-else-if="riders.length === 0" class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
+        Geen renners gevonden voor deze selectie.
+      </div>
+      <div v-else class="grid grid-cols-1 gap-1 sm:grid-cols-3 xl:grid-cols-6">
+        <div 
+          v-for="rider in riders" 
+          :key="rider.rennerID"
+          class="shadow-xs group flex items-center justify-between gap-1 rounded-xl border border-slate-200 bg-white p-2 transition hover:border-slate-400 hover:shadow-sm"
+        >
+          <div class="min-w-0 flex-1">
+            <h3 class="truncate text-sm font-medium leading-snug text-slate-900" :title="formatRiderName(rider)">
+              {{ formatRiderName(rider) }}
+            </h3>
+          </div>
 
-        <div class="flex shrink-0 items-center gap-1">
-          <button 
-            @click="openEditModal(rider)" 
-            class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-            title="Bewerken"
-          >
-            <Edit2 class="h-3.5 w-3.5" />
-          </button>
-          <button 
-            @click="deleteRider(rider.rennerID)" 
-            class="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
-            title="Verwijderen"
-          >
-            <Trash2 class="h-3.5 w-3.5" />
-          </button>
+          <div class="flex shrink-0 items-center gap-1">
+            <button 
+              @click="openEditModal(rider)" 
+              class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              title="Bewerken"
+            >
+              <Edit2 class="h-3.5 w-3.5" />
+            </button>
+            <button 
+              @click="deleteRider(rider.rennerID)" 
+              class="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+              title="Verwijderen"
+            >
+              <Trash2 class="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
