@@ -4,8 +4,12 @@ import { pool } from '../db.js';
 
 export const standardPointsRouter = Router();
 
+const uitslagtypeSchema = z.enum(['rit', 'klasGeel', 'klasGroen', 'klasBol', 'klasWit', 'eindKlas', 'eindPunt', 'eindBerg', 'eindJon']);
+
 const createStandardPointSchema = z.object({
   Omschrijving: z.string().max(100).nullable().optional(),
+  uitslagtype: uitslagtypeSchema.nullable().optional(),
+  plaats: z.number().int().min(1).nullable().optional(),
   punten: z.number().int().default(0),
   volgorde: z.number().int().nullable().optional()
 });
@@ -15,12 +19,27 @@ const updateStandardPointSchema = createStandardPointSchema.partial();
 const presetsSchema = z.object({
   items: z.array(z.object({
     Omschrijving: z.string().max(100),
-    uitslagtype: z.enum(['rit', 'klasGeel', 'klasGroen', 'klasBol', 'klasWit', 'eindKlas', 'eindPunt', 'eindBerg', 'eindJon']),
+    uitslagtype: uitslagtypeSchema,
     plaats: z.number().int().min(1),
     punten: z.number().int(),
     volgorde: z.number().int().nullable().optional()
   })).min(1)
 });
+
+const duplicatePlaceMessage = async (
+  uitslagtype: string | null | undefined,
+  plaats: number | null | undefined,
+  excludeID?: number
+) => {
+  if (!uitslagtype || plaats == null) return null;
+  const rows = await pool.query(
+    'SELECT Omschrijving FROM tblStandaardPunten WHERE uitslagtype = ? AND plaats = ? AND prestatieID <> ? LIMIT 1',
+    [uitslagtype, plaats, excludeID ?? 0]
+  ) as Array<{ Omschrijving: string | null }>;
+  return rows[0]
+    ? `Plaats ${plaats} voor ${uitslagtype} bestaat al ("${rows[0].Omschrijving ?? ''}")`
+    : null;
+};
 
 standardPointsRouter.get('/', async (_request, response, next) => {
   try {
@@ -80,9 +99,14 @@ standardPointsRouter.get('/:prestatieID', async (request, response, next) => {
 standardPointsRouter.post('/', async (request, response, next) => {
   try {
     const payload = createStandardPointSchema.parse(request.body);
+    const duplicate = await duplicatePlaceMessage(payload.uitslagtype, payload.plaats);
+    if (duplicate) {
+      response.status(409).json({ message: duplicate });
+      return;
+    }
     const result = await pool.query(
-      'INSERT INTO tblStandaardPunten (Omschrijving, punten, volgorde) VALUES (?, ?, ?)',
-      [payload.Omschrijving ?? null, payload.punten ?? 0, payload.volgorde ?? null]
+      'INSERT INTO tblStandaardPunten (uitslagtype, plaats, Omschrijving, punten, volgorde) VALUES (?, ?, ?, ?, ?)',
+      [payload.uitslagtype ?? null, payload.plaats ?? null, payload.Omschrijving ?? null, payload.punten ?? 0, payload.volgorde ?? null]
     );
 
     response.status(201).json({
@@ -99,7 +123,7 @@ standardPointsRouter.put('/:prestatieID', async (request, response, next) => {
     const prestatieID = Number(request.params.prestatieID);
     const payload = updateStandardPointSchema.parse(request.body);
 
-    const rows = await pool.query('SELECT prestatieID, Omschrijving, punten, volgorde FROM tblStandaardPunten WHERE prestatieID = ?', [prestatieID]);
+    const rows = await pool.query('SELECT prestatieID, uitslagtype, plaats, Omschrijving, punten, volgorde FROM tblStandaardPunten WHERE prestatieID = ?', [prestatieID]);
     const current = (rows as Array<Record<string, unknown>>)[0];
 
     if (!current) {
@@ -108,14 +132,22 @@ standardPointsRouter.put('/:prestatieID', async (request, response, next) => {
     }
 
     const updated = {
+      uitslagtype: payload.uitslagtype !== undefined ? payload.uitslagtype : current.uitslagtype as string | null,
+      plaats: payload.plaats !== undefined ? payload.plaats : current.plaats as number | null,
       Omschrijving: payload.Omschrijving !== undefined ? payload.Omschrijving : current.Omschrijving,
       punten: payload.punten !== undefined ? payload.punten : current.punten,
       volgorde: payload.volgorde !== undefined ? payload.volgorde : current.volgorde
     };
 
+    const duplicate = await duplicatePlaceMessage(updated.uitslagtype, updated.plaats, prestatieID);
+    if (duplicate) {
+      response.status(409).json({ message: duplicate });
+      return;
+    }
+
     await pool.query(
-      'UPDATE tblStandaardPunten SET Omschrijving = ?, punten = ?, volgorde = ? WHERE prestatieID = ?',
-      [updated.Omschrijving, updated.punten, updated.volgorde ?? null, prestatieID]
+      'UPDATE tblStandaardPunten SET uitslagtype = ?, plaats = ?, Omschrijving = ?, punten = ?, volgorde = ? WHERE prestatieID = ?',
+      [updated.uitslagtype ?? null, updated.plaats ?? null, updated.Omschrijving, updated.punten, updated.volgorde ?? null, prestatieID]
     );
 
     response.json({ prestatieID, ...updated });

@@ -45,6 +45,18 @@ const typeRank = (type?: string | null) => {
   return rank === -1 ? typeOrder.length : rank;
 };
 
+const uitslagtypeOptions = [
+  { value: 'rit', label: 'Etappe' },
+  { value: 'klasGeel', label: 'Gele trui (na etappe)' },
+  { value: 'klasGroen', label: 'Groene trui (na etappe)' },
+  { value: 'klasBol', label: 'Bolletjestrui (na etappe)' },
+  { value: 'klasWit', label: 'Witte trui (na etappe)' },
+  { value: 'eindKlas', label: 'Eindklassement' },
+  { value: 'eindPunt', label: 'Eindklassement punten' },
+  { value: 'eindBerg', label: 'Eindklassement berg' },
+  { value: 'eindJon', label: 'Eindklassement jongeren' }
+];
+
 const filteredPoints = computed(() => {
   let list = points.value;
   if (searchQuery.value.trim() !== '') {
@@ -52,8 +64,7 @@ const filteredPoints = computed(() => {
     list = list.filter(p => 
       (p.Omschrijving && p.Omschrijving.toLowerCase().includes(q)) ||
       String(p.prestatieID).includes(q) ||
-      String(p.punten).includes(q) ||
-      (p.volgorde !== null && p.volgorde !== undefined && String(p.volgorde).includes(q))
+      String(p.punten).includes(q)
     );
   }
   return [...list].sort((a, b) =>
@@ -64,11 +75,11 @@ const filteredPoints = computed(() => {
 });
 
 const openCreateModal = () => {
-  const maxVolgorde = points.value.reduce((max, p) => Math.max(max, p.volgorde || 0), 0);
   editingItem.value = {
     Omschrijving: '',
-    punten: 10,
-    volgorde: maxVolgorde + 1
+    uitslagtype: 'rit',
+    plaats: 1,
+    punten: 10
   };
   modalOpen.value = true;
 };
@@ -83,14 +94,18 @@ const savePoint = async () => {
     alert('Vul een omschrijving in.');
     return;
   }
+  const plaats = Number(editingItem.value.plaats);
+  if (!editingItem.value.uitslagtype || !Number.isInteger(plaats) || plaats < 1) {
+    alert('Kies een uitslagtype en vul een plaats van 1 of hoger in.');
+    return;
+  }
 
   try {
     const payload = {
       Omschrijving: editingItem.value.Omschrijving.trim(),
-      punten: Number(editingItem.value.punten ?? 0),
-      volgorde: editingItem.value.volgorde !== undefined && editingItem.value.volgorde !== null && editingItem.value.volgorde !== ('' as any)
-        ? Number(editingItem.value.volgorde)
-        : null
+      uitslagtype: editingItem.value.uitslagtype,
+      plaats,
+      punten: Number(editingItem.value.punten ?? 0)
     };
 
     if (editingItem.value.prestatieID) {
@@ -254,14 +269,9 @@ const loadPresets = async () => {
       >
         <div class="flex min-w-0 flex-1 items-center gap-1">
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-1">
-              <span v-if="p.volgorde" class="py-0.2 px-1.5 font-mono text-[14px] font-bold text-slate-700">
-                {{ p.volgorde }}:
-              </span>
-            <h3 class="mt-0.5 truncate text-sm font-bold text-slate-900" :title="p.Omschrijving">
+            <h3 class="mt-0.5 truncate px-1.5 text-sm font-bold text-slate-900" :title="p.Omschrijving">
               {{ p.Omschrijving }}
             </h3>
-            </div>
           </div>
         </div>
 
@@ -315,8 +325,30 @@ const loadPresets = async () => {
             />
           </div>
 
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-3 gap-3">
+            <div class="col-span-2">
+              <label class="mb-1 block text-xs font-semibold text-slate-700">Uitslagtype *</label>
+              <select 
+                v-model="editingItem!.uitslagtype" 
+                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none"
+              >
+                <option :value="null" disabled>Kies een type...</option>
+                <option v-for="option in uitslagtypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </div>
             <div>
+              <label class="mb-1 block text-xs font-semibold text-slate-700">Plaats *</label>
+              <input 
+                v-model.number="editingItem!.plaats" 
+                type="number"
+                min="1"
+                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" 
+                placeholder="1" 
+              />
+            </div>
+          </div>
+
+          <div>
               <label class="mb-1 block text-xs font-semibold text-slate-700">Aantal punten *</label>
               <input 
                 v-model.number="editingItem!.punten" 
@@ -324,16 +356,6 @@ const loadPresets = async () => {
                 class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" 
                 placeholder="10" 
               />
-            </div>
-            <div>
-              <label class="mb-1 block text-xs font-semibold text-slate-700">Volgorde</label>
-              <input 
-                v-model.number="editingItem!.volgorde" 
-                type="number"
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" 
-                placeholder="bv. 1" 
-              />
-            </div>
           </div>
         </div>
 
