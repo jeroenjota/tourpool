@@ -74,6 +74,21 @@ const filteredPoints = computed(() => {
   );
 });
 
+const pointColumns = computed(() => {
+  const columns = [
+    { key: 'stage', title: 'Etappeplaatsen', types: ['rit'], points: [] as StandardPoint[] },
+    { key: 'jerseys', title: 'Etappetruien', types: ['klasgeel', 'klasgroen', 'klasbol', 'klaswit'], points: [] as StandardPoint[] },
+    { key: 'final', title: 'Eindklassement', types: ['eindklas'], points: [] as StandardPoint[] },
+    { key: 'other', title: 'Overige klassementen', types: ['eindpunt', 'eindberg', 'eindjon'], points: [] as StandardPoint[] }
+  ];
+  const untyped = { key: 'untyped', title: 'Zonder uitslagtype', types: [] as string[], points: [] as StandardPoint[] };
+  for (const point of filteredPoints.value) {
+    const type = (point.uitslagtype ?? '').toLowerCase();
+    (columns.find(column => column.types.includes(type)) ?? untyped).points.push(point);
+  }
+  return untyped.points.length ? [...columns, untyped] : columns;
+});
+
 const openCreateModal = () => {
   editingItem.value = {
     Omschrijving: '',
@@ -254,16 +269,19 @@ const loadPresets = async () => {
       </div>
     </div>
 
-    <!-- Cards Grid (4 kolommen op groot scherm, 2 op tablet, 1 op mobiel) -->
+    <!-- Kolommen per soort prestatie -->
     <div v-if="loading && points.length === 0" class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
       Punten laden...
     </div>
     <div v-else-if="filteredPoints.length === 0" class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
       Geen standaard punten gevonden voor deze zoekopdracht.
     </div>
-    <div v-else class="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+    <div v-else class="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section v-for="column in pointColumns" :key="column.key" class="min-w-0 space-y-1.5">
+        <h3 class="text-sm font-bold text-slate-900">{{ column.title }}</h3>
+        <p v-if="column.points.length === 0" class="rounded-lg border border-dashed border-slate-300 p-4 text-xs text-slate-500">Geen prestaties</p>
       <div 
-        v-for="p in filteredPoints" 
+        v-for="p in column.points" 
         :key="p.prestatieID"
         class="shadow-xs flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-2 transition hover:border-slate-300 hover:shadow-sm"
       >
@@ -298,6 +316,7 @@ const loadPresets = async () => {
           </div>
         </div>
       </div>
+      </section>
     </div>
 
     <!-- Footer count -->

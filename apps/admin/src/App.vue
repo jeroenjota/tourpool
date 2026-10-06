@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink, RouterView, useRoute } from 'vue-router';
 import { apiFetch } from './services/api';
 import { useActivePoolStore } from './stores/activePool';
@@ -14,7 +14,9 @@ import {
   Sliders, 
   UserCheck,
   Award,
-  ArrowLeft
+  ArrowLeft,
+  Menu,
+  X
 } from '@lucide/vue';
 
 const route = useRoute();
@@ -22,6 +24,14 @@ const activePoolStore = useActivePoolStore();
 const showPoolHeader = computed(() => route.meta.poolPage === true);
 const isNavItemActive = (path: string) =>
   route.path === path || (path === '/pools' && route.path.startsWith('/pools/'));
+const mobileMenuOpen = ref(false);
+watch(() => route.fullPath, () => { mobileMenuOpen.value = false; });
+const closeMenuOnEscape = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') mobileMenuOpen.value = false;
+};
+onMounted(() => window.addEventListener('keydown', closeMenuOnEscape));
+onBeforeUnmount(() => window.removeEventListener('keydown', closeMenuOnEscape));
+
 const headerPool = ref<{ poolID: number; Naam: string | null; Org: string | null } | null>(null);
 const poolHeaderLoading = ref(false);
 const poolHeaderError = ref('');
@@ -73,8 +83,28 @@ const poolNavItems = [
 
 <template>
   <div class="flex h-screen overflow-hidden bg-slate-50 text-slate-800">
+    <!-- Achtergrond achter het uitgeklapte menu op mobiel -->
+    <div
+      v-if="mobileMenuOpen"
+      class="fixed inset-0 z-30 bg-slate-900/40 lg:hidden"
+      aria-hidden="true"
+      @click="mobileMenuOpen = false"
+    ></div>
+
     <!-- Sidebar -->
-    <aside class="fixed inset-y-0 left-0 z-30 flex h-screen w-64 flex-col border-r border-slate-200 bg-yellow-200">
+    <aside
+      id="main-menu"
+      class="fixed inset-y-0 left-0 z-40 flex h-dvh w-64 flex-col border-r border-slate-200 bg-yellow-200 transition-transform duration-200 lg:translate-x-0"
+      :class="mobileMenuOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full'"
+    >
+      <button
+        type="button"
+        class="absolute right-3 top-5 rounded-lg p-2 text-slate-600 hover:bg-yellow-300 lg:hidden"
+        aria-label="Menu sluiten"
+        @click="mobileMenuOpen = false"
+      >
+        <X class="h-5 w-5" />
+      </button>
       <RouterLink to="/" class="flex items-center space-x-3 border-b border-slate-200 p-5 transition-colors hover:bg-slate-50">
         <div class="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-amber-600">
           <Bike class="h-6 w-6" />
@@ -89,7 +119,7 @@ const poolNavItems = [
         <template v-for="item in navItems" :key="item.path">
           <RouterLink
           :to="item.path"
-          class="flex items-center gap-3 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors"
+          class="flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors lg:py-1.5"
           :class="[
             isNavItemActive(item.path)
               ? 'bg-amber-50 text-red-700 border border-amber-200/80 font-semibold' 
@@ -110,10 +140,27 @@ const poolNavItems = [
     </aside>
 
     <!-- Main Content -->
-    <div class="ml-64 flex h-screen min-w-0 flex-1 flex-col overflow-hidden bg-yellow-300">
+    <div class="flex h-dvh min-w-0 flex-1 flex-col overflow-hidden bg-yellow-300 lg:ml-64">
+      <!-- Bovenbalk met menuknop op mobiel -->
+      <div class="flex shrink-0 items-center gap-3 border-b border-yellow-500 bg-yellow-200 px-4 py-2 lg:hidden">
+        <button
+          type="button"
+          class="rounded-lg p-2 text-slate-700 hover:bg-yellow-300"
+          aria-label="Menu openen"
+          aria-controls="main-menu"
+          :aria-expanded="mobileMenuOpen"
+          @click="mobileMenuOpen = true"
+        >
+          <Menu class="h-5 w-5" />
+        </button>
+        <RouterLink to="/" class="flex items-center gap-2 font-bold text-slate-900">
+          <Bike class="h-5 w-5 text-amber-600" />
+          <span>Tourpool</span>
+        </RouterLink>
+      </div>
       <header
         v-if="showPoolHeader"
-        class="mx-4 my-2 shrink-0 rounded-xl border border-b border-yellow-800 bg-yellow-400 px-8 py-4"
+        class="mx-2 my-2 shrink-0 rounded-xl border border-b border-yellow-800 bg-yellow-400 px-4 py-3 sm:mx-4 sm:px-8 sm:py-4"
         aria-label="Pool"
         aria-live="polite"
       >
@@ -143,7 +190,7 @@ const poolNavItems = [
           </nav>
         </div>
       </header>
-      <main class="h-full min-h-0 flex-1 overflow-hidden bg-yellow-300 px-8 py-4">
+      <main class="h-full min-h-0 flex-1 overflow-hidden bg-yellow-300 px-3 py-3 sm:px-8 sm:py-4">
         <RouterView v-slot="{ Component }">
           <component :is="Component" class="route-page" />
         </RouterView>

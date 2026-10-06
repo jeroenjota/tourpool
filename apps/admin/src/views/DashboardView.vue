@@ -145,8 +145,8 @@ const cards = [
 </script>
 
 <template>
-  <div class="space-y-4 p-2">
-    <div class="rounded-2xl bg-yellow-300 p-4">
+  <div class="space-y-4 p-0">
+    <div class="w-full bg-yellow-300 text-center md:p-4">
       <h1 class="text-red -900 text-4xl font-bold tracking-tight">
         Tourpool Dashboard
       </h1>
