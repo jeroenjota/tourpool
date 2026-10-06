@@ -159,11 +159,11 @@ const deleteAddress = async (id: number) => {
     <div v-else-if="filteredAddresses.length === 0" class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
       Geen adressen gevonden voor deze zoekopdracht.
     </div>
-    <div v-else class="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+    <div v-else class="grid grid-cols-1 gap-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
       <div 
         v-for="a in filteredAddresses" 
         :key="a.adrID"
-        class="shadow-xs group flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 transition hover:border-slate-300 hover:shadow-sm"
+        class="shadow-xs group flex items-center justify-between gap-2 rounded-lg border border-slate-500 bg-white px-2 py-1 transition hover:border-slate-300 hover:shadow-sm"
       >
         <div class="min-w-0 flex-1">
           <h3 class="truncate text-sm font-medium leading-snug text-slate-900" :title="formatFullName(a)">

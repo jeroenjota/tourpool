@@ -33,6 +33,19 @@ const error = ref('');
 const searchQuery = ref('');
 const pointInputs = ref<Record<number, string>>({});
 
+const typeOrder = ['rit', 'klasgeel', 'klasgroen', 'klasbol', 'klaswit', 'eindklas', 'eindpunt', 'eindberg', 'eindjon'];
+const typeRank = (type: string | null) => {
+  const rank = typeOrder.indexOf((type ?? '').toLowerCase());
+  return rank === -1 ? typeOrder.length : rank;
+};
+
+// Sorteer op uitslagtype en plaats, zodat een later toegevoegde plaats altijd op zijn plek komt.
+const comparePoints = (a: StandardPoint | PointAllocation, b: StandardPoint | PointAllocation) =>
+  typeRank(a.uitslagtype) - typeRank(b.uitslagtype) ||
+  (a.plaats ?? 9999) - (b.plaats ?? 9999) ||
+  (a.volgorde ?? 9999) - (b.volgorde ?? 9999) ||
+  a.prestatieID - b.prestatieID;
+
 const filteredAllocations = computed(() => {
   const query = searchQuery.value.trim().toLowerCase();
   return allocations.value
@@ -42,11 +55,30 @@ const filteredAllocations = computed(() => {
       (point.uitslagtype ?? '').toLowerCase().includes(query) ||
       String(point.plaats ?? '').includes(query) ||
       String(point.Punten ?? '').includes(query))
-    .sort((a, b) =>
-      (a.volgorde ?? 9999) - (b.volgorde ?? 9999) ||
-      a.prestatieID - b.prestatieID
-    );
+    .sort(comparePoints);
 });
+
+
+const placeKey = (uitslagtype: string | null, plaats: number) => `${(uitslagtype ?? '').toLowerCase()}-${plaats}`;
+const assignedPlaces = computed(() => new Set(
+  allocations.value.filter(point => point.plaats != null).map(point => placeKey(point.uitslagtype, point.plaats!))
+));
+
+// Plaatsen moeten op volgorde: plaats N kan pas als plaats N-1 er is.
+const addBlockedReason = (point: StandardPoint) => {
+  if (point.plaats == null || point.plaats <= 1) return '';
+  return assignedPlaces.value.has(placeKey(point.uitslagtype, point.plaats - 1))
+    ? ''
+    : `Voeg eerst plaats ${point.plaats - 1} toe`;
+};
+
+// Alleen de hoogste plaats mag weg, anders ontstaat er een gat.
+const deleteBlockedReason = (point: PointAllocation) => {
+  if (point.plaats == null) return '';
+  return assignedPlaces.value.has(placeKey(point.uitslagtype, point.plaats + 1))
+    ? `Verwijder eerst plaats ${point.plaats + 1}`
+    : '';
+};
 
 const missingStandardPoints = computed(() => {
   const assignedIDs = new Set(allocations.value.map(point => point.prestatieID));
@@ -58,9 +90,7 @@ const categoryColumns = <T extends StandardPoint | PointAllocation>(points: T[])
   const jerseys: T[] = [];
   const final: T[] = [];
   const other: T[] = [];
-  const sorted = [...points].sort((a, b) =>
-    (a.volgorde ?? 9999) - (b.volgorde ?? 9999) || a.prestatieID - b.prestatieID
-  );
+  const sorted = [...points].sort(comparePoints);
   for (const point of sorted) {
     const category = point.uitslagtype?.toLowerCase();
     if (category === 'rit') stages.push(point);
@@ -145,7 +175,7 @@ const updatePointsInput = (point: PointAllocation, event: Event) => {
 
 const addStandardPoint = async (point: StandardPoint) => {
   const poolID = activePoolStore.activePoolID;
-  if (!poolID) return;
+  if (!poolID || addBlockedReason(point)) return;
 
   saving.value = true;
   error.value = '';
@@ -220,7 +250,7 @@ onBeforeRouteLeave(async () => {
 
 const deletePoint = async (point: PointAllocation) => {
   const poolID = activePoolStore.activePoolID;
-  if (!poolID || saving.value || loading.value) return;
+  if (!poolID || saving.value || loading.value || deleteBlockedReason(point)) return;
 
   saving.value = true;
   error.value = '';
@@ -307,7 +337,7 @@ const deletePoint = async (point: PointAllocation) => {
             @keydown.enter.prevent="blurPointsInput"
             class="shadow-2xs w-16 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-right font-mono text-sm font-bold text-amber-800 focus:border-amber-500 focus:outline-none disabled:opacity-50"
           />
-          <button type="button" @click="deletePoint(point)" :disabled="saving || loading" class="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50" title="Verwijderen">
+          <button type="button" @click="deletePoint(point)" :disabled="saving || loading || !!deleteBlockedReason(point)" class="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400" :title="deleteBlockedReason(point) || 'Verwijderen'">
             <Trash2 class="h-3.5 w-3.5" />
           </button>
         </div>
@@ -333,7 +363,7 @@ const deletePoint = async (point: PointAllocation) => {
           </div>
           <div class="flex shrink-0 items-center gap-2">
             <span class="shadow-2xs rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 font-mono text-sm font-bold text-amber-800">{{ point.punten }} pt</span>
-            <button type="button" @click="addStandardPoint(point)" :disabled="saving" class="rounded-lg border border-amber-200 bg-amber-50 p-2 text-amber-800 hover:bg-amber-100 disabled:opacity-50" title="Toevoegen aan actieve pool">
+            <button type="button" @click="addStandardPoint(point)" :disabled="saving || !!addBlockedReason(point)" class="rounded-lg border border-amber-200 bg-amber-50 p-2 text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-amber-50" :title="addBlockedReason(point) || 'Toevoegen aan actieve pool'">
               <Plus class="h-4 w-4" />
             </button>
           </div>

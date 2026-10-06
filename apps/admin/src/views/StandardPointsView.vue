@@ -8,27 +8,23 @@ import {
   X, 
   RefreshCw, 
   Search, 
-  Sparkles,
-  GripVertical
+  Sparkles
 } from '@lucide/vue';
 
 interface StandardPoint {
   prestatieID: number;
   Omschrijving: string;
   punten: number;
+  uitslagtype?: string | null;
+  plaats?: number | null;
   volgorde?: number | null;
 }
 
 const points = ref<StandardPoint[]>([]);
 const loading = ref(true);
-const savingOrder = ref(false);
 const searchQuery = ref('');
 const modalOpen = ref(false);
 const editingItem = ref<Partial<StandardPoint> | null>(null);
-
-// Drag and drop state
-const draggedIndex = ref<number | null>(null);
-const dragOverIndex = ref<number | null>(null);
 
 const fetchPoints = async () => {
   loading.value = true;
@@ -43,6 +39,12 @@ const fetchPoints = async () => {
 
 onMounted(fetchPoints);
 
+const typeOrder = ['rit', 'klasgeel', 'klasgroen', 'klasbol', 'klaswit', 'eindklas', 'eindpunt', 'eindberg', 'eindjon'];
+const typeRank = (type?: string | null) => {
+  const rank = typeOrder.indexOf((type ?? '').toLowerCase());
+  return rank === -1 ? typeOrder.length : rank;
+};
+
 const filteredPoints = computed(() => {
   let list = points.value;
   if (searchQuery.value.trim() !== '') {
@@ -54,77 +56,12 @@ const filteredPoints = computed(() => {
       (p.volgorde !== null && p.volgorde !== undefined && String(p.volgorde).includes(q))
     );
   }
-  return [...list].sort((a, b) => (a.volgorde ?? 9999) - (b.volgorde ?? 9999) || a.prestatieID - b.prestatieID);
+  return [...list].sort((a, b) =>
+    typeRank(a.uitslagtype) - typeRank(b.uitslagtype) ||
+    (a.plaats ?? 9999) - (b.plaats ?? 9999) ||
+    a.prestatieID - b.prestatieID
+  );
 });
-
-// Drag & drop handlers
-const onDragStart = (event: DragEvent, index: number) => {
-  draggedIndex.value = index;
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', String(index));
-  }
-};
-
-const onDragOver = (event: DragEvent, index: number) => {
-  event.preventDefault();
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'move';
-  }
-  dragOverIndex.value = index;
-};
-
-const onDragLeave = (_event: DragEvent, index: number) => {
-  if (dragOverIndex.value === index) {
-    dragOverIndex.value = null;
-  }
-};
-
-const onDrop = async (dropIndex: number) => {
-  if (draggedIndex.value === null || draggedIndex.value === dropIndex) {
-    draggedIndex.value = null;
-    dragOverIndex.value = null;
-    return;
-  }
-
-  // Work on sorted points list
-  const currentList = [...filteredPoints.value];
-  const [draggedItem] = currentList.splice(draggedIndex.value, 1);
-  currentList.splice(dropIndex, 0, draggedItem);
-
-  // Re-assign volgorde 1..N
-  currentList.forEach((item, idx) => {
-    item.volgorde = idx + 1;
-  });
-
-  points.value = currentList;
-  draggedIndex.value = null;
-  dragOverIndex.value = null;
-
-  // Persist new order to backend
-  savingOrder.value = true;
-  try {
-    await apiFetch('/standard-points/reorder', {
-      method: 'PUT',
-      body: JSON.stringify({
-        items: currentList.map(p => ({
-          prestatieID: p.prestatieID,
-          volgorde: p.volgorde!
-        }))
-      })
-    });
-  } catch (err) {
-    console.error('Error saving new standard points order:', err);
-    await fetchPoints();
-  } finally {
-    savingOrder.value = false;
-  }
-};
-
-const onDragEnd = () => {
-  draggedIndex.value = null;
-  dragOverIndex.value = null;
-};
 
 const openCreateModal = () => {
   const maxVolgorde = points.value.reduce((max, p) => Math.max(max, p.volgorde || 0), 0);
@@ -187,59 +124,71 @@ const deletePoint = async (id: number) => {
 
 // Snelle presets toevoegen inclusief logische volgorde
 const presets = [
-  { omschrijving: 'Winnaar etappe', punten: 10, volgorde: 1 },
-  { omschrijving: 'Tweede plaats etappe', punten: 7, volgorde: 2 },
-  { omschrijving: 'Derde plaats etappe', punten: 5, volgorde: 3 },
-  { omschrijving: 'Vierde plaats etappe', punten: 4, volgorde: 4 },
-  { omschrijving: 'Vijfde plaats etappe', punten: 3, volgorde: 5 },
-  { omschrijving: 'Zesde plaats etappe', punten: 2, volgorde: 6 },
-  { omschrijving: 'Zevende plaats etappe', punten: 1, volgorde: 7 },
-  { omschrijving: 'Gele trui na etappe', punten: 6, volgorde: 21 },
-  { omschrijving: '2e in Klassement na etappe', punten: 4, volgorde: 22 },
-  { omschrijving: '3e in Klassement na etappe', punten: 3, volgorde: 23 },
-  { omschrijving: 'Groene trui na etappe', punten: 3, volgorde: 31 },
-  { omschrijving: 'Bolletjes trui na etappe', punten: 3, volgorde: 32 },
-  { omschrijving: 'Witte trui na etappe', punten: 3, volgorde: 51 },
-  { omschrijving: '1e in eindklassement', punten: 50, volgorde: 71 },
-  { omschrijving: '2e in eindklassement', punten: 30, volgorde: 72 },
-  { omschrijving: '3e in eindklassement', punten: 15, volgorde: 73 },
-  { omschrijving: '4e in eindklassement', punten: 10, volgorde: 74 },
-  { omschrijving: '5e in eindklassement', punten: 5, volgorde: 75 },
-  { omschrijving: '6e in eindklassement', punten: 3, volgorde: 76 },
-  { omschrijving: '7e in eindklassement', punten: 2, volgorde: 77 },
-  { omschrijving: '1e in puntenklassement', punten: 15, volgorde: 81 },
-  { omschrijving: '2e in puntenklassement', punten: 10, volgorde: 82 },
-  { omschrijving: '3e in puntenklassement', punten: 5, volgorde: 83 },
-  { omschrijving: '1e in bergklassement', punten: 15, volgorde: 91 },
-  { omschrijving: '2e in bergklassement', punten: 10, volgorde: 92 },
-  { omschrijving: '3e in bergklassement', punten: 5, volgorde: 93 },
-  { omschrijving: '1e in jongerenklassement', punten: 15, volgorde: 101 },
-  { omschrijving: '2e in jongerenklassement', punten: 10, volgorde: 102 },
-  { omschrijving: '3e in jongerenklassement', punten: 5, volgorde: 103 }
+  { omschrijving: 'Winnaar etappe', plaats: 1, punten: 15, volgorde: 1, uitslagtype: 'rit' },
+  { omschrijving: '2e etappe', plaats: 2, punten: 12, volgorde: 2, uitslagtype: 'rit' },
+  { omschrijving: '3e etappe', plaats: 3, punten: 9, volgorde: 3, uitslagtype: 'rit' },
+  { omschrijving: '4e etappe', plaats: 4, punten: 7, volgorde: 4, uitslagtype: 'rit' },
+  { omschrijving: '5e etappe', plaats: 5, punten: 6, volgorde: 5, uitslagtype: 'rit' },
+  { omschrijving: '6e etappe', plaats: 6, punten: 5, volgorde: 6, uitslagtype: 'rit' },
+  { omschrijving: '7e etappe', plaats: 7, punten: 4, volgorde: 7, uitslagtype: 'rit' },
+  { omschrijving: '8e etappe', plaats: 8, punten: 3, volgorde: 8, uitslagtype: 'rit' },
+  { omschrijving: '9e etappe', plaats: 9, punten: 2, volgorde: 9, uitslagtype: 'rit' },
+  { omschrijving: '10e etappe', plaats: 10, punten: 1, volgorde: 10, uitslagtype: 'rit' },
+  { omschrijving: 'Gele trui na etappe', plaats: 1, punten: 5, volgorde: 21, uitslagtype: 'klasGeel' },
+  { omschrijving: '2e in Klassement na etappe', plaats: 2, punten: 3, volgorde: 22, uitslagtype: 'klasGeel' },
+  { omschrijving: '3e in Klassement na etappe', plaats: 3, punten: 1, volgorde: 23, uitslagtype: 'klasGeel' },
+  { omschrijving: 'Groene trui na etappe', plaats: 1, punten: 5, volgorde: 31, uitslagtype: 'klasGroen' },
+  { omschrijving: 'Bolletjes trui na etappe', plaats: 1, punten: 5, volgorde: 32, uitslagtype: 'klasBol' },
+  { omschrijving: 'Witte trui na etappe', plaats: 1, punten: 5, volgorde: 51, uitslagtype: 'klasWit' },
+  { omschrijving: 'Tourwinnaar', plaats: 1, punten: 50, volgorde: 71, uitslagtype: 'eindKlas' },
+  { omschrijving: '2e in tour', plaats: 2, punten: 30, volgorde: 72, uitslagtype: 'eindKlas' },
+  { omschrijving: '3e in tour', plaats: 3, punten: 15, volgorde: 73, uitslagtype: 'eindKlas' },
+  { omschrijving: '4e in tour', plaats: 4, punten: 10, volgorde: 74, uitslagtype: 'eindKlas' },
+  { omschrijving: '5e in tour', plaats: 5, punten: 7, volgorde: 75, uitslagtype: 'eindKlas' },
+  { omschrijving: '6e in tour', plaats: 6, punten: 5, volgorde: 76, uitslagtype: 'eindKlas' },
+  { omschrijving: '7e in tour', plaats: 7, punten: 4, volgorde: 77, uitslagtype: 'eindKlas' },
+  { omschrijving: '8e in tour', plaats: 8, punten: 3, volgorde: 78, uitslagtype: 'eindKlas' },
+  { omschrijving: '9e in tour', plaats: 9, punten: 2, volgorde: 79, uitslagtype: 'eindKlas' },
+  { omschrijving: '10e in tour', plaats: 10, punten: 1, volgorde: 80, uitslagtype: 'eindKlas' },
+  { omschrijving: '1e puntenkl', plaats: 1, punten: 15, volgorde: 81, uitslagtype: 'eindPunt' },
+  { omschrijving: '2e puntenkl', plaats: 2, punten: 10, volgorde: 82, uitslagtype: 'eindPunt' },
+  { omschrijving: '3e puntenkl', plaats: 3, punten: 5, volgorde: 83, uitslagtype: 'eindPunt' },
+  { omschrijving: '1e in bergkl', plaats: 1, punten: 15, volgorde: 91, uitslagtype: 'eindBerg' },
+  { omschrijving: '2e in bergkl', plaats: 2, punten: 10, volgorde: 92, uitslagtype: 'eindBerg' },
+  { omschrijving: '3e in bergkl', plaats: 3, punten: 5, volgorde: 93, uitslagtype: 'eindBerg' },
+  { omschrijving: '1e in jong.kl', plaats: 1, punten: 15, volgorde: 101, uitslagtype: 'eindJon' },
+  { omschrijving: '2e in jong.kl', plaats: 2, punten: 10, volgorde: 102, uitslagtype: 'eindJon' },
+  { omschrijving: '3e in jong.kl', plaats: 3, punten: 5, volgorde: 103, uitslagtype: 'eindJon' }
 ];
 
-const addAllMissingPresets = async () => {
-  const currentDescriptions = new Set(points.value.map(p => p.Omschrijving.toLowerCase()));
-  const toAdd = presets.filter(p => !currentDescriptions.has(p.omschrijving.toLowerCase()));
+const loadingPresets = ref(false);
 
-  if (toAdd.length === 0) {
-    alert('Alle standaard prestaties zijn al aanwezig.');
-    return;
-  }
+const loadPresets = async () => {
+  if (!confirm(
+    `Alle huidige standaardpunten worden verwijderd en vervangen door ${presets.length} presets.\n\n` +
+    'De puntentoekenning van bestaande pools blijft ongewijzigd. Doorgaan?'
+  )) return;
 
-  if (!confirm(`Wil je de ${toAdd.length} ontbrekende standaard prestaties toevoegen?`)) return;
-
-  for (const item of toAdd) {
-    await apiFetch('/standard-points', {
-      method: 'POST',
+  loadingPresets.value = true;
+  try {
+    await apiFetch('/standard-points/presets', {
+      method: 'PUT',
       body: JSON.stringify({
-        Omschrijving: item.omschrijving,
-        punten: item.punten,
-        volgorde: item.volgorde
+        items: presets.map(item => ({
+          Omschrijving: item.omschrijving,
+          uitslagtype: item.uitslagtype,
+          plaats: item.plaats,
+          punten: item.punten,
+          volgorde: item.volgorde
+        }))
       })
     });
+  } catch (err) {
+    alert(`Fout bij laden van presets: ${err instanceof Error ? err.message : err}`);
+  } finally {
+    loadingPresets.value = false;
+    await fetchPoints();
   }
-  await fetchPoints();
 };
 </script>
 
@@ -265,9 +214,10 @@ const addAllMissingPresets = async () => {
       <!-- Knoppen rechts -->
       <div class="flex shrink-0 items-center gap-2.5">
         <button 
-          @click="addAllMissingPresets"
-          class="shadow-xs flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
-          title="Voeg automatisch de standaard prestatie-templates toe"
+          @click="loadPresets"
+          :disabled="loadingPresets"
+          class="shadow-xs flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
+          title="Standaardtabel leegmaken en opnieuw vullen met de presets"
         >
           <Sparkles class="h-4 w-4 text-amber-600" />
           <span>Presets laden</span>
@@ -296,41 +246,22 @@ const addAllMissingPresets = async () => {
     <div v-else-if="filteredPoints.length === 0" class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
       Geen standaard punten gevonden voor deze zoekopdracht.
     </div>
-    <div v-else class="grid select-none grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+    <div v-else class="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
       <div 
-        v-for="(p, idx) in filteredPoints" 
+        v-for="p in filteredPoints" 
         :key="p.prestatieID"
-        draggable="true"
-        @dragstart="onDragStart($event, idx)"
-        @dragover="onDragOver($event, idx)"
-        @dragleave="onDragLeave($event, idx)"
-        @drop="onDrop(idx)"
-        @dragend="onDragEnd"
-        class="shadow-xs group flex cursor-grab items-center justify-between gap-3 rounded-xl border p-4 transition-all duration-150 active:cursor-grabbing"
-        :class="[
-          draggedIndex === idx 
-            ? 'opacity-40 scale-95 border-dashed border-amber-400 bg-amber-50/20' 
-            : dragOverIndex === idx 
-              ? 'border-amber-500 ring-2 ring-amber-400/50 bg-amber-50/50 scale-[1.02]' 
-              : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
-        ]"
+        class="shadow-xs flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-2 transition hover:border-slate-300 hover:shadow-sm"
       >
-        <!-- Drag Handle + Info -->
-        <div class="flex min-w-0 flex-1 items-center gap-2">
-          <div class="cursor-grab text-slate-300 transition group-hover:text-slate-500">
-            <GripVertical class="h-4 w-4" />
-          </div>
-
+        <div class="flex min-w-0 flex-1 items-center gap-1">
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-1.5">
-              <span v-if="p.volgorde" class="py-0.2 rounded border border-slate-200 bg-slate-100 px-1.5 font-mono text-[10px] font-bold text-slate-700">
-                #{{ p.volgorde }}
+            <div class="flex items-center gap-1">
+              <span v-if="p.volgorde" class="py-0.2 px-1.5 font-mono text-[14px] font-bold text-slate-700">
+                {{ p.volgorde }}:
               </span>
-              <span class="font-mono text-[10px] text-slate-400">ID #{{ p.prestatieID }}</span>
-            </div>
             <h3 class="mt-0.5 truncate text-sm font-bold text-slate-900" :title="p.Omschrijving">
               {{ p.Omschrijving }}
             </h3>
+            </div>
           </div>
         </div>
 
@@ -362,10 +293,6 @@ const addAllMissingPresets = async () => {
     <!-- Footer count -->
     <div class="shadow-xs flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500">
       <span>Totaal <strong>{{ filteredPoints.length }}</strong> standaard prestaties geconfigureerd</span>
-      <span class="flex items-center gap-1.5 text-slate-400">
-        <span v-if="savingOrder" class="animate-pulse font-semibold text-amber-600">Volgorde opslaan...</span>
-        <span v-else>💡 Sleep een kaartje om de volgorde aan te passen</span>
-      </span>
     </div>
 
     <!-- Modal: Prestatie toevoegen / bewerken -->

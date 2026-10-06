@@ -60,6 +60,11 @@ test('Allocation mutations recalculate existing stages only for their pool atomi
               return [{ poolID: 3, tourID: 2 }];
             }
             if (sql.startsWith('SELECT prestatieID')) return allocation ? [allocation] : [];
+            if (sql.startsWith('SELECT uitslagtype, plaats')) return allocation ? [allocation] : [];
+            if (sql.startsWith('SELECT plaats FROM tblPuntenToekenning')) {
+              assert.deepEqual(params, [3, 'rit']);
+              return allocation ? [{ plaats: allocation.plaats }] : [];
+            }
             if (sql.startsWith('UPDATE tblPuntenToekenning')) {
               assert.deepEqual(params.slice(-2), [81, 3]);
               allocation = { ...allocation, Punten: params[1] };

@@ -12,11 +12,14 @@ const createStandardPointSchema = z.object({
 
 const updateStandardPointSchema = createStandardPointSchema.partial();
 
-const reorderSchema = z.object({
+const presetsSchema = z.object({
   items: z.array(z.object({
-    prestatieID: z.number().int(),
-    volgorde: z.number().int()
-  }))
+    Omschrijving: z.string().max(100),
+    uitslagtype: z.enum(['rit', 'klasGeel', 'klasGroen', 'klasBol', 'klasWit', 'eindKlas', 'eindPunt', 'eindBerg', 'eindJon']),
+    plaats: z.number().int().min(1),
+    punten: z.number().int(),
+    volgorde: z.number().int().nullable().optional()
+  })).min(1)
 });
 
 standardPointsRouter.get('/', async (_request, response, next) => {
@@ -28,18 +31,32 @@ standardPointsRouter.get('/', async (_request, response, next) => {
   }
 });
 
-standardPointsRouter.put('/reorder', async (request, response, next) => {
+standardPointsRouter.put('/presets', async (request, response, next) => {
+  let payload: z.infer<typeof presetsSchema>;
   try {
-    const payload = reorderSchema.parse(request.body);
-    for (const item of payload.items) {
-      await pool.query(
-        'UPDATE tblStandaardPunten SET volgorde = ? WHERE prestatieID = ?',
-        [item.volgorde, item.prestatieID]
-      );
-    }
-    response.json({ success: true, updated: payload.items.length });
+    payload = presetsSchema.parse(request.body);
   } catch (error) {
     next(error);
+    return;
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query('DELETE FROM tblStandaardPunten');
+    for (const item of payload.items) {
+      await connection.query(
+        'INSERT INTO tblStandaardPunten (uitslagtype, plaats, Omschrijving, punten, volgorde) VALUES (?, ?, ?, ?, ?)',
+        [item.uitslagtype, item.plaats, item.Omschrijving, item.punten, item.volgorde ?? null]
+      );
+    }
+    await connection.commit();
+    response.json({ success: true, inserted: payload.items.length });
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
   }
 });
 

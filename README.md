@@ -35,6 +35,16 @@ npm run check        # typecheck API en admin
 npm test             # API-tests
 ```
 
+## Deployen naar piweb
+
+`./deploy_tourpool.sh` deployt naar `https://jota.nl/tourpool/` (admin in `/var/www/tourpool`, API via pm2 als `tourpool-api` op poort 3002 in `~/apps/tourpool-api`).
+
+1. Eenmalig **optie 1**: maakt mappen, database `tourpool` + gebruiker, de prod-`.env` (met gegenereerd wachtwoord) en `/etc/nginx/snippets/tourpool.conf` (optioneel met basic auth). Voeg daarna eenmalig `include /etc/nginx/snippets/tourpool.conf;` toe aan het 443-serverblok in `jota.conf` en herlaad nginx.
+2. **Optie 2** zet de dev-database over (eerst backup naar `~/apps/backups`). De dump wordt aangepast voor MariaDB 10.11 (collatie, DEFINER).
+3. **Optie 3/4/5** bouwt en deployt API en/of admin.
+
+Het basispad van de admin staat in `apps/admin/.env.production` (`VITE_BASE_PATH`, `VITE_API_URL`).
+
 ## Wat is aangepast voor MariaDB
 
 - De database-driver gebruikt nu `mariadb` in plaats van `mysql2`.

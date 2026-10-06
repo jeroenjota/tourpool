@@ -5,6 +5,21 @@ import { recalculatePoolPoints } from './stageResults.js';
 
 type DatabaseConnection = Awaited<ReturnType<typeof pool.getConnection>>;
 class AllocationNotFoundError extends Error {}
+class AllocationOrderError extends Error {}
+
+// Plaatsen per uitslagtype moeten aaneensluitend vanaf 1 lopen (1, 2, 3, ...).
+const assertPlacesInOrder = async (
+  connection: DatabaseConnection, poolID: number, uitslagtypes: Array<unknown>, message: (type: string, missing: number) => string
+) => {
+  for (const type of new Set(uitslagtypes.filter((value): value is string => typeof value === 'string' && value !== ''))) {
+    const rows = await connection.query(
+      'SELECT plaats FROM tblPuntenToekenning WHERE poolID = ? AND uitslagtype = ? AND plaats IS NOT NULL ORDER BY plaats',
+      [poolID, type]
+    ) as Array<{ plaats: number }>;
+    const missing = rows.findIndex((row, index) => Number(row.plaats) !== index + 1);
+    if (missing !== -1) throw new AllocationOrderError(message(type, missing + 1));
+  }
+};
 
 const changePoolAllocations = async <T>(
   poolID: number, change: (connection: DatabaseConnection) => Promise<T>
@@ -102,10 +117,14 @@ pointAllocationsRouter.get('/:prestatieID/:poolID', async (request, response, ne
 pointAllocationsRouter.post('/', async (request, response, next) => {
   try {
     const payload = createPointAllocationSchema.parse(request.body);
-    await changePoolAllocations(payload.poolID, connection => connection.query(
-      'INSERT INTO tblPuntenToekenning (prestatieID, poolID, Omschrijving, Punten, uitslagtype, plaats, volgorde) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [payload.prestatieID, payload.poolID, payload.Omschrijving ?? null, payload.Punten ?? null, payload.uitslagtype ?? null, payload.plaats ?? null, payload.volgorde ?? null]
-    ));
+    await changePoolAllocations(payload.poolID, async connection => {
+      await connection.query(
+        'INSERT INTO tblPuntenToekenning (prestatieID, poolID, Omschrijving, Punten, uitslagtype, plaats, volgorde) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [payload.prestatieID, payload.poolID, payload.Omschrijving ?? null, payload.Punten ?? null, payload.uitslagtype ?? null, payload.plaats ?? null, payload.volgorde ?? null]
+      );
+      await assertPlacesInOrder(connection, payload.poolID, [payload.uitslagtype],
+        (type, missing) => `Voeg eerst plaats ${missing} van ${type} toe voordat je plaats ${payload.plaats} toevoegt.`);
+    });
 
     response.status(201).json(payload);
   } catch (error) {
@@ -158,6 +177,8 @@ pointAllocationsRouter.put('/:prestatieID/:poolID', async (request, response, ne
         'UPDATE tblPuntenToekenning SET Omschrijving = ?, Punten = ?, uitslagtype = ?, plaats = ? WHERE prestatieID = ? AND poolID = ?',
         [updated.Omschrijving, updated.Punten, updated.uitslagtype, updated.plaats, prestatieID, poolID]
       );
+      await assertPlacesInOrder(connection, poolID, [current.uitslagtype, updated.uitslagtype],
+        (type, missing) => `Deze wijziging laat een gat bij ${type}: plaats ${missing} ontbreekt.`);
 
       return { prestatieID, poolID, ...updated, volgorde: current.volgorde };
     });
@@ -173,10 +194,18 @@ pointAllocationsRouter.delete('/:prestatieID/:poolID', async (request, response,
     const prestatieID = Number(request.params.prestatieID);
     const poolID = Number(request.params.poolID);
 
-    await changePoolAllocations(poolID, connection => connection.query(
-      'DELETE FROM tblPuntenToekenning WHERE prestatieID = ? AND poolID = ?',
-      [prestatieID, poolID]
-    ));
+    await changePoolAllocations(poolID, async connection => {
+      const rows = await connection.query(
+        'SELECT uitslagtype, plaats FROM tblPuntenToekenning WHERE prestatieID = ? AND poolID = ?',
+        [prestatieID, poolID]
+      ) as Array<{ uitslagtype: string | null; plaats: number | null }>;
+      await connection.query(
+        'DELETE FROM tblPuntenToekenning WHERE prestatieID = ? AND poolID = ?',
+        [prestatieID, poolID]
+      );
+      await assertPlacesInOrder(connection, poolID, [rows[0]?.uitslagtype],
+        type => `Verwijder eerst de hogere plaatsen van ${type} voordat je plaats ${rows[0]?.plaats} verwijdert.`);
+    });
 
     response.status(204).send();
   } catch (error) {
@@ -187,6 +216,10 @@ pointAllocationsRouter.delete('/:prestatieID/:poolID', async (request, response,
 const allocationErrorHandler: ErrorRequestHandler = (error, _request, response, next) => {
   if (error instanceof AllocationNotFoundError) {
     response.status(404).json({ message: error.message });
+    return;
+  }
+  if (error instanceof AllocationOrderError) {
+    response.status(400).json({ message: error.message });
     return;
   }
   next(error);

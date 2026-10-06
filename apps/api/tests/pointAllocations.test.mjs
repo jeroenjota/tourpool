@@ -26,9 +26,25 @@ test('Point allocations support reading and editing without an uitleg column', a
     volgorde: 7,
   };
   const writes = [];
+  let places = [{ prestatieID: 81, uitslagtype: 'rit', plaats: 1 }];
+  let placesSnapshot = places;
   pool.query = async (sql, params = []) => {
     assert.doesNotMatch(sql, /\buitleg\b/i);
     assert.equal((sql.match(/\?/g) ?? []).length, params.length);
+    if (sql.startsWith('SELECT plaats FROM tblPuntenToekenning WHERE poolID = ? AND uitslagtype = ?')) {
+      return places
+        .filter(place => place.uitslagtype === params[1])
+        .map(({ plaats }) => ({ plaats }))
+        .sort((a, b) => a.plaats - b.plaats);
+    }
+    if (sql.startsWith('SELECT uitslagtype, plaats FROM tblPuntenToekenning')) {
+      return places.filter(place => place.prestatieID === params[0]);
+    }
+    if (sql.startsWith('DELETE FROM tblPuntenToekenning WHERE prestatieID = ?')) {
+      places = places.filter(place => place.prestatieID !== params[0]);
+      writes.push({ sql, params });
+      return {};
+    }
     if (sql.startsWith('SELECT')) {
       assert.match(sql, /SELECT prestatieID, poolID, Omschrijving, Punten, uitslagtype, plaats, volgorde FROM tblPuntenToekenning/);
       assert.deepEqual(params, sql.includes('prestatieID = ?') ? [81, 1] : [1]);
@@ -42,16 +58,17 @@ test('Point allocations support reading and editing without an uitleg column', a
       return {};
     }
     if (sql.startsWith('INSERT')) {
-      assert.deepEqual(params, [82, 1, 'Tweede plaats etappe', 0, 'rit', 2, 8]);
+      if (params[0] === 82) assert.deepEqual(params, [82, 1, 'Tweede plaats etappe', 0, 'rit', 2, 8]);
+      places = [...places, { prestatieID: params[0], uitslagtype: params[4], plaats: params[5] }];
       writes.push({ sql, params });
       return {};
     }
     throw new Error(`Unexpected query: ${sql}`);
   };
   pool.getConnection = async () => ({
-    beginTransaction: async () => {},
+    beginTransaction: async () => { placesSnapshot = places; },
     commit: async () => {},
-    rollback: async () => {},
+    rollback: async () => { places = placesSnapshot; },
     release: () => {},
     query: async (sql, params) => {
       if (sql.includes('FROM tblPools WHERE')) return [{ poolID: 1, tourID: 2 }];
@@ -155,6 +172,25 @@ test('Point allocations support reading and editing without an uitleg column', a
       assert.equal(response.status, 201);
       assert.deepEqual(await response.json(), body);
       assert.equal(writes.length, 2);
+    });
+    await t.test('Places must be added in order', async () => {
+      const response = await request('', 'POST', {
+        prestatieID: 84, poolID: 1, Omschrijving: 'Vierde plaats etappe',
+        Punten: 4, uitslagtype: 'rit', plaats: 4, volgorde: 10,
+      });
+      assert.equal(response.status, 400);
+      assert.match((await response.json()).message, /plaats 3 van rit/);
+      assert.deepEqual(places.map(place => place.plaats), [1, 2]);
+    });
+    await t.test('Only the highest place can be deleted', async () => {
+      const blocked = await request('/81/1', 'DELETE');
+      assert.equal(blocked.status, 400);
+      assert.match((await blocked.json()).message, /hogere plaatsen van rit/);
+      assert.deepEqual(places.map(place => place.plaats), [1, 2]);
+
+      const allowed = await request('/82/1', 'DELETE');
+      assert.equal(allowed.status, 204);
+      assert.deepEqual(places.map(place => place.plaats), [1]);
     });
   } finally {
     pool.query = originalQuery;

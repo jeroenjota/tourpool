@@ -102,7 +102,7 @@ const formatTeamName = (team: Team) => {
     <!-- Action header met gecentreerd zoekvak -->
     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div class="shrink-0">
-        <h2 class="text-xl font-bold text-slate-900">Ploegenoverzicht</h2>
+        <h1 class="text-2xl font-bold text-slate-900">Ploegenoverzicht</h1>
         <p class="text-xs text-slate-500">Overzicht en beheer van wielerploegen</p>
       </div>
 
@@ -157,11 +157,11 @@ const formatTeamName = (team: Team) => {
     <div v-else-if="teams.length === 0" class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
       Geen ploegen gevonden voor deze selectie.
     </div>
-    <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div v-else class="grid grid-cols-1 gap-1 sm:grid-cols-2 xl:grid-cols-4">
       <div 
         v-for="team in teams" 
         :key="team.ploegID"
-        class="shadow-xs group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3.5 transition hover:border-slate-300 hover:shadow-sm"
+        class="shadow-xs group flex items-center justify-between gap-2 rounded-xl border border-slate-500 bg-white p-2 transition hover:border-slate-300 hover:shadow-sm"
       >
         <div class="min-w-0 flex-1">
           <h3 class="truncate text-sm font-medium leading-snug text-slate-900" :title="formatTeamName(team)">
