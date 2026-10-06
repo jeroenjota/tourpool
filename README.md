@@ -1,6 +1,39 @@
-# Tourpool API
+# Tourpool
 
-Basis-API voor de Tourpool-database, gebouwd met Node.js, Express, TypeScript en MariaDB.
+Monorepo met npm workspaces:
+
+| Map | Workspace | Inhoud |
+| --- | --- | --- |
+| `apps/api` | `@tourpool/api` | REST-API (Node.js, Express, TypeScript, MariaDB), migraties en tests |
+| `apps/admin` | `@tourpool/admin` | Beheermodule (Vue 3, Vite, Tailwind) |
+| `packages/*` | | Gedeelde code tussen apps (gereserveerd, nog leeg) |
+
+Later komt er een gebruikersapp bij in `apps/`.
+
+## Ontwikkelen
+
+Installeer alle afhankelijkheden eenmalig vanuit de hoofdmap:
+
+```sh
+npm install
+```
+
+Start daarna in aparte terminals:
+
+```sh
+npm run dev:api     # API op http://localhost:3000
+npm run dev:admin   # admin op http://localhost:5173 (proxy /api -> :3000)
+```
+
+Overige scripts vanuit de hoofdmap:
+
+```sh
+npm run build        # bouwt alle apps (apps/*/dist)
+npm run build:api
+npm run build:admin
+npm run check        # typecheck API en admin
+npm test             # API-tests
+```
 
 ## Wat is aangepast voor MariaDB
 
@@ -10,7 +43,7 @@ Basis-API voor de Tourpool-database, gebouwd met Node.js, Express, TypeScript en
 
 ## Database-updates
 
-Voer SQL-updates uit `migrations/` eenmalig uit op bestaande databases.
+Voer SQL-updates uit `apps/api/migrations/` eenmalig uit op bestaande databases.
 `20261004_add_stage_prize_precision.sql` maakt bedragen voor etappeprijzen nauwkeurig
 tot op eurocenten; `20261004_store_stage_prizes_as_double.sql` wijzigt de opslag
 naar `DOUBLE`, zodat gedeelde bedragen hun volledige fractie behouden. Nieuwe
@@ -24,7 +57,7 @@ databases gebruiken deze opslag via `tourpool.sql`.
 
 ## Lokale configuratie
 
-Gebruik `.env.example` als basis voor je eigen `.env` als je de API buiten Docker wilt draaien.
+Gebruik `apps/api/.env.example` als basis voor je eigen `apps/api/.env` als je de API buiten Docker wilt draaien.
 
 ## Endpoints
 
@@ -90,6 +123,7 @@ De regressietest voor het laden en aanpassen van poolpunten draait zonder
 databasewijzigingen:
 
 ```sh
+cd apps/api
 node --import tsx --test tests/pointAllocations.test.mjs
 ```
 
@@ -108,6 +142,7 @@ De regressietests voor gewone etappes, TTT-klassementen en rollback gebruiken ee
 gesimuleerde databaseverbinding en wijzigen geen databasegegevens:
 
 ```sh
+cd apps/api
 node --import tsx --test tests/stageResults.test.mjs
 ```
 
@@ -137,5 +172,6 @@ Test de opslag, validatie en het kopieren naar nieuwe pools zonder
 databasegegevens te wijzigen:
 
 ```sh
+cd apps/api
 node --import tsx --test tests/options.test.mjs
 ```
