@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { apiFetch } from "../services/api";
-import { RefreshCw, X, Save, Check, Plus } from "@lucide/vue";
+import { RefreshCw, X, Save, Check, Plus, Edit2 } from "@lucide/vue";
 
 interface Stage {
   tour: string;
@@ -26,6 +26,7 @@ interface TourRider {
   ploegLand?: string | null;
   rennerID: number;
   Rugnummer: number;
+  nietGestartEtappe?: number | null;
   anaam: string;
   vnaam?: string | null;
   tnaam?: string | null;
@@ -70,6 +71,7 @@ const allStageResults = ref<StageResultItem[]>([]);
 const loading = ref(true);
 const saving = ref(false);
 const createStageModalOpen = ref(false);
+const editingStage = ref<Stage | null>(null);
 const stageForm = ref<{
   etappeNr: number | "";
   datum: string;
@@ -89,6 +91,9 @@ const stageForm = ref<{
 // Modal state voor uitslag invoeren
 const modalOpen = ref(false);
 const activeStage = ref<Stage | null>(null);
+const isTeamTimeTrial = computed(
+  () => activeStage.value?.type?.toLowerCase() === "ttt",
+);
 
 // Formulier state per categorie
 const resultForm = ref<{
@@ -104,6 +109,7 @@ const resultForm = ref<{
   groen: [],
   wit: [],
 });
+const nonStarterRiderIDs = ref<number[]>([]);
 
 const targetCounts = computed(() => ({
   rit: poolOptions.value?.AantalEtapPlaatsen ?? 7,
@@ -166,6 +172,7 @@ const onTourChange = () => {
 onMounted(fetchData);
 
 const openCreateStageModal = () => {
+  editingStage.value = null;
   const lastStageNumber = stages.value.reduce(
     (highest, stage) => Math.max(highest, stage.etappeNr ?? 0),
     0,
@@ -181,30 +188,64 @@ const openCreateStageModal = () => {
   createStageModalOpen.value = true;
 };
 
+const openEditStageModal = (stage: Stage) => {
+  editingStage.value = stage;
+  stageForm.value = {
+    etappeNr: stage.etappeNr ?? "",
+    datum: stage.datum ? String(stage.datum).slice(0, 10) : "",
+    Start: stage.Start ?? "",
+    Finish: stage.Finish ?? "",
+    kms: stage.kms ?? "",
+    type: stage.type?.toLowerCase() === "rustdag" ? "rustdag" : stage.type ?? "vlak",
+  };
+  createStageModalOpen.value = true;
+};
+
+const closeStageModal = () => {
+  createStageModalOpen.value = false;
+  editingStage.value = null;
+};
+
 const saveStage = async () => {
   if (selectedTourID.value === null) return;
 
   const isRestDay = stageForm.value.type === "rustdag";
-  if (!isRestDay && stageForm.value.etappeNr === "") return;
+  if (!editingStage.value && !isRestDay && stageForm.value.etappeNr === "") return;
   saving.value = true;
 
   try {
-    await apiFetch("/stages", {
-      method: "POST",
-      body: JSON.stringify({
-        tour: String(selectedTourID.value),
-        etappeNr: isRestDay ? null : Number(stageForm.value.etappeNr),
-        datum: stageForm.value.datum,
-        Start: isRestDay ? null : stageForm.value.Start.trim(),
-        Finish: isRestDay ? null : stageForm.value.Finish.trim(),
-        kms: isRestDay || stageForm.value.kms === "" ? null : Number(stageForm.value.kms),
-        type: stageForm.value.type,
-      }),
-    });
-    createStageModalOpen.value = false;
+    const payload = {
+      datum: stageForm.value.datum,
+      Start: isRestDay ? null : stageForm.value.Start.trim(),
+      Finish: isRestDay ? null : stageForm.value.Finish.trim(),
+      kms: isRestDay || stageForm.value.kms === "" ? null : Number(stageForm.value.kms),
+      type: stageForm.value.type,
+    };
+    const stageToEdit = editingStage.value;
+
+    if (stageToEdit) {
+      const endpoint =
+        stageToEdit.etappeNr == null
+          ? `/stages/rest-day/${stageToEdit.tour}/${String(stageToEdit.datum).slice(0, 10)}`
+          : `/stages/${stageToEdit.tour}/${stageToEdit.etappeNr}`;
+      await apiFetch(endpoint, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+    } else {
+      await apiFetch("/stages", {
+        method: "POST",
+        body: JSON.stringify({
+          tour: String(selectedTourID.value),
+          etappeNr: isRestDay ? null : Number(stageForm.value.etappeNr),
+          ...payload,
+        }),
+      });
+    }
+    closeStageModal();
     await fetchData();
   } catch (err) {
-    alert(`Fout bij toevoegen etappe: ${err instanceof Error ? err.message : err}`);
+    alert(`Fout bij ${editingStage.value ? "wijzigen" : "toevoegen"} etappe: ${err instanceof Error ? err.message : err}`);
   } finally {
     saving.value = false;
   }
@@ -218,6 +259,14 @@ const sortedTourRiders = computed(() => {
     return aName.localeCompare(bName, "nl");
   });
 });
+
+const activeTourRidersForStage = computed(() =>
+  sortedTourRiders.value.filter(
+    rider =>
+      rider.nietGestartEtappe == null ||
+      rider.nietGestartEtappe >= (activeStage.value?.etappeNr ?? Number.MAX_SAFE_INTEGER)
+  )
+);
 
 const formatRiderOption = (r: TourRider) => {
   const given = [r.vnaam, r.tnaam].filter(Boolean).join(" ");
@@ -277,6 +326,9 @@ const openResultModal = (s: Stage) => {
     groen: initCategory("groen", targetCounts.value.groen),
     wit: initCategory("wit", targetCounts.value.wit),
   };
+  nonStarterRiderIDs.value = activeTourRidersForStage.value
+    .filter(rider => rider.nietGestartEtappe === s.etappeNr)
+    .map(rider => rider.rennerID);
 
   modalOpen.value = true;
 };
@@ -305,7 +357,7 @@ const saveResults = async () => {
       }
     };
 
-    appendResults("rit");
+    if (!isTeamTimeTrial.value) appendResults("rit");
     appendResults("geel");
     appendResults("bol");
     appendResults("groen");
@@ -317,6 +369,7 @@ const saveResults = async () => {
         tourID: selectedTourID.value,
         etappeNr: activeStage.value.etappeNr,
         results: resultsPayload,
+        nietGestartRenners: nonStarterRiderIDs.value,
       }),
     });
 
@@ -388,16 +441,17 @@ const saveResults = async () => {
             <th scope="col" class="px-4 py-2">Parcours</th>
             <th scope="col" class="px-4 py-2">Lengte</th>
             <th scope="col" class="px-4 py-2">Type</th>
+            <th scope="col" class="px-4 py-2">Acties</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-200">
           <tr v-if="loading && stages.length === 0">
-            <td colspan="5" class="px-4 py-10 text-center text-slate-400">
+            <td colspan="6" class="px-4 py-10 text-center text-slate-400">
               Etappes laden...
             </td>
           </tr>
           <tr v-else-if="stages.length === 0">
-            <td colspan="5" class="px-4 py-10 text-center text-slate-400">
+            <td colspan="6" class="px-4 py-10 text-center text-slate-400">
               Geen etappes gevonden.
             </td>
           </tr>
@@ -441,12 +495,22 @@ const saveResults = async () => {
             <td class="px-4 py-2 capitalize text-slate-700">
               {{ isRestDay(s) ? "" : s.type }}
             </td>
+            <td class="whitespace-nowrap px-4 py-2">
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100 hover:text-amber-900"
+                :aria-label="`Etappe ${isRestDay(s) ? 'rustdag' : s.etappeNr} wijzigen`"
+                @click.stop="openEditStageModal(s)">
+                <Edit2 class="h-3.5 w-3.5" />
+                Wijzigen
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <!-- Etappe toevoegen -->
+    <!-- Etappe toevoegen of wijzigen -->
     <div
       v-if="createStageModalOpen"
       class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
@@ -455,14 +519,16 @@ const saveResults = async () => {
         @submit.prevent="saveStage">
         <div class="flex items-center justify-between border-b border-slate-200 pb-4">
           <div>
-            <h3 class="text-lg font-bold text-slate-900">Etappe toevoegen</h3>
+            <h3 class="text-lg font-bold text-slate-900">
+              {{ editingStage ? "Etappe wijzigen" : "Etappe toevoegen" }}
+            </h3>
             <p class="text-sm text-slate-500">{{ tours.find((tour) => tour.tourID === selectedTourID)?.naam }}</p>
           </div>
           <button
             type="button"
             class="text-slate-400 hover:text-slate-700"
             aria-label="Sluiten"
-            @click="createStageModalOpen = false">
+            @click="closeStageModal">
             <X class="h-5 w-5" />
           </button>
         </div>
@@ -474,8 +540,8 @@ const saveResults = async () => {
               v-model.number="stageForm.etappeNr"
               type="number"
               min="1"
-              :required="stageForm.type !== 'rustdag'"
-              :disabled="stageForm.type === 'rustdag'"
+              :required="!editingStage && stageForm.type !== 'rustdag'"
+              :disabled="Boolean(editingStage) || stageForm.type === 'rustdag'"
               class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:border-amber-500 focus:outline-none disabled:bg-slate-100"
               placeholder="Leeg voor rustdag" />
           </label>
@@ -512,7 +578,7 @@ const saveResults = async () => {
               type="number"
               min="0"
               step="0.1"
-              :disabled="stageForm.type === 'rustdag'"
+              :disabled="stageForm.type === 'rustdag' || Boolean(editingStage && editingStage.etappeNr == null)"
               class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:border-amber-500 focus:outline-none disabled:bg-slate-100" />
           </label>
           <label class="block text-xs font-semibold text-slate-700">
@@ -520,13 +586,18 @@ const saveResults = async () => {
             <select
               v-model="stageForm.type"
               required
+              :disabled="Boolean(editingStage && editingStage.etappeNr == null)"
               class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:border-amber-500 focus:outline-none">
               <option value="vlak">Vlak</option>
               <option value="heuvels">Heuvels</option>
               <option value="bergen">Bergen</option>
               <option value="ITT">ITT</option>
               <option value="TTT">TTT</option>
-              <option value="rustdag">Rustdag</option>
+              <option
+                v-if="!editingStage || editingStage.etappeNr == null"
+                value="rustdag">
+                Rustdag
+              </option>
             </select>
           </label>
         </div>
@@ -535,7 +606,7 @@ const saveResults = async () => {
           <button
             type="button"
             class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
-            @click="createStageModalOpen = false">
+            @click="closeStageModal">
             Annuleren
           </button>
           <button
@@ -543,7 +614,15 @@ const saveResults = async () => {
             :disabled="saving"
             class="flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50">
             <Save class="h-4 w-4" />
-            <span>{{ saving ? "Opslaan..." : "Etappe opslaan" }}</span>
+            <span>
+              {{
+                saving
+                  ? "Opslaan..."
+                  : editingStage
+                  ? "Wijzigingen opslaan"
+                  : "Etappe opslaan"
+              }}
+            </span>
           </button>
         </div>
       </form>
@@ -585,8 +664,44 @@ const saveResults = async () => {
 
         <!-- Modal Body: Categorieën Grid -->
         <div class="flex-1 space-y-6 overflow-y-auto pr-1">
+          <section class="space-y-3 rounded-xl border border-rose-200 bg-rose-50/50 p-4">
+            <div class="flex items-center justify-between gap-3 border-b border-rose-200 pb-2">
+              <div>
+                <h4 class="text-sm font-bold text-rose-900">Niet gestart</h4>
+                <p class="text-xs text-rose-700">Markeer renners die deze etappe niet zijn gestart.</p>
+              </div>
+              <span class="shrink-0 rounded-full border border-rose-200 bg-white px-2 py-0.5 text-xs font-semibold text-rose-700">
+                {{ nonStarterRiderIDs.length }} geselecteerd
+              </span>
+            </div>
+            <div v-if="activeTourRidersForStage.length === 0" class="text-xs text-slate-500">
+              Er zijn geen renners die nog aan deze etappe kunnen starten.
+            </div>
+            <div v-else class="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+              <label
+                v-for="rider in activeTourRidersForStage"
+                :key="`non-starter-${rider.rennerID}`"
+                class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs text-slate-700 hover:bg-white"
+              >
+                <input
+                  v-model="nonStarterRiderIDs"
+                  type="checkbox"
+                  :value="rider.rennerID"
+                  class="h-3.5 w-3.5 rounded border-rose-300 text-rose-600 focus:ring-rose-500"
+                />
+                <span class="truncate" :title="formatRiderOption(rider)">
+                  {{ formatRiderOption(rider) }}
+                </span>
+                <span v-if="rider.nietGestartEtappe === activeStage.etappeNr" class="shrink-0 text-[10px] font-semibold text-rose-700">
+                  Niet gestart
+                </span>
+              </label>
+            </div>
+          </section>
+
           <!-- 1. Rit (Daguitslag) -->
           <div
+            v-if="!isTeamTimeTrial"
             class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
             <div
               class="flex items-center justify-between border-b border-slate-200 pb-2">

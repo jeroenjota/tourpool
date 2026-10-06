@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import { RouterLink, RouterView, useRoute } from 'vue-router';
+import { apiFetch } from './services/api';
+import { useActivePoolStore } from './stores/activePool';
 import { 
   Bike, 
   Users, 
@@ -10,10 +13,44 @@ import {
   Contact, 
   Sliders, 
   UserCheck,
-  Award
+  Award,
+  ArrowLeft
 } from '@lucide/vue';
 
 const route = useRoute();
+const activePoolStore = useActivePoolStore();
+const showPoolHeader = computed(() => route.meta.poolPage === true);
+const isNavItemActive = (path: string) =>
+  route.path === path || (path === '/pools' && route.path.startsWith('/pools/'));
+const headerPool = ref<{ poolID: number; Naam: string | null; Org: string | null } | null>(null);
+const poolHeaderLoading = ref(false);
+const poolHeaderError = ref('');
+
+watch(
+  [() => route.path, () => activePoolStore.activePoolID],
+  async (_values, _oldValues, onCleanup) => {
+    let current = true;
+    onCleanup(() => { current = false; });
+    headerPool.value = null;
+    poolHeaderError.value = '';
+    poolHeaderLoading.value = false;
+    const poolID = activePoolStore.activePoolID;
+    if (!showPoolHeader.value || !poolID) return;
+
+    poolHeaderLoading.value = true;
+    try {
+      const pool = await apiFetch<NonNullable<typeof headerPool.value>>(`/pools/${poolID}`);
+      if (current) headerPool.value = pool;
+    } catch (error) {
+      if (current) {
+        poolHeaderError.value = `Fout bij laden van pool: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    } finally {
+      if (current) poolHeaderLoading.value = false;
+    }
+  },
+  { immediate: true }
+);
 
 const navItems = [
   { name: 'Adresboek', path: '/addresses', icon: Contact },
@@ -24,8 +61,13 @@ const navItems = [
   { name: 'Etappes', path: '/stages', icon: MapPin },
   { name: 'Standaard Punten', path: '/standard-points', icon: Award },
   { name: 'Pools', path: '/pools', icon: Trophy },
-  { name: 'Pool Deelnemers', path: '/participants', icon: UserCheck },
-  { name: 'Pool Opties', path: '/options', icon: Sliders },
+];
+
+const poolNavItems = [
+  { name: 'Deelnemers', page: 'participants', icon: UserCheck },
+  { name: 'Poolstand', page: 'standings', icon: Trophy },
+  { name: 'Puntentoekenning', page: 'point-allocations', icon: Award },
+  { name: 'Opties', page: 'options', icon: Sliders },
 ];
 </script>
 
@@ -49,7 +91,7 @@ const navItems = [
           :to="item.path"
           class="flex items-center gap-3 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors"
           :class="[
-            route.path === item.path 
+            isNavItemActive(item.path)
               ? 'bg-amber-50 text-red-700 border border-amber-200/80 font-semibold' 
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
           ]"
@@ -68,8 +110,40 @@ const navItems = [
     </aside>
 
     <!-- Main Content -->
-    <div class="ml-64 flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
-      <main class="h-full min-h-0 flex-1 overflow-hidden bg-yellow-300 px-8">
+    <div class="ml-64 flex h-screen min-w-0 flex-1 flex-col overflow-hidden bg-yellow-300">
+      <header
+        v-if="showPoolHeader"
+        class="mx-4 my-2 shrink-0 rounded-xl border border-b border-yellow-800 bg-yellow-400 px-8 py-4"
+        aria-label="Pool"
+        aria-live="polite"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <RouterLink to="/pools" class="flex items-center gap-1.5 text-sm font-medium text-slate-700 hover:text-slate-900">
+            <ArrowLeft class="h-4 w-4" />
+            <span>Pools</span>
+          </RouterLink>
+          <p v-if="poolHeaderLoading" class="text-sm text-slate-500">Pool laden...</p>
+          <h2 v-else-if="poolHeaderError" role="alert" class="text-sm text-red-700">{{ poolHeaderError }}</h2>
+          <span v-else-if="headerPool" class="font-heading text-2xl font-semibold text-slate-900">
+            <template v-if="headerPool.Org">{{ headerPool.Org }} - </template>{{ headerPool.Naam || `Pool #${headerPool.poolID}` }}
+          </span>
+          <nav class="flex flex-wrap gap-1" aria-label="Poolonderdelen">
+            <RouterLink
+              v-for="item in poolNavItems"
+              :key="item.page"
+              :to="`/pools/${route.params.poolID}/${item.page}`"
+              class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
+              :class="route.name === item.page
+                ? 'border border-amber-200/80 bg-amber-50 font-semibold text-red-700'
+                : 'text-slate-700 hover:bg-yellow-300 hover:text-slate-900'"
+            >
+              <component :is="item.icon" class="h-4 w-4" />
+              <span>{{ item.name }}</span>
+            </RouterLink>
+          </nav>
+        </div>
+      </header>
+      <main class="h-full min-h-0 flex-1 overflow-hidden bg-yellow-300 px-8 py-4">
         <RouterView v-slot="{ Component }">
           <component :is="Component" class="route-page" />
         </RouterView>

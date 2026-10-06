@@ -78,6 +78,45 @@ stagesRouter.post('/', async (request, response, next) => {
   }
 });
 
+stagesRouter.put('/rest-day/:tour/:datum', async (request, response, next) => {
+  try {
+    const tour = String(request.params.tour);
+    const datum = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(request.params.datum);
+    const payload = updateStageSchema.parse(request.body);
+    const rows = await pool.query(
+      'SELECT tour, etappeNr, datum, Start, Finish, kms, type FROM tblEtappes WHERE tour = ? AND datum = ? AND etappeNr IS NULL',
+      [tour, datum]
+    ) as Array<Record<string, unknown>>;
+
+    if (rows.length === 0) {
+      response.status(404).json({ message: 'Rest day not found' });
+      return;
+    }
+    if (rows.length > 1) {
+      response.status(409).json({ message: 'Multiple rest days found for this date' });
+      return;
+    }
+
+    const current = rows[0];
+    const updated = {
+      datum: payload.datum !== undefined ? payload.datum : current.datum,
+      Start: payload.Start !== undefined ? payload.Start : current.Start,
+      Finish: payload.Finish !== undefined ? payload.Finish : current.Finish,
+      kms: payload.kms !== undefined ? payload.kms : current.kms,
+      type: payload.type !== undefined ? payload.type : current.type
+    };
+
+    await pool.query(
+      'UPDATE tblEtappes SET datum = ?, Start = ?, Finish = ?, kms = ?, type = ? WHERE tour = ? AND datum = ? AND etappeNr IS NULL',
+      [updated.datum, updated.Start, updated.Finish, updated.kms, updated.type, tour, datum]
+    );
+
+    response.json({ tour, etappeNr: null, ...updated });
+  } catch (error) {
+    next(error);
+  }
+});
+
 stagesRouter.put('/:tour/:etappeNr', async (request, response, next) => {
   try {
     const tour = String(request.params.tour);

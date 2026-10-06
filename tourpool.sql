@@ -872,10 +872,10 @@ CREATE TABLE `tblDeelnemerPunten` (
   `witPnt` int(11) DEFAULT 0,
   `etapPnt` int(11) DEFAULT 0 COMMENT 'Totaal aantal piunten na deze etappe',
   `etapPlaats` int(11) DEFAULT 0,
-  `etapGeld` decimal(10,0) DEFAULT 0,
+  `etapGeld` double DEFAULT 0,
   `ttlPnt` int(11) DEFAULT 0,
   `ttlPlaats` int(11) DEFAULT 0,
-  `ttlGeld` decimal(10,0) DEFAULT 0,
+  `ttlGeld` double DEFAULT 0,
   PRIMARY KEY (`deelnemID`,`etappeNr`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -887,6 +887,57 @@ CREATE TABLE `tblDeelnemerPunten` (
 LOCK TABLES `tblDeelnemerPunten` WRITE;
 /*!40000 ALTER TABLE `tblDeelnemerPunten` DISABLE KEYS */;
 set autocommit=0;
+INSERT INTO `tblDeelnemerPunten` VALUES
+(6,1,0,0,0,0,0,0,0,0,0,0,0),
+(7,1,0,0,0,0,0,0,0,0,0,0,0),
+(8,1,0,6,0,0,0,6,0,0,0,0,0),
+(9,1,0,0,0,0,0,0,0,0,0,0,0),
+(10,1,0,0,0,0,0,0,0,0,0,0,0),
+(11,1,0,0,0,0,0,0,0,0,0,0,0),
+(12,1,0,6,0,0,0,6,0,0,0,0,0),
+(14,1,0,0,0,0,0,0,0,0,0,0,0),
+(15,1,0,0,3,0,0,3,0,0,0,0,0),
+(16,1,0,0,0,0,0,0,0,0,0,0,0),
+(17,1,0,0,0,0,0,0,0,0,0,0,0),
+(18,1,0,6,0,0,0,6,0,0,0,0,0),
+(19,1,0,0,0,0,0,0,0,0,0,0,0),
+(20,1,0,0,0,0,0,0,0,0,0,0,0),
+(21,1,0,6,0,0,0,6,0,0,0,0,0),
+(23,1,0,0,0,0,0,0,0,0,0,0,0),
+(24,1,0,0,0,0,0,0,0,0,0,0,0),
+(25,1,0,0,0,0,0,0,0,0,0,0,0),
+(26,1,0,0,0,0,0,0,0,0,0,0,0),
+(27,1,0,0,0,0,0,0,0,0,0,0,0),
+(28,1,0,0,0,3,0,3,0,0,0,0,0),
+(30,1,0,6,0,3,0,9,0,0,0,0,0),
+(31,1,0,0,0,3,0,3,0,0,0,0,0),
+(52,1,0,0,0,0,0,0,0,0,0,0,0),
+(53,1,0,0,0,0,0,0,0,0,0,0,0),
+(54,1,0,0,0,0,0,0,0,0,0,0,0),
+(55,1,0,0,0,0,0,0,0,0,0,0,0),
+(56,1,0,0,0,0,0,0,0,0,0,0,0),
+(57,1,0,0,0,0,0,0,0,0,0,0,0),
+(58,1,0,0,0,0,0,0,0,0,0,0,0),
+(59,1,0,0,0,0,0,0,0,0,0,0,0),
+(60,1,0,0,0,0,0,0,0,0,0,0,0),
+(61,1,0,0,0,0,0,0,0,0,0,0,0),
+(62,1,0,0,0,0,0,0,0,0,0,0,0),
+(63,1,0,0,0,0,0,0,0,0,0,0,0),
+(64,1,0,0,0,0,0,0,0,0,0,0,0),
+(65,1,0,0,0,0,0,0,0,0,0,0,0),
+(66,1,0,0,0,0,0,0,0,0,0,0,0),
+(67,1,0,0,0,0,0,0,0,0,0,0,0),
+(68,1,0,0,0,0,0,0,0,0,0,0,0),
+(69,1,0,0,0,0,0,0,0,0,0,0,0),
+(70,1,0,0,0,0,0,0,0,0,0,0,0),
+(71,1,0,0,0,0,0,0,0,0,0,0,0),
+(72,1,0,0,0,0,0,0,0,0,0,0,0),
+(73,1,0,0,0,0,0,0,0,0,0,0,0),
+(74,1,0,0,0,0,0,0,0,0,0,0,0),
+(75,1,0,0,0,0,0,0,0,0,0,0,0),
+(76,1,0,0,0,0,0,0,0,0,0,0,0),
+(77,1,0,0,0,0,0,0,0,0,0,0,0),
+(78,1,0,6,3,3,0,12,0,0,0,0,0);
 /*!40000 ALTER TABLE `tblDeelnemerPunten` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
@@ -987,6 +1038,7 @@ CREATE TABLE `tblEtappeUitslag` (
   `etappeNr` int(11) NOT NULL,
   `uitslagType` varchar(10) NOT NULL,
   `plaats` int(11) NOT NULL,
+  `prestatieID` int(11) DEFAULT 0,
   `rennerID` int(11) NOT NULL,
   PRIMARY KEY (`tourID`,`etappeNr`,`uitslagType`,`plaats`),
   KEY `tblEtappeUitslag_tblRenners_FK` (`rennerID`),
@@ -1003,16 +1055,9 @@ LOCK TABLES `tblEtappeUitslag` WRITE;
 /*!40000 ALTER TABLE `tblEtappeUitslag` DISABLE KEYS */;
 set autocommit=0;
 INSERT INTO `tblEtappeUitslag` VALUES
-(1,1,'geel',1,1),
-(1,1,'rit',1,1),
-(1,1,'rit',7,5),
-(1,1,'rit',5,23),
-(1,1,'bol',1,34),
-(1,1,'rit',3,34),
-(1,1,'rit',4,35),
-(1,1,'rit',6,44),
-(1,1,'rit',2,48),
-(1,1,'groen',1,49);
+(1,1,'bol',1,0,34),
+(1,1,'geel',1,0,1),
+(1,1,'groen',1,0,49);
 /*!40000 ALTER TABLE `tblEtappeUitslag` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
@@ -1068,7 +1113,10 @@ INSERT INTO `tblEtappes` VALUES
 ('1',20,'2026-07-25','Bourg d\'Oissans','Alpe d\'Huez',170.9,'bergen'),
 ('1',21,'2026-07-26','Thoiry','Parijs',133.0,'vlak'),
 ('1',NULL,'2026-07-13',NULL,NULL,NULL,'rustdag'),
-('1',NULL,'2026-07-20',NULL,NULL,NULL,'rustdag');
+('1',NULL,'2026-07-20',NULL,NULL,NULL,'rustdag'),
+('2',1,'2027-07-02','Edinburgh','Carlisle',184.0,'vlak'),
+('2',2,'2027-07-03','Keswick','Liverpool',223.0,'heuvels'),
+('2',3,'2027-07-04','Welshpool','Cardiff',223.0,'bergen');
 /*!40000 ALTER TABLE `tblEtappes` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
@@ -1322,6 +1370,9 @@ CREATE TABLE `tblOpties` (
   `AantalEindKlasGroen` int(11) DEFAULT 1,
   `AantalEindKlasBol` int(11) DEFAULT 1,
   `AantalEindKlasWit` int(11) DEFAULT 1,
+  `geldEtappeHoog` decimal(4,2) DEFAULT 0.00,
+  `geldEtappeTotaal` decimal(4,2) DEFAULT 0.00,
+  `geldEtappeLaagTTL` decimal(4,2) DEFAULT 0.00,
   `PrijsNr1Percentage` decimal(8,2) DEFAULT 0.50,
   `PrijsNr2Percentage` decimal(8,2) DEFAULT 0.35,
   `PrijsNr3Percentage` decimal(8,2) DEFAULT 0.15,
@@ -1340,8 +1391,8 @@ LOCK TABLES `tblOpties` WRITE;
 /*!40000 ALTER TABLE `tblOpties` DISABLE KEYS */;
 set autocommit=0;
 INSERT INTO `tblOpties` VALUES
-(1,10.00,15,5,7,1,1,1,0,3,1,1,1,0.50,0.35,0.15,0.00,10.00),
-(3,10.00,15,5,7,1,1,1,0,3,1,1,1,0.50,0.35,0.15,0.00,10.00);
+(1,10.00,15,5,7,1,1,1,0,3,1,1,1,2.50,1.00,0.10,0.50,0.35,0.15,0.00,10.00),
+(3,10.00,15,5,7,1,1,1,0,3,1,1,1,2.50,1.00,0.10,0.50,0.35,0.15,0.00,10.00);
 /*!40000 ALTER TABLE `tblOpties` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
@@ -1791,7 +1842,7 @@ LOCK TABLES `tblPools` WRITE;
 /*!40000 ALTER TABLE `tblPools` DISABLE KEYS */;
 set autocommit=0;
 INSERT INTO `tblPools` VALUES
-(1,1,'TDF Pool 2026','Cafe de Laurierboom','2026-06-30 16:00:00','2026-10-30 20:00:00'),
+(1,1,'TDF Pool 2026','Cafe de Laurierboom','2026-06-30 14:00:00','2026-10-30 19:00:00'),
 (3,1,'Nog een 2026 Pool','Jota',NULL,NULL);
 /*!40000 ALTER TABLE `tblPools` ENABLE KEYS */;
 UNLOCK TABLES;
@@ -1825,37 +1876,40 @@ CREATE TABLE `tblPuntenToekenning` (
 LOCK TABLES `tblPuntenToekenning` WRITE;
 /*!40000 ALTER TABLE `tblPuntenToekenning` DISABLE KEYS */;
 set autocommit=0;
-INSERT INTO `tblPuntenToekenning` (`prestatieID`, `poolID`, `Omschrijving`, `Punten`, `uitleg`) VALUES
-(81,1,'Winnaar etappe',10,NULL),
-(83,1,'Derde plaats etappe',5,NULL),
-(84,1,'Vierde plaats etappe',4,NULL),
-(91,1,'Groene trui na etappe',3,NULL),
-(88,1,'Gele trui na etappe',6,NULL),
-(82,1,'Tweede plaats etappe',7,NULL),
-(92,1,'Bolletjes trui na etappe',3,NULL),
-(93,1,'Witte trui na etappe',3,NULL),
-(94,1,'1e in eindklassement',50,NULL),
-(95,1,'2e in eindklassement',30,NULL),
-(96,1,'3e in eindklassement',15,NULL),
-(97,1,'4e in eindklassement',10,NULL),
-(98,1,'5e in eindklassement',5,NULL),
-(99,1,'6e in eindklassement',3,NULL),
-(100,1,'7e in eindklassement',2,NULL),
-(101,1,'1e in puntenklassement',15,NULL),
-(104,1,'1e in bergklassement',15,NULL),
-(107,1,'1e in jongerenklassement',15,NULL),
-(81,3,'Winnaar etappe',10,NULL),
-(82,3,'Tweede plaats etappe',7,NULL),
-(88,3,'Gele trui na etappe',6,NULL),
-(83,3,'Derde plaats etappe',5,NULL),
-(91,3,'Groene trui na etappe',3,NULL),
-(94,3,'1e in eindklassement',50,NULL),
-(92,3,'Bolletjes trui na etappe',3,NULL),
-(95,3,'2e in eindklassement',30,NULL),
-(96,3,'3e in eindklassement',15,NULL),
-(101,3,'1e in puntenklassement',15,NULL),
-(104,3,'1e in bergklassement',15,NULL),
-(107,3,'1e in jongerenklassement',15,NULL);
+INSERT INTO `tblPuntenToekenning` VALUES
+(81,1,'Winnaar etappe',10,NULL,'rit',1),
+(83,1,'Derde plaats etappe',5,NULL,'rit',3),
+(84,1,'Vierde plaats etappe',4,NULL,'rit',4),
+(91,1,'Groene trui na etappe',3,NULL,'klasGroen',1),
+(88,1,'Gele trui na etappe',6,NULL,'klasGeel',1),
+(82,1,'Tweede plaats etappe',7,NULL,'rit',2),
+(92,1,'Bolletjes trui na etappe',3,NULL,'klasBol',1),
+(93,1,'Witte trui na etappe',3,NULL,'klasWit',1),
+(94,1,'1e in eindklassement',50,NULL,'eindKlas',1),
+(95,1,'2e in eindklassement',30,NULL,'eindKlas',2),
+(96,1,'3e in eindklassement',15,NULL,'eindKlas',3),
+(97,1,'4e in eindklassement',10,NULL,'eindKlas',4),
+(98,1,'5e in eindklassement',5,NULL,'eindKlas',5),
+(99,1,'6e in eindklassement',3,NULL,'eindKlas',6),
+(100,1,'7e in eindklassement',2,NULL,'eindKlas',7),
+(101,1,'1e in puntenklassement',15,NULL,'eindPunt',1),
+(104,1,'1e in bergklassement',15,NULL,'eindBerg',1),
+(107,1,'1e in jongerenklassement',15,NULL,'eindJon',1),
+(81,3,'Winnaar etappe',10,NULL,'rit',1),
+(82,3,'Tweede plaats etappe',7,NULL,'rit',2),
+(88,3,'Gele trui na etappe',6,NULL,'klasGeel',1),
+(83,3,'Derde plaats etappe',5,NULL,'rit',3),
+(91,3,'Groene trui na etappe',3,NULL,'klasGroen',1),
+(94,3,'1e in eindklassement',50,NULL,'eindKlas',1),
+(92,3,'Bolletjes trui na etappe',3,NULL,'klasBol',1),
+(95,3,'2e in eindklassement',30,NULL,'eindKlas',2),
+(96,3,'3e in eindklassement',15,NULL,'eindKlas',3),
+(101,3,'1e in puntenklassement',15,NULL,'eindPunt',1),
+(104,3,'1e in bergklassement',15,NULL,'eindBerg',1),
+(107,3,'1e in jongerenklassement',15,NULL,'eindJon',1),
+(85,1,'Vijfde plaats etappe',3,NULL,'rit',5),
+(87,1,'Zevende plaats etappe',1,NULL,'rit',7),
+(86,1,'Zesde plaats etappe',2,NULL,'rit',6);
 /*!40000 ALTER TABLE `tblPuntenToekenning` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
@@ -2158,7 +2212,7 @@ DROP TABLE IF EXISTS `tblStandaardPunten`;
 CREATE TABLE `tblStandaardPunten` (
   `prestatieID` int(11) NOT NULL AUTO_INCREMENT,
   `uitslagtype` varchar(10) DEFAULT NULL,
-  `plaats` int(11) DEFAULT NULL,
+  `plaats` int(11) DEFAULT 0,
   `Omschrijving` varchar(100) DEFAULT NULL,
   `punten` int(11) NOT NULL DEFAULT 0,
   `volgorde` int(11) DEFAULT NULL,
@@ -2173,7 +2227,7 @@ CREATE TABLE `tblStandaardPunten` (
 LOCK TABLES `tblStandaardPunten` WRITE;
 /*!40000 ALTER TABLE `tblStandaardPunten` DISABLE KEYS */;
 set autocommit=0;
-INSERT INTO `tblStandaardPunten` (`prestatieID`, `uitslagtype`, `plaats`, `Omschrijving`, `punten`, `volgorde`) VALUES
+INSERT INTO `tblStandaardPunten` VALUES
 (81,'rit',1,'Winnaar etappe',10,1),
 (82,'rit',2,'Tweede plaats etappe',7,2),
 (83,'rit',3,'Derde plaats etappe',5,3),
@@ -2181,36 +2235,31 @@ INSERT INTO `tblStandaardPunten` (`prestatieID`, `uitslagtype`, `plaats`, `Omsch
 (85,'rit',5,'Vijfde plaats etappe',3,5),
 (86,'rit',6,'Zesde plaats etappe',2,6),
 (87,'rit',7,'Zevende plaats etappe',1,7),
-(88,'geel',1,'Gele trui na etappe',6,21),
-(89,'geel',2,'2e in Klassement na etappe',4,22),
-(90,'geel',3,'3e in Klassement na etappe',3,23),
-(91,'groen',1,'Groene trui na etappe',3,31),
-(92,'bol',1,'Bolletjes trui na etappe',3,32),
-(93,'wit',1,'Witte trui na etappe',3,51),
-(94,'eindGeel',1,'1e in eindklassement',50,71),
-(95,'eindGeel',2,'2e in eindklassement',30,72),
-(96,'eindGeel',3,'3e in eindklassement',15,73),
-(97,'eindGeel',4,'4e in eindklassement',10,74),
-(98,'eindGeel',5,'5e in eindklassement',5,75),
-(99,'eindGeel',6,'6e in eindklassement',3,76),
-(100,'eindGeel',7,'7e in eindklassement',2,77),
-(101,'eindGroen',1,'1e in puntenklassement',15,81),
-(102,'eindGroen',2,'2e in puntenklassement',10,82),
-(103,'eindGroen',3,'3e in puntenklassement',5,83),
-(104,'eindBol',1,'1e in bergklassement',15,91),
-(105,'eindBol',2,'2e in bergklassement',10,92),
-(106,'eindBol',3,'3e in bergklassement',5,93),
-(107,'eindWit',1,'1e in jongerenklassement',15,101),
-(108,'eindWit',2,'2e in jongerenklassement',10,102),
-(109,'eindWit',3,'3e in jongerenklassement',5,103);
+(88,'klasGeel',1,'Gele trui na etappe',6,21),
+(89,'klasGeel',2,'2e in Klassement na etappe',4,22),
+(90,'klasGeel',3,'3e in Klassement na etappe',3,23),
+(91,'klasGroen',1,'Groene trui na etappe',3,31),
+(92,'klasBol',1,'Bolletjes trui na etappe',3,32),
+(93,'klasWit',1,'Witte trui na etappe',3,51),
+(94,'eindKlas',1,'1e in eindklassement',50,71),
+(95,'eindKlas',2,'2e in eindklassement',30,72),
+(96,'eindKlas',3,'3e in eindklassement',15,73),
+(97,'eindKlas',4,'4e in eindklassement',10,74),
+(98,'eindKlas',5,'5e in eindklassement',5,75),
+(99,'eindKlas',6,'6e in eindklassement',3,76),
+(100,'eindKlas',7,'7e in eindklassement',2,77),
+(101,'eindPunt',1,'1e in puntenklassement',15,81),
+(102,'eindPunt',2,'2e in puntenklassement',10,82),
+(103,'eindPunt',3,'3e in puntenklassement',5,83),
+(104,'eindBerg',1,'1e in bergklassement',15,91),
+(105,'eindBerg',2,'2e in bergklassement',10,92),
+(106,'eindBerg',3,'3e in bergklassement',5,93),
+(107,'eindJon',1,'1e in jongerenklassement',15,101),
+(108,'eindJon',2,'2e in jongerenklassement',10,102),
+(109,'eindJon',3,'3e in jongerenklassement',5,103);
 /*!40000 ALTER TABLE `tblStandaardPunten` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;
-
-UPDATE `tblPuntenToekenning` pta
-INNER JOIN `tblStandaardPunten` sp ON sp.`prestatieID` = pta.`prestatieID`
-SET pta.`uitslagtype` = sp.`uitslagtype`,
-    pta.`plaats` = sp.`plaats`;
 
 --
 -- Table structure for table `tblTourPloegen`
@@ -2363,4 +2412,4 @@ SET character_set_client = @saved_cs_client;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
--- Dump completed on 2026-09-19 17:52:09
+-- Dump completed on 2026-10-03 11:44:13

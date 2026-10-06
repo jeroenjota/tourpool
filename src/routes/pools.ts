@@ -81,6 +81,9 @@ poolsRouter.post('/', async (request, response, next) => {
         o.AantalEindKlasGroen,
         o.AantalEindKlasBol,
         o.AantalEindKlasWit,
+        o.geldEtappeHoog,
+        o.geldEtappeTotaal,
+        o.geldEtappeLaagTTL,
         o.PrijsNr1Percentage,
         o.PrijsNr2Percentage,
         o.PrijsNr3Percentage,
@@ -98,14 +101,22 @@ poolsRouter.post('/', async (request, response, next) => {
       [payload.tourID, payload.Naam ?? null, payload.Org ?? null, toMariaDbDateTime(payload.StartInschr), toMariaDbDateTime(payload.EindInschr)]
     );
     const poolID = Number((result as { insertId: number | bigint }).insertId);
+    await connection.query(
+      `INSERT INTO tblPuntenToekenning
+        (prestatieID, poolID, Omschrijving, Punten, uitslagtype, plaats, volgorde)
+       SELECT prestatieID, ?, Omschrijving, punten, uitslagtype, plaats, volgorde
+       FROM tblStandaardPunten`,
+      [poolID]
+    );
     // Add new options for the newly created pool
     await connection.query(
       `INSERT INTO tblOpties (
         poolID, inleg, PloegRennerAantal, PloegReserveAantal, AantalEtapPlaatsen,
         AantalKlasGeel, AantalKlasGroen, AantalKlasBol, AantalKlasWit,
         AantalEindKlasGeel, AantalEindKlasGroen, AantalEindKlasBol, AantalEindKlasWit,
+        geldEtappeHoog, geldEtappeTotaal, geldEtappeLaagTTL,
         PrijsNr1Percentage, PrijsNr2Percentage, PrijsNr3Percentage, PrijsNr4Percentage, PrijsNrLaatstBedrag
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         poolID,
@@ -121,6 +132,9 @@ poolsRouter.post('/', async (request, response, next) => {
         lastOptions?.AantalEindKlasGroen ?? 0,
         lastOptions?.AantalEindKlasBol ?? 0,
         lastOptions?.AantalEindKlasWit ?? 0,
+        lastOptions?.geldEtappeHoog ?? 0,
+        lastOptions?.geldEtappeTotaal ?? 0,
+        lastOptions?.geldEtappeLaagTTL ?? 0,
         lastOptions?.PrijsNr1Percentage ?? 0,
         lastOptions?.PrijsNr2Percentage ?? 0,
         lastOptions?.PrijsNr3Percentage ?? 0,

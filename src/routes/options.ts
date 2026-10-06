@@ -4,20 +4,25 @@ import { pool } from '../db.js';
 
 export const optionsRouter = Router();
 
+const stagePrizeSchema = z.number().min(0).max(99.99).multipleOf(0.01).nullable().optional();
+
 const createOptionSchema = z.object({
   poolID: z.number().int(),
   inleg: z.number().nullable().optional(),
-  PloegRennerAantal: z.number().int().nullable().optional(),
+  PloegRennerAantal: z.number().int().max(25).nullable().optional(),
   PloegReserveAantal: z.number().int().nullable().optional(),
   AantalEtapPlaatsen: z.number().int().nullable().optional(),
-  AantalKlasGeel: z.number().int().nullable().optional(),
-  AantalKlasGroen: z.number().int().nullable().optional(),
-  AantalKlasBol: z.number().int().nullable().optional(),
-  AantalKlasWit: z.number().int().nullable().optional(),
-  AantalEindKlasGeel: z.number().int().nullable().optional(),
-  AantalEindKlasGroen: z.number().int().nullable().optional(),
-  AantalEindKlasBol: z.number().int().nullable().optional(),
-  AantalEindKlasWit: z.number().int().nullable().optional(),
+  AantalKlasGeel: z.number().int().min(0).max(10).nullable().optional(),
+  AantalKlasGroen: z.number().int().min(0).max(10).nullable().optional(),
+  AantalKlasBol: z.number().int().min(0).max(10).nullable().optional(),
+  AantalKlasWit: z.number().int().min(0).max(10).nullable().optional(),
+  AantalEindKlasGeel: z.number().int().min(0).max(10).nullable().optional(),
+  AantalEindKlasGroen: z.number().int().min(0).max(10).nullable().optional(),
+  AantalEindKlasBol: z.number().int().min(0).max(10).nullable().optional(),
+  AantalEindKlasWit: z.number().int().min(0).max(10).nullable().optional(),
+  geldEtappeHoog: stagePrizeSchema,
+  geldEtappeTotaal: stagePrizeSchema,
+  geldEtappeLaagTTL: stagePrizeSchema,
   PrijsNr1Percentage: z.number().nullable().optional(),
   PrijsNr2Percentage: z.number().nullable().optional(),
   PrijsNr3Percentage: z.number().nullable().optional(),
@@ -61,8 +66,9 @@ optionsRouter.post('/', async (request, response, next) => {
         poolID, inleg, PloegRennerAantal, PloegReserveAantal, AantalEtapPlaatsen,
         AantalKlasGeel, AantalKlasGroen, AantalKlasBol, AantalKlasWit,
         AantalEindKlasGeel, AantalEindKlasGroen, AantalEindKlasBol, AantalEindKlasWit,
+        geldEtappeHoog, geldEtappeTotaal, geldEtappeLaagTTL,
         PrijsNr1Percentage, PrijsNr2Percentage, PrijsNr3Percentage, PrijsNr4Percentage, PrijsNrLaatstBedrag
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         payload.poolID,
         payload.inleg ?? 10.00,
@@ -77,6 +83,9 @@ optionsRouter.post('/', async (request, response, next) => {
         payload.AantalEindKlasGroen ?? 1,
         payload.AantalEindKlasBol ?? 1,
         payload.AantalEindKlasWit ?? 1,
+        payload.geldEtappeHoog ?? 0,
+        payload.geldEtappeTotaal ?? 0,
+        payload.geldEtappeLaagTTL ?? 0,
         payload.PrijsNr1Percentage ?? 1.00,
         payload.PrijsNr2Percentage ?? 0.35,
         payload.PrijsNr3Percentage ?? 0.15,
@@ -117,6 +126,9 @@ optionsRouter.put('/:poolID', async (request, response, next) => {
       AantalEindKlasGroen: payload.AantalEindKlasGroen !== undefined ? payload.AantalEindKlasGroen : current.AantalEindKlasGroen,
       AantalEindKlasBol: payload.AantalEindKlasBol !== undefined ? payload.AantalEindKlasBol : current.AantalEindKlasBol,
       AantalEindKlasWit: payload.AantalEindKlasWit !== undefined ? payload.AantalEindKlasWit : current.AantalEindKlasWit,
+      geldEtappeHoog: payload.geldEtappeHoog !== undefined ? payload.geldEtappeHoog : current.geldEtappeHoog,
+      geldEtappeTotaal: payload.geldEtappeTotaal !== undefined ? payload.geldEtappeTotaal : current.geldEtappeTotaal,
+      geldEtappeLaagTTL: payload.geldEtappeLaagTTL !== undefined ? payload.geldEtappeLaagTTL : current.geldEtappeLaagTTL,
       PrijsNr1Percentage: payload.PrijsNr1Percentage !== undefined ? payload.PrijsNr1Percentage : current.PrijsNr1Percentage,
       PrijsNr2Percentage: payload.PrijsNr2Percentage !== undefined ? payload.PrijsNr2Percentage : current.PrijsNr2Percentage,
       PrijsNr3Percentage: payload.PrijsNr3Percentage !== undefined ? payload.PrijsNr3Percentage : current.PrijsNr3Percentage,
@@ -129,6 +141,7 @@ optionsRouter.put('/:poolID', async (request, response, next) => {
         inleg = ?, PloegRennerAantal = ?, PloegReserveAantal = ?, AantalEtapPlaatsen = ?,
         AantalKlasGeel = ?, AantalKlasGroen = ?, AantalKlasBol = ?, AantalKlasWit = ?,
         AantalEindKlasGeel = ?, AantalEindKlasGroen = ?, AantalEindKlasBol = ?, AantalEindKlasWit = ?,
+        geldEtappeHoog = ?, geldEtappeTotaal = ?, geldEtappeLaagTTL = ?,
         PrijsNr1Percentage = ?, PrijsNr2Percentage = ?, PrijsNr3Percentage = ?, PrijsNr4Percentage = ?, PrijsNrLaatstBedrag = ?
       WHERE poolID = ?`,
       [
@@ -144,6 +157,9 @@ optionsRouter.put('/:poolID', async (request, response, next) => {
         updated.AantalEindKlasGroen,
         updated.AantalEindKlasBol,
         updated.AantalEindKlasWit,
+        updated.geldEtappeHoog,
+        updated.geldEtappeTotaal,
+        updated.geldEtappeLaagTTL,
         updated.PrijsNr1Percentage,
         updated.PrijsNr2Percentage,
         updated.PrijsNr3Percentage,

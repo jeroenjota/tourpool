@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { apiFetch } from '../services/api';
 import { useActivePoolStore } from '../stores/activePool';
+import { loadPrintFonts } from '../services/printFonts';
 import { 
   Plus, 
   Trash2, 
@@ -17,7 +18,8 @@ import {
   GripVertical,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Printer
 } from '@lucide/vue';
 
 interface Pool {
@@ -102,6 +104,8 @@ const allAddresses = ref<Address[]>([]);
 const participants = ref<Participant[]>([]);
 const poolOption = ref<PoolOption | null>(null);
 const stages = ref<Stage[]>([]);
+const stagesWithResults = ref<Set<number>>(new Set());
+const printStageNumber = ref<number | null>(null);
 const tourRiders = ref<TourRider[]>([]);
 const participantRidersMap = ref<Record<number, ParticipantRiderItem[]>>({});
 const loading = ref(true);
@@ -115,9 +119,19 @@ const participantSort = ref<{ key: 'roepnaam' | 'naam'; direction: 'asc' | 'desc
 
 // Modal states
 const addModalOpen = ref(false);
+const addAddressModalOpen = ref(false);
 const editModalOpen = ref(false);
 const manageRidersModalOpen = ref(false);
 const selectedStageNumber = ref<number | null>(null);
+const savingNewAddress = ref(false);
+const newAddressForm = ref({
+  vNaam: '',
+  tNaam: '',
+  aNaam: '',
+  plaats: '',
+  tel: '',
+  email: ''
+});
 
 // Drag & drop state for selected riders
 const addRiderDragIdx = ref<number | null>(null);
@@ -178,10 +192,13 @@ const fetchInitialData = async () => {
 const fetchPoolData = async () => {
   if (!selectedPoolID.value) return;
   try {
-    const [partsRes, optionsRes, stagesRes] = await Promise.all([
+    const [partsRes, optionsRes, stagesRes, stageResultsRes] = await Promise.all([
       apiFetch<Participant[]>(`/participants?poolID=${selectedPoolID.value}`),
       apiFetch<PoolOption[]>(`/options?poolID=${selectedPoolID.value}`).catch(() => []),
-      apiFetch<Stage[]>(`/stages?tour=${activePool.value?.tourID ?? ''}`).catch(() => [])
+      apiFetch<Stage[]>(`/stages?tour=${activePool.value?.tourID ?? ''}`).catch(() => []),
+      activePool.value?.tourID
+        ? apiFetch<Array<{ etappeNr: number }>>(`/stage-results?tourID=${activePool.value.tourID}`).catch(() => [])
+        : Promise.resolve([])
     ]);
     participants.value = partsRes;
     poolOption.value = optionsRes.find(o => o.poolID === selectedPoolID.value) || null;
@@ -189,6 +206,8 @@ const fetchPoolData = async () => {
       .filter(stage => stage.etappeNr != null)
       .sort((a, b) => (a.etappeNr || 0) - (b.etappeNr || 0));
     selectedStageNumber.value = stages.value.at(-1)?.etappeNr ?? null;
+    stagesWithResults.value = new Set(stageResultsRes.map(result => Number(result.etappeNr)));
+    printStageNumber.value = nextStageNumber.value;
 
     // Haal de renners van de actieve tour op
     if (activePool.value?.tourID) {
@@ -249,6 +268,86 @@ const participantSortIcon = (key: 'roepnaam' | 'naam') => {
   if (participantSort.value?.key !== key) return ArrowUpDown;
   return participantSort.value.direction === 'asc' ? ArrowUp : ArrowDown;
 };
+
+const printableParticipantPages = computed(() => {
+  const sortedParticipants = [...participants.value].sort((a, b) =>
+    (a.roepnaam || '').localeCompare(b.roepnaam || '', 'nl', { sensitivity: 'base' })
+  );
+  const pages: Participant[][] = [];
+  const participantsPerPage = 12;
+  for (let index = 0; index < sortedParticipants.length; index += participantsPerPage) {
+    pages.push(sortedParticipants.slice(index, index + participantsPerPage));
+  }
+  return pages;
+});
+
+const lastStageNumber = computed(() => stages.value.at(-1)?.etappeNr ?? null);
+const afterLastStageNumber = computed(() => (lastStageNumber.value ?? 0) + 1);
+
+// Volgende etappe = eerste etappe zonder ingevoerde uitslag.
+const nextStageNumber = computed(() => {
+  const nextStage = stages.value.find(stage => !stagesWithResults.value.has(stage.etappeNr ?? 0));
+  if (nextStage) return nextStage.etappeNr ?? null;
+  return stages.value.length > 0 ? afterLastStageNumber.value : null;
+});
+
+const printStage = computed(() => stages.value.find(stage => stage.etappeNr === printStageNumber.value) || null);
+
+const printStageTitle = computed(() => {
+  if (printStageNumber.value == null) return 'Deelnemersploegen';
+  if (!printStage.value) return `Deelnemersploegen na etappe ${lastStageNumber.value}`;
+
+  const details = [
+    printStage.value.datum
+      ? new Intl.DateTimeFormat('nl-NL', { day: 'numeric', month: 'long' }).format(new Date(printStage.value.datum))
+      : null,
+    [printStage.value.Start, printStage.value.Finish].filter(Boolean).join(' – ') || null
+  ].filter(Boolean).join(', ');
+  return `Deelnemersploegen vóór etappe ${printStageNumber.value}${details ? ` (${details})` : ''}`;
+});
+
+const isRiderOutBeforePrintStage = (rider: ParticipantRiderItem) =>
+  rider.nietGestartEtappe != null && printStageNumber.value != null && rider.nietGestartEtappe <= printStageNumber.value;
+
+const participantRidersForPrint = (deelnID: number) => {
+  const sortedRiders = [...(participantRidersMap.value[deelnID] || [])].sort((a, b) => a.positie - b.positie);
+  const activeRiders = sortedRiders.filter(rider => !isRiderOutBeforePrintStage(rider));
+  const droppedRiders = sortedRiders
+    .filter(isRiderOutBeforePrintStage)
+    .sort((a, b) => (a.nietGestartEtappe ?? 0) - (b.nietGestartEtappe ?? 0) || a.positie - b.positie);
+
+  return [
+    ...activeRiders.map((rider, index) => ({
+      ...rider,
+      printPlace: index < targetRiderCount.value ? String(index + 1) : `R${index - targetRiderCount.value + 1}`,
+      printDropped: false
+    })),
+    ...droppedRiders.map(rider => ({ ...rider, printPlace: '-', printDropped: true }))
+  ];
+};
+
+const printRiderName = (rider: { anaam?: string | null; vnaam?: string | null; tnaam?: string | null }) => {
+  const lastName = rider.anaam?.trim() || '';
+  const firstNames = [rider.vnaam?.trim(), rider.tnaam?.trim()].filter(Boolean).join(' ');
+  return [lastName, firstNames].filter(Boolean).join(', ') || '—';
+};
+
+const printParticipantRosters = async () => {
+  if (!activePool.value || participants.value.length === 0) return;
+
+  await loadPrintFonts();
+
+  const originalTitle = document.title;
+  const stageSuffix = printStageNumber.value == null
+    ? ''
+    : printStage.value ? ` voor etappe ${printStageNumber.value}` : ` na etappe ${lastStageNumber.value}`;
+  document.title = `${activePool.value.Naam || `Pool ${activePool.value.poolID}`} - deelnemersploegen${stageSuffix}`;
+  window.addEventListener('afterprint', () => {
+    document.title = originalTitle;
+  }, { once: true });
+  window.print();
+};
+
 
 // Gefilterde deelnemers
 const filteredParticipants = computed(() => {
@@ -440,6 +539,52 @@ const openAddModal = () => {
   };
   riderSearchQuery.value = '';
   addModalOpen.value = true;
+};
+
+const openAddAddressModal = () => {
+  newAddressForm.value = {
+    vNaam: '',
+    tNaam: '',
+    aNaam: '',
+    plaats: '',
+    tel: '',
+    email: ''
+  };
+  addAddressModalOpen.value = true;
+};
+
+const addAddress = async () => {
+  const form = newAddressForm.value;
+  const aNaam = form.aNaam.trim();
+  if (!aNaam) {
+    alert('Vul minimaal een achternaam in.');
+    return;
+  }
+
+  const address: Address = {
+    adrID: allAddresses.value.reduce((max, item) => Math.max(max, item.adrID), 0) + 1,
+    vNaam: form.vNaam.trim() || null,
+    tNaam: form.tNaam.trim() || null,
+    aNaam,
+    plaats: form.plaats.trim() || null,
+    tel: form.tel.trim() || null,
+    email: form.email.trim() || null
+  };
+
+  savingNewAddress.value = true;
+  try {
+    await apiFetch('/addresses', {
+      method: 'POST',
+      body: JSON.stringify(address)
+    });
+    allAddresses.value = [...allAddresses.value, address];
+    addForm.value.adrID = address.adrID;
+    addAddressModalOpen.value = false;
+  } catch (err) {
+    alert(`Fout bij toevoegen adres: ${err instanceof Error ? err.message : err}`);
+  } finally {
+    savingNewAddress.value = false;
+  }
 };
 
 const addParticipant = async () => {
@@ -650,12 +795,39 @@ const deleteParticipant = async (p: Participant) => {
     <!-- Header -->
     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <h2 class="text-xl font-bold text-slate-900">Deelnemers per Pool</h2>
-        <p class="text-xs text-slate-500">Koppel adressen uit het adresboek aan een specifieke pool en stel hun rennersploeg samen</p>
+        <h2 class="text-xl font-bold text-slate-900">Deelnemers</h2>
+        <p class="text-xs text-slate-500">Kies uit het adresboek en stel hun rennersploeg samen</p>
       </div>
 
       <!-- Knoppen rechts -->
       <div class="flex items-center gap-3">
+        <label
+          v-if="stages.length > 0"
+          class="shadow-xs flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600"
+          title="Ploegen afdrukken zoals ze gelden vóór deze etappe (uitvallers tot en met deze etappe staan onderaan)"
+        >
+          <span>Vóór</span>
+          <select
+            v-model.number="printStageNumber"
+            class="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-sm font-semibold text-slate-800 focus:border-amber-500 focus:outline-none"
+          >
+            <option v-for="stage in stages" :key="stage.etappeNr ?? 0" :value="stage.etappeNr">
+              Etappe {{ stage.etappeNr }}{{ stage.etappeNr === nextStageNumber ? ' (volgende)' : '' }}
+            </option>
+            <option :value="afterLastStageNumber">
+              Na laatste etappe{{ afterLastStageNumber === nextStageNumber ? ' (volgende)' : '' }}
+            </option>
+          </select>
+        </label>
+        <button
+          @click="printParticipantRosters"
+          :disabled="loading || participants.length === 0"
+          class="shadow-xs flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          title="Deelnemers en renners als PDF afdrukken"
+        >
+          <Printer class="h-4 w-4" />
+          <span>PDF ploegen</span>
+        </button>
         <button 
           @click="fetchPoolData" 
           class="shadow-xs rounded-lg border border-slate-200 bg-white p-2.5 text-slate-600 transition hover:bg-slate-50"
@@ -677,9 +849,6 @@ const deleteParticipant = async (p: Participant) => {
     <!-- Active Pool Summary Banner -->
     <div v-if="activePool" class="shadow-xs grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-white p-5 md:grid-cols-4">
       <div class="space-y-1 border-r-0 border-slate-100 pr-4 md:col-span-1 md:border-r">
-        <span class="rounded border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-700">
-          Pool ID #{{ activePool.poolID }} (Tour #{{ activePool.tourID }})
-        </span>
         <h3 class="mt-1 text-base font-bold text-slate-900">{{ activePool.Naam }}</h3>
         <p class="text-xs text-slate-500">Ploeggrootte: <strong class="font-mono font-bold text-amber-700">{{ targetRiderCount }} renners</strong> <span v-if="targetReserveCount > 0">(+ {{ targetReserveCount }} reserves)</span></p>
       </div>
@@ -885,15 +1054,25 @@ const deleteParticipant = async (p: Participant) => {
           <div class="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5 sm:grid-cols-2">
             <div>
               <label class="mb-1 block text-xs font-semibold text-slate-700">Selecteer adres uit adresboek *</label>
-              <select 
-                v-model="addForm.adrID" 
-                class="shadow-2xs w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:outline-none"
-              >
-                <option :value="null" disabled>Kies een persoon...</option>
-                <option v-for="a in sortedAddresses" :key="a.adrID" :value="a.adrID">
-                  {{ formatFullName(a) }} {{ a.plaats ? `(${a.plaats})` : '' }}
-                </option>
-              </select>
+              <div class="flex gap-2">
+                <select
+                  v-model="addForm.adrID"
+                  class="shadow-2xs min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:outline-none"
+                >
+                  <option :value="null" disabled>Kies een persoon...</option>
+                  <option v-for="a in sortedAddresses" :key="a.adrID" :value="a.adrID">
+                    {{ formatFullName(a) }} {{ a.plaats ? `(${a.plaats})` : '' }}
+                  </option>
+                </select>
+                <button
+                  type="button"
+                  @click="openAddAddressModal"
+                  class="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                >
+                  <Plus class="h-4 w-4" />
+                  Nieuw adres
+                </button>
+              </div>
             </div>
 
             <div>
@@ -1214,6 +1393,106 @@ const deleteParticipant = async (p: Participant) => {
         </div>
       </div>
     </div>
+
+    <!-- Modal: Nieuw adres toevoegen aan het adresboek -->
+    <div v-if="addAddressModalOpen" class="backdrop-blur-xs fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4">
+      <form @submit.prevent="addAddress" class="w-full max-w-md space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+          <div>
+            <h3 class="text-lg font-bold text-slate-900">Nieuw adres toevoegen</h3>
+            <p class="text-xs text-slate-500">Het adres wordt opgeslagen in het centrale adresboek.</p>
+          </div>
+          <button type="button" @click="addAddressModalOpen = false" class="text-slate-400 hover:text-slate-700">
+            <X class="h-5 w-5" />
+          </button>
+        </div>
+
+        <div class="space-y-4">
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="mb-1 block text-xs font-semibold text-slate-700">Voornaam</label>
+              <input v-model="newAddressForm.vNaam" maxlength="24" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" placeholder="Jan" />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-semibold text-slate-700">Tussenvoegsel</label>
+              <input v-model="newAddressForm.tNaam" maxlength="12" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" placeholder="van" />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-semibold text-slate-700">Achternaam *</label>
+              <input v-model="newAddressForm.aNaam" maxlength="24" required class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" placeholder="Jansen" />
+            </div>
+          </div>
+
+          <div>
+            <label class="mb-1 block text-xs font-semibold text-slate-700">E-mailadres</label>
+            <input v-model="newAddressForm.email" type="email" maxlength="64" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" placeholder="jan@example.com" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="mb-1 block text-xs font-semibold text-slate-700">Woonplaats</label>
+              <input v-model="newAddressForm.plaats" maxlength="24" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" placeholder="Amsterdam" />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-semibold text-slate-700">Telefoonnummer</label>
+              <input v-model="newAddressForm.tel" maxlength="12" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" placeholder="06-12345678" />
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 border-t border-slate-200 pt-4">
+          <button type="button" @click="addAddressModalOpen = false" class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Annuleren</button>
+          <button type="submit" :disabled="savingNewAddress" class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50">
+            {{ savingNewAddress ? 'Opslaan...' : 'Adres opslaan' }}
+          </button>
+        </div>
+      </form>
+    </div>
+
+  <div v-if="activePool" class="pool-print-report" aria-hidden="true">
+    <article
+      v-for="(page, pageIndex) in printableParticipantPages"
+      :key="pageIndex"
+      class="pool-print-page"
+      :class="{ 'pool-print-page-last': pageIndex === printableParticipantPages.length - 1 }"
+    >
+      <header class="pool-print-header">
+        <div class="pool-print-title">
+          <strong>
+            <template v-if="activePool.Org?.trim()">{{ activePool.Org.trim() }}, </template>{{ activePool.Naam || `Pool #${activePool.poolID}` }}
+          </strong>
+          <span>{{ printStageTitle }}</span>
+        </div>
+        <!-- <span>
+          Tour #{{ activePool.tourID }} · {{ participants.length }} deelnemers ·
+          {{ printReportDate }} · {{ pageIndex + 1 }}/{{ printableParticipantPages.length }}
+        </span> -->
+      </header>
+      <div class="pool-print-grid">
+        <section v-for="participant in page" :key="participant.deelnID" class="pool-print-participant">
+          <h2>{{ participant.roepnaam?.trim() || 'Huh?' }}</h2>
+          <div class="pool-print-rider-heading">
+            <span>Nr</span><span>Naam</span><span>Ploeg</span>
+          </div>
+          <div class="pool-print-riders">
+            <div
+              v-for="rider in participantRidersForPrint(participant.deelnID)"
+              :key="rider.rennerID"
+              class="pool-print-rider"
+              :class="{ 'pool-print-rider-dropped': rider.printDropped }"
+            >
+              <span class="pool-print-place">{{ rider.printPlace }}</span>
+              <span>{{ printRiderName(rider) }}</span>
+              <span class="pool-print-code">{{ rider.printDropped ? `NG ${rider.nietGestartEtappe}` : rider.ploegCode || '—' }}</span>
+            </div>
+            <div v-if="participantRidersForPrint(participant.deelnID).length === 0" class="pool-print-empty">
+              Geen renners geselecteerd
+            </div>
+          </div>
+        </section>
+      </div>
+    </article>
+  </div>
   </div>
 </template>
 
@@ -1221,5 +1500,178 @@ const deleteParticipant = async (p: Participant) => {
 .participant-fields,
 .participant-header-fields {
   grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 0.55fr) minmax(0, 1.8fr) minmax(0, 0.65fr) minmax(0, 0.65fr);
+}
+
+.pool-print-report {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 7mm;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .pool-print-report,
+  .pool-print-report * {
+    visibility: visible !important;
+  }
+
+  .pool-print-report {
+    position: absolute;
+    inset: 0;
+    display: block !important;
+    width: 100%;
+    color: #172033;
+    font-family: var(--pdf-body-font);
+  }
+
+  .pool-print-page {
+    display: flex;
+    width: 100%;
+    height: 283mm;
+    flex-direction: column;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .pool-print-page-last {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .pool-print-header {
+    font-family: var(--pdf-heading-font);
+    display: flex;
+    height: 11mm;
+    flex: 0 0 11mm;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 4mm;
+    padding-bottom: 1mm;
+    margin-bottom: 1.5mm;
+    border-bottom: 0.3mm solid #64748b;
+    font-size: 11pt;
+  }
+
+  .pool-print-title {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5mm;
+    text-align: center;
+  }
+
+  .pool-print-title span {
+    font-size: 10pt;
+    font-weight: 600;
+  }
+
+  .pool-print-header > span {
+    flex: 0 0 auto;
+  }
+
+  .pool-print-header strong {
+    font-size: 11pt;
+  }
+
+  .pool-print-grid {
+    display: grid;
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    gap: 2mm;
+  }
+
+  .pool-print-participant {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    border: 0.25mm solid #94a3b8;
+  }
+
+  .pool-print-participant h2 {
+    margin: 0;
+    padding: 1mm;
+    background: #e2e8f0;
+    font-size: 10pt;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .pool-print-rider-heading,
+  .pool-print-rider {
+    display: grid;
+    grid-template-columns: 5mm minmax(0, 1fr) 10mm;
+    gap: 0.6mm;
+    align-items: center;
+    padding: 0.45mm 0.7mm;
+  }
+
+  .pool-print-rider-heading {
+    flex: 0 0 auto;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 6.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .pool-print-riders {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .pool-print-rider {
+    min-height: 0;
+    flex: 1 1 auto;
+    border-top: 0.15mm solid #e2e8f0;
+    font-size: 8pt;
+    line-height: 1.15;
+  }
+
+  .pool-print-rider span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .pool-print-code {
+    text-align: center;
+    font-weight: 700;
+  }
+
+  .pool-print-place {
+    color: #475569;
+    font-weight: 700;
+  }
+
+  .pool-print-rider-dropped {
+    color: #94a3b8;
+  }
+
+  .pool-print-rider-dropped span:nth-child(2) {
+    text-decoration: line-through;
+  }
+
+  .pool-print-empty {
+    padding: 1mm;
+    color: #64748b;
+    font-size: 6pt;
+  }
 }
 </style>

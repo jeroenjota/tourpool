@@ -21,7 +21,7 @@ const reorderSchema = z.object({
 
 standardPointsRouter.get('/', async (_request, response, next) => {
   try {
-    const rows = await pool.query('SELECT prestatieID, Omschrijving, punten, volgorde FROM tblStandaardPunten ORDER BY COALESCE(volgorde, 9999), prestatieID');
+    const rows = await pool.query('SELECT prestatieID, uitslagtype, plaats, Omschrijving, punten, volgorde FROM tblStandaardPunten ORDER BY COALESCE(volgorde, 9999), prestatieID');
     response.json(rows);
   } catch (error) {
     next(error);
@@ -46,7 +46,7 @@ standardPointsRouter.put('/reorder', async (request, response, next) => {
 standardPointsRouter.get('/:prestatieID', async (request, response, next) => {
   try {
     const prestatieID = Number(request.params.prestatieID);
-    const rows = await pool.query('SELECT prestatieID, Omschrijving, punten, volgorde FROM tblStandaardPunten WHERE prestatieID = ?', [prestatieID]);
+    const rows = await pool.query('SELECT prestatieID, uitslagtype, plaats, Omschrijving, punten, volgorde FROM tblStandaardPunten WHERE prestatieID = ?', [prestatieID]);
     const item = (rows as Array<Record<string, unknown>>)[0];
 
     if (!item) {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { apiFetch } from '../services/api';
-import { Plus, Trash2, Edit2, X } from '@lucide/vue';
-import { useActivePoolStore } from '../stores/activePool';
+import { RouterLink } from 'vue-router';
+import { Plus, Trash2, Edit2, X, UserCheck, Trophy, Award, Sliders } from '@lucide/vue';
 
 interface Pool {
   poolID: number;
@@ -13,9 +13,33 @@ interface Pool {
   EindInschr?: string | null;
 }
 
+interface PoolOption {
+  poolID: number;
+  inleg?: number | string | null;
+  geldEtappeHoog?: number | string | null;
+  geldEtappeTotaal?: number | string | null;
+  geldEtappeLaagTTL?: number | string | null;
+  PrijsNr1Percentage?: number | string | null;
+  PrijsNr2Percentage?: number | string | null;
+  PrijsNr3Percentage?: number | string | null;
+  PrijsNr4Percentage?: number | string | null;
+  PrijsNrLaatstBedrag?: number | string | null;
+}
+
+interface Participant {
+  poolID: number;
+}
+
+interface Stage {
+  tour: number | string;
+  etappeNr?: number | null;
+}
+
 interface StandardPoint {
   prestatieID: number;
-  Omschrijving: string;
+  uitslagtype: string | null;
+  plaats: number | null;
+  Omschrijving: string | null;
   punten: number;
   volgorde?: number | null;
 }
@@ -38,15 +62,23 @@ const selectedPrestatieIds = ref<number[]>([]);
 const allocationPoints = ref<Record<number, number>>({});
 const loadingPointAllocations = ref(false);
 const savingPool = ref(false);
-const activePoolStore = useActivePoolStore();
+const participants = ref<Participant[]>([]);
+const poolOptions = ref<PoolOption[]>([]);
+const stages = ref<Stage[]>([]);
 
 const fetchPools = async () => {
   loading.value = true;
   try {
-    pools.value = await apiFetch<Pool[]>('/pools');
-    if (pools.value.length > 0 && !activePoolStore.activePoolID) {
-      activePoolStore.setActivePool(pools.value[0].poolID);
-    }
+    const [poolsData, participantData, optionData, stageData] = await Promise.all([
+      apiFetch<Pool[]>('/pools'),
+      apiFetch<Participant[]>('/participants'),
+      apiFetch<PoolOption[]>('/options'),
+      apiFetch<Stage[]>('/stages')
+    ]);
+    pools.value = poolsData;
+    participants.value = participantData;
+    poolOptions.value = optionData;
+    stages.value = stageData.filter(stage => stage.etappeNr != null);
   } catch (err) {
     console.error('Error fetching pools:', err);
   } finally {
@@ -54,9 +86,66 @@ const fetchPools = async () => {
   }
 };
 
-const setActivePool = (poolID: number) => {
-  activePoolStore.setActivePool(poolID);
-};
+const poolPages = [
+  { name: 'Deelnemers', page: 'participants', icon: UserCheck },
+  { name: 'Poolstand', page: 'standings', icon: Trophy },
+  { name: 'Puntentoekenning', page: 'point-allocations', icon: Award },
+  { name: 'Opties', page: 'options', icon: Sliders }
+];
+
+const prizeCurrencyFormatter = new Intl.NumberFormat('nl-NL', {
+  style: 'currency',
+  currency: 'EUR'
+});
+
+const prizeBreakdowns = computed(() => {
+  const toCents = (amount: number | string | null | undefined) =>
+    Math.round(Number(amount ?? 0) * 100);
+  const getPercentage = (value: number | string | null | undefined) => {
+    const percentage = Number(value ?? 0);
+    return percentage > 0 && percentage <= 1 ? percentage * 100 : percentage;
+  };
+
+  return Object.fromEntries(pools.value.map(pool => {
+    const option = poolOptions.value.find(item => item.poolID === pool.poolID);
+    if (!option) return [pool.poolID, null];
+
+    const participantCount = participants.value.filter(participant => participant.poolID === pool.poolID).length;
+    const stageCount = stages.value.filter(stage => Number(stage.tour) === pool.tourID).length;
+    const totalInlegCents = participantCount * toCents(option.inleg);
+    const stagePrizePerStageCents =
+      toCents(option.geldEtappeHoog) +
+      toCents(option.geldEtappeTotaal) +
+      toCents(option.geldEtappeLaagTTL);
+    const stagePrizeTotalCents = stagePrizePerStageCents * stageCount;
+    const redLanternCents = toCents(option.PrijsNrLaatstBedrag);
+    const remainingCents = totalInlegCents - stagePrizeTotalCents - redLanternCents;
+    const distributableCents = Math.max(remainingCents, 0);
+    const prizes = [
+      { label: '1e prijs', percentage: getPercentage(option.PrijsNr1Percentage) },
+      { label: '2e prijs', percentage: getPercentage(option.PrijsNr2Percentage) },
+      { label: '3e prijs', percentage: getPercentage(option.PrijsNr3Percentage) },
+      { label: '4e prijs', percentage: getPercentage(option.PrijsNr4Percentage) }
+    ].map(prize => ({
+      ...prize,
+      amountCents: Math.round(distributableCents * prize.percentage / 100)
+    }));
+
+    return [pool.poolID, {
+      participantCount,
+      stageCount,
+      totalInlegCents,
+      stagePrizePerStageCents,
+      stagePrizeTotalCents,
+      redLanternCents,
+      remainingCents,
+      prizes
+    }];
+  }));
+});
+
+const formatPrizeAmount = (amountCents: number) =>
+  prizeCurrencyFormatter.format(amountCents / 100);
 
 onMounted(async () => {
   try {
@@ -70,8 +159,10 @@ onMounted(async () => {
 
 const openCreateModal = () => {
   editingPool.value = { tourID: tours.value[0]?.tourID || 1, Naam: '', Org: '' };
-  selectedPrestatieIds.value = [];
-  allocationPoints.value = {};
+  selectedPrestatieIds.value = standardPoints.value.map(point => point.prestatieID);
+  allocationPoints.value = Object.fromEntries(
+    standardPoints.value.map(point => [point.prestatieID, point.punten])
+  );
   modalOpen.value = true;
 };
 
@@ -129,7 +220,10 @@ const syncPointAllocations = async (poolID: number) => {
           prestatieID: point.prestatieID,
           poolID,
           Omschrijving: point.Omschrijving,
-          Punten: allocationPoints.value[point.prestatieID] ?? point.punten
+          Punten: allocationPoints.value[point.prestatieID] ?? point.punten,
+          uitslagtype: point.uitslagtype,
+          plaats: point.plaats,
+          volgorde: point.volgorde
         })
       }))
   ]);
@@ -162,7 +256,7 @@ const savePool = async () => {
       poolID = createdPool.poolID;
     }
 
-    if (poolID) {
+    if (poolID && standardPoints.value.length > 0) {
       await syncPointAllocations(poolID);
     }
     modalOpen.value = false;
@@ -175,7 +269,7 @@ const savePool = async () => {
 };
 
 const deletePool = async (id: number) => {
-  const poolNaam = pools.find(p => p.poolID === id)?.Naam || 'Onbekend';
+  const poolNaam = pools.value.find(p => p.poolID === id)?.Naam || 'Onbekend';
   if (!confirm(`Weet je zeker dat je alle data mbt pool "${poolNaam}" (ID: ${id}) wilt verwijderen?`)) return;
   try {
     await apiFetch(`/pools/${id}`, { method: 'DELETE' });
@@ -210,20 +304,72 @@ const deletePool = async (id: number) => {
         class="shadow-xs flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 transition hover:border-slate-300"
       >
         <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <span class="font-mono text-xs text-slate-400">Pool #{{ p.poolID }} (Tour #{{ p.tourID }})</span>
-            <button
-              @click="setActivePool(p.poolID)"
-              class="rounded-full border px-2.5 py-0.5 text-xs font-semibold transition"
-              :class="activePoolStore.activePoolID === p.poolID
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : 'border-slate-200 bg-slate-100 text-slate-500 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700'"
-            >
-              {{ activePoolStore.activePoolID === p.poolID ? 'Actief' : 'Actief maken' }}
-            </button>
-          </div>
+          <span class="font-mono text-xs text-slate-400">Pool #{{ p.poolID }} (Tour #{{ p.tourID }})</span>
           <h3 class="text-lg font-bold text-slate-900">{{ p.Naam }}</h3>
           <p class="text-xs text-slate-500">Organisator: <span class="font-semibold text-slate-800">{{ p.Org || 'Onbekend' }}</span></p>
+          <nav class="flex flex-wrap gap-2" :aria-label="`Onderdelen van ${p.Naam}`">
+            <RouterLink
+              v-for="item in poolPages"
+              :key="item.page"
+              :to="`/pools/${p.poolID}/${item.page}`"
+              class="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
+            >
+              <component :is="item.icon" class="h-3.5 w-3.5" />
+              <span>{{ item.name }}</span>
+            </RouterLink>
+          </nav>
+        </div>
+
+        <div v-if="prizeBreakdowns[p.poolID]" class="mt-4 space-y-3 border-t border-slate-100 pt-4">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <h4 class="text-sm font-bold text-slate-900">Prijzenpot</h4>
+              <p class="text-xs text-slate-500">
+                {{ prizeBreakdowns[p.poolID]!.participantCount }} deelnemers · {{ prizeBreakdowns[p.poolID]!.stageCount }} etappes
+              </p>
+            </div>
+            <div class="text-right">
+              <span class="block text-xs font-medium text-slate-500">Te verdelen na inhoudingen</span>
+              <strong class="font-mono text-lg text-amber-700">
+                {{ formatPrizeAmount(Math.max(prizeBreakdowns[p.poolID]!.remainingCents, 0)) }}
+              </strong>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+            <div class="space-y-1.5">
+              <div class="flex justify-between gap-3">
+                <span class="text-slate-600">Totale inleg</span>
+                <strong class="font-mono text-slate-900">{{ formatPrizeAmount(prizeBreakdowns[p.poolID]!.totalInlegCents) }}</strong>
+              </div>
+              <div class="flex justify-between gap-3">
+                <span class="text-slate-600">
+                  Etappeprijzen ({{ formatPrizeAmount(prizeBreakdowns[p.poolID]!.stagePrizePerStageCents) }} × {{ prizeBreakdowns[p.poolID]!.stageCount }})
+                </span>
+                <strong class="font-mono text-rose-700">−{{ formatPrizeAmount(prizeBreakdowns[p.poolID]!.stagePrizeTotalCents) }}</strong>
+              </div>
+              <div class="flex justify-between gap-3">
+                <span class="text-slate-600">Rode lantaarn</span>
+                <strong class="font-mono text-rose-700">−{{ formatPrizeAmount(prizeBreakdowns[p.poolID]!.redLanternCents) }}</strong>
+              </div>
+              <div class="flex justify-between gap-3 border-t border-slate-100 pt-1.5">
+                <span class="font-semibold text-slate-700">Restant</span>
+                <strong class="font-mono" :class="prizeBreakdowns[p.poolID]!.remainingCents < 0 ? 'text-rose-700' : 'text-slate-900'">
+                  {{ formatPrizeAmount(prizeBreakdowns[p.poolID]!.remainingCents) }}
+                </strong>
+              </div>
+              <p v-if="prizeBreakdowns[p.poolID]!.remainingCents < 0" class="text-xs text-rose-700">
+                De inhoudingen zijn hoger dan de totale inleg; de eindprijzen zijn daarom op €0,00 begrensd.
+              </p>
+            </div>
+
+            <div class="space-y-1.5 border-t border-slate-100 pt-2 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+              <div v-for="prize in prizeBreakdowns[p.poolID]!.prizes" :key="prize.label" class="flex justify-between gap-3">
+                <span class="text-slate-600">{{ prize.label }} ({{ prize.percentage }}%)</span>
+                <strong class="font-mono text-slate-900">{{ formatPrizeAmount(prize.amountCents) }}</strong>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-3">
