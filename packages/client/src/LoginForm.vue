@@ -36,30 +36,19 @@ async function submit() {
 </script>
 
 <template>
-  <form class="auth-form" @submit.prevent="submit">
-    <h1>{{ registering ? 'Account aanmaken' : admin ? 'Tourpool beheer - Inloggen' : 'Tourpool - Inloggen' }}</h1>
-    <p v-if="error" role="alert">{{ error }}</p>
-    <p v-if="message" role="status">{{ message }}</p>
-    <fieldset :disabled="busy">
+  <form class="mx-auto my-12 max-w-md rounded-xl border border-yellow-700 bg-yellow-100 p-6 text-slate-800" @submit.prevent="submit">
+    <h1 class="mb-4 text-2xl font-bold">{{ registering ? 'Account aanmaken' : admin ? 'Tourpool beheer - Inloggen' : 'Tourpool - Inloggen' }}</h1>
+    <p v-if="error" class="text-red-700" role="alert">{{ error }}</p>
+    <p v-if="message" class="text-green-800" role="status">{{ message }}</p>
+    <fieldset :disabled="busy" class="min-w-0">
       <ProfileFields v-if="registering" v-model="profile" />
-      <label>E-mailadres <input v-model="email" type="email" autocomplete="username" required maxlength="64" /></label>
-      <label>Wachtwoord <input v-model="password" type="password" :autocomplete="registering ? 'new-password' : 'current-password'" :minlength="registering ? 12 : 1" maxlength="128" required /></label>
+      <label class="my-3 block font-semibold">E-mailadres <input class="block w-full rounded-md border border-slate-500 bg-white p-2.5 font-normal" v-model="email" type="email" autocomplete="username" required maxlength="64" /></label>
+      <label class="my-3 block font-semibold">Wachtwoord <input class="block w-full rounded-md border border-slate-500 bg-white p-2.5 font-normal" v-model="password" type="password" :autocomplete="registering ? 'new-password' : 'current-password'" :minlength="registering ? 12 : 1" maxlength="128" required /></label>
       <p v-if="registering">Gebruik minimaal 12 tekens.</p>
-      <button type="submit">{{ busy ? 'Even geduld...' : registering ? 'Registreren' : 'Inloggen' }}</button>
-      <button v-if="!admin" type="button" @click="registering = !registering; error = ''; message = ''">
+      <button class="mt-2 mr-2 cursor-pointer rounded-md border border-yellow-700 bg-yellow-400 px-4 py-2.5 disabled:cursor-not-allowed disabled:opacity-50" type="submit">{{ busy ? 'Even geduld...' : registering ? 'Registreren' : 'Inloggen' }}</button>
+      <button v-if="!admin" class="mt-2 mr-2 cursor-pointer rounded-md border border-yellow-700 bg-yellow-400 px-4 py-2.5 disabled:cursor-not-allowed disabled:opacity-50" type="button" @click="registering = !registering; error = ''; message = ''">
         {{ registering ? 'Ik heb al een account' : 'Nieuw account aanmaken' }}
       </button>
     </fieldset>
   </form>
 </template>
-
-<style scoped>
-.auth-form { max-width: 28rem; margin: 3rem auto; padding: 1.5rem; background: #fef9c3; border: 1px solid #a16207; border-radius: .75rem; color: #1e293b; }
-h1 { font-size: 1.5rem; font-weight: bold; margin-bottom: 1rem; }
-fieldset { border: 0; padding: 0; }
-.auth-form :deep(label) { display: block; margin: .75rem 0; font-weight: 600; }
-.auth-form :deep(input) { box-sizing: border-box; display: block; width: 100%; padding: .6rem; border: 1px solid #64748b; border-radius: .4rem; background: white; font-weight: normal; }
-button { padding: .6rem 1rem; margin: .5rem .5rem 0 0; border: 1px solid #a16207; border-radius: .4rem; background: #facc15; cursor: pointer; }
-[role=alert] { color: #b91c1c; }
-[role=status] { color: #166534; }
-</style>

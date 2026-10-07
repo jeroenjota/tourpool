@@ -1,20 +1,2 @@
-* { box-sizing: border-box; }
-body { margin: 0; background: #fef08a; color: #1e293b; font-family: system-ui, sans-serif; }
-main { max-width: 70rem; margin: auto; padding: 1rem; }
-header { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
-h1 { font-size: 2rem; }
-h2 { font-size: 1.4rem; margin-top: 0; }
-h3 { font-size: 1.1rem; }
-section { padding: 1.25rem; background: #fef9c3; border: 1px solid #a16207; border-radius: .75rem; margin: 1rem 0; }
-article { padding: 1rem; margin: .75rem 0; border: 1px solid #a16207; border-radius: .5rem; background: #fff; }
-label { display: block; font-weight: 600; margin: .75rem 0; }
-input, select { display: block; width: 100%; max-width: 30rem; padding: .65rem; border: 1px solid #64748b; border-radius: .4rem; font: inherit; background: #fff; }
-button { font: inherit; cursor: pointer; padding: .5rem .75rem; margin: .25rem; border: 1px solid #a16207; background: #fde047; color: #1e293b; border-radius: .4rem; }
-button:disabled { opacity: .5; cursor: not-allowed; }
-fieldset { border: 0; padding: 0; margin: 0; }
-ul, ol { list-style: none; padding: 0; }
-li { padding: .5rem; border-bottom: 1px solid #cbd5e1; display: flex; justify-content: space-between; gap: .5rem; flex-wrap: wrap; align-items: center; }
-.rider-list { max-height: 24rem; overflow: auto; background: #fff; border: 1px solid #cbd5e1; }
-.error { color: #991b1b; padding: 1rem; background: #fee2e2; }
-.success { color: #166534; padding: 1rem; background: #dcfce7; }
-@media (max-width: 600px) { main { padding: .5rem; } section { padding: .75rem; } button { min-height: 2.75rem; } }
+@import "tailwindcss";
+@source "../../../packages/client/src";

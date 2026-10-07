@@ -9,6 +9,12 @@ Monorepo met npm workspaces:
 | `apps/user` | `@tourpool/user` | Deelnemersapp met registratie, eigen tourploegen en PDF |
 | `packages/client` | `@tourpool/client` | Gedeelde sessieclient en accountformulieren |
 
+Beide Vue-apps gebruiken Tailwind CSS 4 via de Vite-plugin. De deelnemersapp
+en de gedeelde inlog-/profielcomponenten gebruiken utilities in hun templates,
+zonder eigen CSS-regels. De deelnemersapp laadt ook Tailwinds Preflight-reset.
+De gedeelde clientcomponenten zijn in beide apps expliciet opgenomen in de
+Tailwind-bronscan.
+
 ## Accounts en autorisatie
 
 Voer op bestaande databases eerst `apps/api/migrations/20261007_add_accounts.sql`

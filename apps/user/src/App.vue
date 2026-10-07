@@ -26,7 +26,7 @@ const profile = ref<Profile>(emptyProfile());
 const loading = ref(true);
 const busy = ref(false);
 const error = ref('');
-const message = ref('');
+const message = ref('');emptyProfile
 const editingProfile = ref(false);
 const editing = ref(false);
 const editingID = ref<number | null>(null);
@@ -175,106 +175,112 @@ async function pdf(entry: Entry) {
 </script>
 
 <template>
-  <main>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
+  <main class="mx-auto max-w-280 p-2 min-[601px]:p-4">
+    <p v-if="error" class="my-4 bg-red-100 p-4 text-red-800" role="alert">{{ error }}</p>
     <p v-if="loading">Gegevens laden...</p>
     <LoginForm v-else-if="!auth.account" @signed-in="refresh" />
     <template v-else>
-      <header>
-        <h1>Mijn Tourpool</h1>
+      <header class="flex flex-wrap items-center gap-4">
+        <h1 class="my-5 text-[2rem]">Jota's Tourpool</h1>
         <span>{{ auth.account.email }}</span>
-        <button :disabled="busy" @click="signOut">Uitloggen</button>
+        <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" :disabled="busy" @click="signOut">Uitloggen</button>
       </header>
-      <p v-if="message" class="success" role="status">{{ message }}</p>
-      <section>
-        <h2>Mijn gegevens</h2>
+      <p v-if="message" class="my-4 bg-green-100 p-4 text-green-800" role="status">{{ message }}</p>
+      <section class="my-4 rounded-xl border border-yellow-700 bg-yellow-100 p-3 min-[601px]:p-5">
+
+        <div class="flex flex-row items-center justify-between">
+          <h2 class="text-[1.4rem]">Mijn gegevens</h2>
+          <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" :disabled="busy" @click="editingProfile = true">Wijzigen</button>
+        </div>
+        
         <form v-if="editingProfile" @submit.prevent="saveProfile">
-          <fieldset :disabled="busy">
+          <fieldset :disabled="busy" class="min-w-0 max-w-120">
             <ProfileFields v-model="profile" />
-            <button type="submit">Gegevens opslaan</button>
-            <button type="button" @click="editingProfile = false; refresh()">Annuleren</button>
+            <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" type="submit">Gegevens opslaan</button>
+            <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" type="button" @click="editingProfile = false; refresh()">Annuleren</button>
           </fieldset>
         </form>
         <template v-else>
-          <p>{{ [profile.vNaam, profile.tNaam, profile.aNaam].filter(Boolean).join(' ') }}</p>
-          <button :disabled="busy" @click="editingProfile = true">Gegevens wijzigen</button>
+          <p class="my-4 text-xl font-bold">{{ [profile.vNaam, profile.tNaam, profile.aNaam].filter(Boolean).join(' ') }} {{ profile.plaats ? `- ${profile.plaats}` : '' }} {{ profile.tel ? `(${profile.tel})` : '' }} </p>
+          
         </template>
       </section>
 
-      <section v-if="editing && activePool">
-        <h2>{{ editingID ? 'Mijn tourploeg' : 'Nieuwe tourploeg' }} - {{ activePool.Naam }}</h2>
-        <p v-if="!editable">Deze pool is gesloten voor wijzigingen. Je opgeslagen ploeg blijft zichtbaar.</p>
-        <p>{{ activePool.PloegRennerAantal }} renners, waarvan {{ activePool.PloegReserveAantal }} reserves. Volgorde bepaalt de reservevolgorde.</p>
+      <section v-if="editing && activePool" class="my-4 rounded-xl border border-yellow-700 bg-yellow-100 p-3 min-[601px]:p-5">
+        <h2 class="mb-4 text-[1.4rem]">{{ editingID ? 'Mijn tourploeg' : 'Nieuwe tourploeg' }} - {{ activePool.Naam }}</h2>
+        <p v-if="!editable" class="my-4">Deze pool is gesloten voor wijzigingen. Je opgeslagen ploeg blijft zichtbaar.</p>
+        <p class="my-4">{{ activePool.PloegRennerAantal }} renners, waarvan {{ activePool.PloegReserveAantal }} reserves. Volgorde bepaalt de reservevolgorde.</p>
         <form @submit.prevent="saveTeam()" @invalid.capture="teamError = 'Vul een roepnaam / ploegnaam in.'">
-          <fieldset :disabled="busy || !editable">
-            <label>Roepnaam / ploegnaam <input v-model="roepnaam" required maxlength="255" /></label>
-            <h3>Gekozen: {{ selected.length }} / {{ activePool.PloegRennerAantal }}</h3>
+          <fieldset :disabled="busy || !editable" class="min-w-0">
+            <label class="my-3 block font-semibold">Roepnaam / ploegnaam <input class="block w-full max-w-120 rounded-md border border-slate-500 bg-white p-2.5 font-normal" v-model="roepnaam" required maxlength="255" /></label>
+            <h3 class="my-4 text-[1.1rem]">Gekozen: {{ selected.length }} / {{ activePool.PloegRennerAantal }}</h3>
             <ol>
-              <li v-for="(r, index) in selectedRiders" :key="r.rennerID">
+              <li v-for="(r, index) in selectedRiders" :key="r.rennerID" class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-300 p-2">
                 <span>{{ index + 1 }}. {{ index >= mainCount ? 'Reserve: ' : '' }}{{ r.Rugnummer }} - {{ riderName(r) }}</span>
-                <span v-if="!riders.some(availableRider => availableRider.rennerID === r.rennerID)" class="error">Niet meer beschikbaar in deze tour; kies een vervanger.</span>
-                <div class="actions">
-                  <button type="button" :disabled="index === 0" :aria-label="`${riderName(r)} omhoog`" @click="moveRider(index, -1)">Omhoog</button>
-                  <button type="button" :disabled="index === selected.length - 1" :aria-label="`${riderName(r)} omlaag`" @click="moveRider(index, 1)">Omlaag</button>
-                  <button type="button" @click="selected.splice(index, 1)">Verwijderen</button>
+                <span v-if="!riders.some(availableRider => availableRider.rennerID === r.rennerID)" class="bg-red-100 p-4 text-red-800">Niet meer beschikbaar in deze tour; kies een vervanger.</span>
+                <div class="flex flex-wrap">
+                  <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" type="button" :disabled="index === 0" :aria-label="`${riderName(r)} omhoog`" @click="moveRider(index, -1)">Omhoog</button>
+                  <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" type="button" :disabled="index === selected.length - 1" :aria-label="`${riderName(r)} omlaag`" @click="moveRider(index, 1)">Omlaag</button>
+                  <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" type="button" @click="selected.splice(index, 1)">Verwijderen</button>
                 </div>
               </li>
             </ol>
-            <label>Zoek renner <input v-model="search" type="search" /></label>
-            <ul class="rider-list">
-              <li v-for="r in available" :key="r.rennerID">
+            <label class="my-3 block font-semibold">Zoek renner <input class="block w-full max-w-120 rounded-md border border-slate-500 bg-white p-2.5 font-normal" v-model="search" type="search" /></label>
+            <ul class="max-h-96 overflow-auto border border-slate-300 bg-white">
+              <li v-for="r in available" :key="r.rennerID" class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-300 p-2">
                 <span>{{ r.Rugnummer }} - {{ riderName(r) }} ({{ r.ploegNaam }})</span>
-                <button type="button" :disabled="selected.length >= activePool.PloegRennerAantal" @click="addRider(r.rennerID)">Kiezen</button>
+                <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" type="button" :disabled="selected.length >= activePool.PloegRennerAantal" @click="addRider(r.rennerID)">Kiezen</button>
               </li>
             </ul>
-            <p v-if="teamError" class="error" role="alert">{{ teamError }}</p>
-            <button type="submit">{{ busy ? 'Bezig met opslaan...' : 'Tourploeg opslaan' }}</button>
+            <p v-if="teamError" class="my-4 bg-red-100 p-4 text-red-800" role="alert">{{ teamError }}</p>
+            <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" type="submit">{{ busy ? 'Bezig met opslaan...' : 'Tourploeg opslaan' }}</button>
             <button
+              class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               :disabled="selected.length !== activePool.PloegRennerAantal"
               @click="saveTeam(true)"
             >Opslaan en PDF downloaden</button>
-            <p v-if="selected.length !== activePool.PloegRennerAantal">
+            <p v-if="selected.length !== activePool.PloegRennerAantal" class="my-4">
               Je kunt je ploeg alvast opslaan. Kies alle {{ activePool.PloegRennerAantal }} renners inclusief reserves om het formulier als PDF te downloaden en af te drukken.
             </p>
           </fieldset>
-          <button type="button" :disabled="busy" @click="editing = false">Terug zonder opslaan</button>
+          <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" type="button" :disabled="busy" @click="editing = false">Terug zonder opslaan</button>
         </form>
       </section>
 
       <template v-else>
-        <section>
-          <h2>Mijn tourploegen</h2>
-          <p>Je kunt meerdere ploegen per pool invullen. Lever per ploeg de PDF in bij de organisatie en betaal daar. De admin bevestigt je betaling.</p>
-          <p v-if="!entries.length">Je hebt nog geen tourploegen ingevuld.</p>
-          <label v-else>
+        <section class="my-4 rounded-xl border border-yellow-700 bg-yellow-100 p-3 min-[601px]:p-5">
+          <h2 class="mb-4 text-[1.4rem]">Mijn tourploegen</h2>
+          <p class="my-4">Je kunt meerdere ploegen per pool invullen. Lever per ploeg de PDF in bij de organisatie en betaal daar. De admin bevestigt je betaling.</p>
+          <p v-if="!entries.length" class="my-4">Je hebt nog geen tourploegen ingevuld.</p>
+          <label v-else class="my-3 block font-semibold">
             Kies mijn tourploeg
-            <select v-model="selectedEntryID" :disabled="busy">
+            <select class="block w-full max-w-120 rounded-md border border-slate-500 bg-white p-2.5 font-normal" v-model="selectedEntryID" :disabled="busy">
               <option v-for="entry in entries" :key="entry.deelnID" :value="entry.deelnID">
                 {{ entry.roepnaam }} - {{ entry.poolNaam }} (#{{ entry.deelnID }})
               </option>
             </select>
           </label>
-          <article v-if="selectedEntry">
-            <h3>{{ selectedEntry.roepnaam }} - {{ selectedEntry.poolNaam }}</h3>
-            <p>Inschrijving #{{ selectedEntry.deelnID }} - {{ selectedEntry.Betaald ? 'Betaald' : 'Nog niet betaald' }}</p>
-            <button :disabled="busy || !pools.some(p => p.poolID === selectedEntry?.poolID)" @click="openSelectedTeam">Bekijken / wijzigen</button>
-            <button :disabled="busy" @click="pdf(selectedEntry)">PDF downloaden</button>
+          <article v-if="selectedEntry" class="my-3 rounded-lg border border-yellow-700 bg-white p-4">
+            <h3 class="my-4 text-[1.1rem]">{{ selectedEntry.roepnaam }} - {{ selectedEntry.poolNaam }}</h3>
+            <p class="my-4">Inschrijving #{{ selectedEntry.deelnID }} - {{ selectedEntry.Betaald ? 'Betaald' : 'Nog niet betaald' }}</p>
+            <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" :disabled="busy || !pools.some(p => p.poolID === selectedEntry?.poolID)" @click="openSelectedTeam">Bekijken / wijzigen</button>
+            <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" :disabled="busy" @click="pdf(selectedEntry)">PDF downloaden</button>
           </article>
         </section>
-        <section>
-          <h2>Pools</h2>
-          <button :disabled="busy || loading" @click="refresh">Verversen</button>
-          <article v-for="p in pools" :key="p.poolID">
-            <h3>{{ p.Org }} - {{ p.Naam }} ({{ p.tourNaam }})</h3>
-            <p>Inleg: EUR {{ Number(p.inleg || 0).toFixed(2) }} per ploeg.</p>
-            <p>
+        <section class="my-4 rounded-xl border border-yellow-700 bg-yellow-100 p-3 min-[601px]:p-5">
+          <h2 class="mb-4 text-[1.4rem]">Pools</h2>
+          <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" :disabled="busy || loading" @click="refresh">Verversen</button>
+          <article v-for="p in pools" :key="p.poolID" class="my-3 rounded-lg border border-yellow-700 bg-white p-4">
+            <h3 class="my-4 text-[1.1rem]">{{ p.Org }} - {{ p.Naam }} ({{ p.tourNaam }})</h3>
+            <p class="my-4">Inleg: EUR {{ Number(p.inleg || 0).toFixed(2) }} per ploeg.</p>
+            <p class="my-4">
               Inschrijving vanaf {{ p.registrationStart ? enrollmentDate(p.registrationStart) : 'direct' }}
               {{ p.registrationEnd ? `tot en met ${enrollmentDate(p.registrationEnd)}` : 'tot de tourstart' }}.
             </p>
-            <p v-if="p.closesAt">Sluit op {{ dutchTime(p.closesAt) }} (Nederlandse tijd).</p>
-            <p v-if="!isOpen(p)">{{ p.reason || 'De inschrijving is gesloten.' }}</p>
-            <button :disabled="busy || !isOpen(p)" @click="openTeam(p)">Nieuwe tourploeg invullen</button>
+            <p v-if="p.closesAt" class="my-4">Sluit op {{ dutchTime(p.closesAt) }} (Nederlandse tijd).</p>
+            <p v-if="!isOpen(p)" class="my-4">{{ p.reason || 'De inschrijving is gesloten.' }}</p>
+            <button class="m-1 cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-3 py-2 max-[600px]:min-h-11 disabled:cursor-not-allowed disabled:opacity-50" :disabled="busy || !isOpen(p)" @click="openTeam(p)">Nieuwe tourploeg invullen</button>
           </article>
         </section>
       </template>

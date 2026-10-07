@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../../../packages/client/src";
 
 /* Lato 2.0 (volledige tekenset, o.a. č); eigen gewichtskoppeling omdat lato-font bold op 600 zet. */
 @font-face {
