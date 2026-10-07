@@ -1,0 +1,19 @@
+ALTER TABLE tblAdressen MODIFY adrID INT NOT NULL AUTO_INCREMENT;
+
+CREATE TABLE IF NOT EXISTS tblAccounts (
+  accountID INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  adrID INT NOT NULL UNIQUE,
+  email VARCHAR(64) NOT NULL UNIQUE,
+  passwordHash VARCHAR(255) NOT NULL,
+  role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
+  CONSTRAINT tblAccounts_address_FK FOREIGN KEY (adrID) REFERENCES tblAdressen (adrID)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tblSessions (
+  tokenHash CHAR(64) NOT NULL PRIMARY KEY,
+  accountID INT NOT NULL,
+  csrfToken CHAR(64) NOT NULL,
+  expiresAt DATETIME NOT NULL,
+  INDEX (expiresAt),
+  CONSTRAINT tblSessions_account_FK FOREIGN KEY (accountID) REFERENCES tblAccounts (accountID) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

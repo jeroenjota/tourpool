@@ -5,7 +5,7 @@ import { pool } from '../db.js';
 export const addressesRouter = Router();
 
 const createAddressSchema = z.object({
-  adrID: z.number().int(),
+  adrID: z.number().int().positive().optional(),
   vNaam: z.string().max(24).nullable().optional(),
   tNaam: z.string().max(12).nullable().optional(),
   aNaam: z.string().max(24).nullable().optional(),
@@ -45,12 +45,12 @@ addressesRouter.get('/:adrID', async (request, response, next) => {
 addressesRouter.post('/', async (request, response, next) => {
   try {
     const payload = createAddressSchema.parse(request.body);
-    await pool.query(
+    const result = await pool.query(
       'INSERT INTO tblAdressen (adrID, vNaam, tNaam, aNaam, plaats, tel, email) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [payload.adrID, payload.vNaam ?? null, payload.tNaam ?? null, payload.aNaam ?? null, payload.plaats ?? null, payload.tel ?? null, payload.email ?? null]
+      [payload.adrID ?? null, payload.vNaam ?? null, payload.tNaam ?? null, payload.aNaam ?? null, payload.plaats ?? null, payload.tel ?? null, payload.email ?? null]
     );
 
-    response.status(201).json(payload);
+    response.status(201).json({ ...payload, adrID: payload.adrID ?? Number(result.insertId) });
   } catch (error) {
     next(error);
   }

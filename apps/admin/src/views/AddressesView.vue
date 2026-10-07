@@ -59,9 +59,7 @@ const filteredAddresses = computed(() => {
 });
 
 const openCreateModal = () => {
-  const maxId = addresses.value.reduce((max, a) => Math.max(max, a.adrID || 0), 0);
   editingAddress.value = { 
-    adrID: maxId + 1, 
     vNaam: '', 
     tNaam: '', 
     aNaam: '', 

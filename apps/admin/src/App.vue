@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { RouterLink, RouterView, useRoute } from 'vue-router';
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
+import { auth, errorMessage, logout } from '@tourpool/client';
 import { apiFetch } from './services/api';
 import { useActivePoolStore } from './stores/activePool';
 import { 
@@ -20,6 +21,20 @@ import {
 } from '@lucide/vue';
 
 const route = useRoute();
+const router = useRouter();
+const authError = ref('');
+router.onError(error => { authError.value = errorMessage(error); });
+watch(() => auth.account, account => {
+  if (auth.checked && account?.role !== 'admin' && route.name !== 'login') {
+    void router.replace('/login').catch(error => { authError.value = errorMessage(error); });
+  }
+});
+async function signOut() {
+  try {
+    await logout();
+    await router.replace('/login');
+  } catch (error) { authError.value = errorMessage(error); }
+}
 const activePoolStore = useActivePoolStore();
 const showPoolHeader = computed(() => route.meta.poolPage === true);
 const isNavItemActive = (path: string) =>
@@ -82,7 +97,9 @@ const poolNavItems = [
 </script>
 
 <template>
-  <div class="flex h-screen overflow-hidden bg-slate-50 text-slate-800">
+  <div v-if="authError" role="alert" class="bg-red-100 p-4 text-red-800">{{ authError }}</div>
+  <RouterView v-if="auth.account?.role !== 'admin' || route.name === 'login'" />
+  <div v-else class="flex h-screen overflow-hidden bg-slate-50 text-slate-800">
     <!-- Achtergrond achter het uitgeklapte menu op mobiel -->
     <div
       v-if="mobileMenuOpen"
@@ -94,7 +111,7 @@ const poolNavItems = [
     <!-- Sidebar -->
     <aside
       id="main-menu"
-      class="fixed inset-y-0 left-0 z-40 flex h-dvh w-64 flex-col border-r border-slate-200 bg-yellow-200 transition-transform duration-200 lg:translate-x-0"
+      class="h-dvh fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-200 bg-yellow-200 transition-transform duration-200 lg:translate-x-0"
       :class="mobileMenuOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full'"
     >
       <button
@@ -134,13 +151,13 @@ const poolNavItems = [
       </nav>
 
       <div class="flex items-center justify-between border-t border-slate-200 bg-slate-50/50 p-4 text-xs text-slate-500">
-        <span>API: <span class="font-medium text-emerald-600">Verbonden</span></span>
-        <span class="rounded bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-700">v0.1.0</span>
+        <span class="truncate">{{ auth.account.email }}</span>
+        <button type="button" class="ml-2 font-semibold text-red-700" @click="signOut">Uitloggen</button>
       </div>
     </aside>
 
     <!-- Main Content -->
-    <div class="flex h-dvh min-w-0 flex-1 flex-col overflow-hidden bg-yellow-300 lg:ml-64">
+    <div class="h-dvh flex min-w-0 flex-1 flex-col overflow-hidden bg-yellow-300 lg:ml-64">
       <!-- Bovenbalk met menuknop op mobiel -->
       <div class="flex shrink-0 items-center gap-3 border-b border-yellow-500 bg-yellow-200 px-4 py-2 lg:hidden">
         <button

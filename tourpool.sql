@@ -20,11 +20,13 @@
 -- Table structure for table `tblAdressen`
 --
 
+DROP TABLE IF EXISTS `tblSessions`;
+DROP TABLE IF EXISTS `tblAccounts`;
 DROP TABLE IF EXISTS `tblAdressen`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `tblAdressen` (
-  `adrID` int(11) NOT NULL,
+  `adrID` int(11) NOT NULL AUTO_INCREMENT,
   `vNaam` varchar(24) DEFAULT NULL,
   `tNaam` varchar(12) DEFAULT NULL,
   `aNaam` varchar(24) DEFAULT NULL,
@@ -2402,6 +2404,24 @@ SET character_set_client = @saved_cs_client;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;
+CREATE TABLE IF NOT EXISTS tblAccounts (
+  accountID INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  adrID INT NOT NULL UNIQUE,
+  email VARCHAR(64) NOT NULL UNIQUE,
+  passwordHash VARCHAR(255) NOT NULL,
+  role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
+  CONSTRAINT tblAccounts_address_FK FOREIGN KEY (adrID) REFERENCES tblAdressen (adrID)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tblSessions (
+  tokenHash CHAR(64) NOT NULL PRIMARY KEY,
+  accountID INT NOT NULL,
+  csrfToken CHAR(64) NOT NULL,
+  expiresAt DATETIME NOT NULL,
+  INDEX (expiresAt),
+  CONSTRAINT tblSessions_account_FK FOREIGN KEY (accountID) REFERENCES tblAccounts (accountID) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

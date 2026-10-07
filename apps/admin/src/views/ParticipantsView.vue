@@ -54,6 +54,15 @@ interface Participant {
   Betaald?: number | boolean | null;
 }
 
+interface UserAccount {
+  accountID: number;
+  adrID: number;
+  email: string;
+  vNaam: string | null;
+  tNaam: string | null;
+  aNaam: string | null;
+}
+
 interface PoolOption {
   poolID: number;
   inleg: number;
@@ -155,6 +164,11 @@ const addForm = ref<{
 
 const riderSearchQuery = ref('');
 const editingParticipant = ref<Participant | null>(null);
+const userAccounts = ref<UserAccount[]>([]);
+const selectedAccountID = ref<number | null>(null);
+const loadingAccounts = ref(false);
+const linkingAccount = ref(false);
+const accountError = ref('');
 
 // State for Managing Team of Existing Participant
 const managingParticipant = ref<Participant | null>(null);
@@ -561,8 +575,7 @@ const addAddress = async () => {
     return;
   }
 
-  const address: Address = {
-    adrID: allAddresses.value.reduce((max, item) => Math.max(max, item.adrID), 0) + 1,
+  const address: Omit<Address, 'adrID'> = {
     vNaam: form.vNaam.trim() || null,
     tNaam: form.tNaam.trim() || null,
     aNaam,
@@ -573,12 +586,12 @@ const addAddress = async () => {
 
   savingNewAddress.value = true;
   try {
-    await apiFetch('/addresses', {
+    const savedAddress = await apiFetch<Address>('/addresses', {
       method: 'POST',
       body: JSON.stringify(address)
     });
-    allAddresses.value = [...allAddresses.value, address];
-    addForm.value.adrID = address.adrID;
+    allAddresses.value = [...allAddresses.value, savedAddress];
+    addForm.value.adrID = savedAddress.adrID;
     addAddressModalOpen.value = false;
   } catch (err) {
     alert(`Fout bij toevoegen adres: ${err instanceof Error ? err.message : err}`);
@@ -737,9 +750,39 @@ const saveManagingRiders = async () => {
 };
 
 // Deelnemer bewerken
-const openEditModal = (p: Participant) => {
+const openEditModal = async (p: Participant) => {
   editingParticipant.value = { ...p, Betaald: !!p.Betaald };
+  selectedAccountID.value = null;
+  userAccounts.value = [];
+  accountError.value = '';
   editModalOpen.value = true;
+  loadingAccounts.value = true;
+  try {
+    userAccounts.value = await apiFetch<UserAccount[]>('/accounts');
+    selectedAccountID.value = userAccounts.value.find(account => account.adrID === p.adrID)?.accountID ?? null;
+  } catch (error) { accountError.value = `Accounts laden mislukt: ${error instanceof Error ? error.message : String(error)}`; }
+  finally { loadingAccounts.value = false; }
+};
+
+const linkAccount = async () => {
+  const participant = editingParticipant.value;
+  const account = userAccounts.value.find(item => item.accountID === selectedAccountID.value);
+  if (!participant || !account) {
+    accountError.value = 'Kies eerst een gebruikersaccount.';
+    return;
+  }
+  if (!confirm(`Deze inschrijving koppelen aan ${account.email}? Dit account krijgt toegang tot de ploeg. De persoonsgegevens komen voortaan uit dat account. Andere inschrijvingen blijven ongewijzigd. Niet-opgeslagen wijzigingen in dit formulier worden niet meegenomen.`)) return;
+  linkingAccount.value = true;
+  accountError.value = '';
+  try {
+    await apiFetch(`/participants/${participant.deelnID}/account`, {
+      method: 'PUT',
+      body: JSON.stringify({ accountID: account.accountID, expectedAdrID: participant.adrID })
+    });
+    editModalOpen.value = false;
+    await fetchInitialData();
+  } catch (error) { accountError.value = `Koppelen mislukt: ${error instanceof Error ? error.message : String(error)}`; }
+  finally { linkingAccount.value = false; }
 };
 
 const saveParticipant = async () => {
@@ -1361,10 +1404,10 @@ const deleteParticipant = async (p: Participant) => {
             <h3 class="text-lg font-bold text-slate-900">Deelnemer bewerken</h3>
             <p class="text-xs text-slate-500">{{ formatFullName(editingParticipant) }}</p>
           </div>
-          <button @click="editModalOpen = false" class="text-slate-400 hover:text-slate-700"><X class="h-5 w-5" /></button>
+          <button :disabled="linkingAccount" @click="editModalOpen = false" class="text-slate-400 hover:text-slate-700"><X class="h-5 w-5" /></button>
         </div>
 
-        <div class="space-y-4">
+        <fieldset :disabled="linkingAccount" class="space-y-4">
           <div>
             <label class="mb-1 block text-xs font-semibold text-slate-700">Roepnaam / Teamnaam</label>
             <input 
@@ -1385,11 +1428,26 @@ const deleteParticipant = async (p: Participant) => {
               Inleg is betaald (€{{ inlegBedrag }})
             </label>
           </div>
-        </div>
+          <div class="border-t border-slate-200 pt-4">
+            <label for="participant-account" class="mb-1 block text-xs font-semibold text-slate-700">Koppelen aan gebruikersaccount</label>
+            <p v-if="loadingAccounts" class="text-xs text-slate-500">Accounts laden...</p>
+            <select id="participant-account" v-model="selectedAccountID" :disabled="loadingAccounts" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+              <option :value="null">Kies een gebruikersaccount</option>
+              <option v-for="account in userAccounts" :key="account.accountID" :value="account.accountID">
+                {{ [account.vNaam, account.tNaam, account.aNaam].filter(Boolean).join(' ') }} — {{ account.email }}
+              </option>
+            </select>
+            <p class="mt-2 text-xs text-slate-500">Koppelt alleen deze inschrijving. Renners, roepnaam en betaling blijven behouden. Het account moet al bestaan.</p>
+            <p v-if="accountError" role="alert" class="mt-2 text-sm text-red-700">{{ accountError }}</p>
+            <button type="button" :disabled="loadingAccounts || !selectedAccountID || userAccounts.find(account => account.accountID === selectedAccountID)?.adrID === editingParticipant.adrID" class="mt-2 rounded-lg bg-amber-100 px-3 py-2 text-sm font-semibold text-slate-900 disabled:opacity-50" @click="linkAccount">
+              {{ linkingAccount ? 'Bezig met koppelen...' : 'Account koppelen' }}
+            </button>
+          </div>
+        </fieldset>
 
         <div class="flex justify-end gap-3 border-t border-slate-200 pt-4">
-          <button @click="editModalOpen = false" class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Annuleren</button>
-          <button @click="saveParticipant" class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400">Opslaan</button>
+          <button :disabled="linkingAccount" @click="editModalOpen = false" class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Annuleren</button>
+          <button :disabled="linkingAccount" @click="saveParticipant" class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400">Opslaan</button>
         </div>
       </div>
     </div>

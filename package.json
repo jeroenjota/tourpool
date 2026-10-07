@@ -9,10 +9,12 @@
   "scripts": {
     "dev:api": "npm run dev -w @tourpool/api",
     "dev:admin": "npm run dev -w @tourpool/admin",
+    "dev:user": "npm run dev -w @tourpool/user",
     "build": "npm run build --workspaces --if-present",
     "build:api": "npm run build -w @tourpool/api",
     "build:admin": "npm run build -w @tourpool/admin",
-    "check": "npm run check -w @tourpool/api && npm exec -w @tourpool/admin -- vue-tsc -b",
+    "build:user": "npm run build -w @tourpool/user",
+    "check": "npm run check -w @tourpool/api && npm exec -w @tourpool/admin -- vue-tsc -b && npm run check -w @tourpool/user",
     "test": "npm test -w @tourpool/api"
   }
 }

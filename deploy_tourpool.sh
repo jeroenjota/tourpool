@@ -12,6 +12,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DEV_API_DIR="$ROOT_DIR/apps/api"
 DEV_ADMIN_DIR="$ROOT_DIR/apps/admin"
+DEV_USER_DIR="$ROOT_DIR/apps/user"
 DEV_ENV_FILE="$DEV_API_DIR/.env"
 DEV_DB_MODE="docker" # docker | local
 DEV_CONTAINER="mariadb"
@@ -178,6 +179,8 @@ DB_PORT=3306
 DB_USER=${PROD_DB_USER}
 DB_PASSWORD=${DB_PASSWORD}
 DB_NAME=${PROD_DB}
+AUTH_ORIGINS=https://jota.nl
+TRUST_PROXY=1
 ENV
   echo ".env aangemaakt: $PROD_ENV_FILE"
 else
@@ -211,7 +214,6 @@ ${AUTH_LINES}
 }
 
 location ^~ ${PROD_BASE_PATH}/api/ {
-${AUTH_LINES}
     proxy_pass http://127.0.0.1:${PROD_API_PORT}/api/;
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
@@ -219,6 +221,12 @@ ${AUTH_LINES}
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto \$scheme;
     proxy_redirect off;
+}
+
+location = ${PROD_BASE_PATH}/deelnemen { return 301 ${PROD_BASE_PATH}/deelnemen/; }
+location ^~ ${PROD_BASE_PATH}/deelnemen/ {
+    root ${WEB_PARENT};
+    try_files \$uri \$uri/ ${PROD_BASE_PATH}/deelnemen/index.html;
 }
 NGINX
 echo "Nginx-snippet geschreven: $PROD_NGINX_SNIPPET"
@@ -379,7 +387,7 @@ pm2 save > /dev/null
 port="$(sed -nE "s/^PORT=['\"]?([0-9]+)['\"]?$/\1/p" "$PROD_ENV_FILE" | head -n 1)"
 for _ in $(seq 1 12); do
   if curl -fsS "http://127.0.0.1:${port}/health" > /dev/null 2>&1 \
-    && curl -fsS "http://127.0.0.1:${port}/api/pools" > /dev/null 2>&1; then
+    && [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/api/pools")" = "401" ]; then
     echo "Health check OK (poort $port)"
     exit 0
   fi
@@ -406,9 +414,23 @@ build_admin() {
 sync_admin() {
   log "Admin uploaden..."
   rsync -rltz --delete --no-perms --no-owner --no-group \
+    --exclude deelnemen \
     "$DEV_ADMIN_DIR/dist/" \
     "$PROD_SSH:$PROD_WEB_DIR/"
   ok "Admin gedeployed: https://jota.nl${PROD_BASE_PATH}/"
+}
+
+build_user() {
+  log "Deelnemersapp bouwen..."
+  (cd "$ROOT_DIR" && npm run build:user)
+  [ -f "$DEV_USER_DIR/dist/index.html" ] || fail "Build deelnemersapp mislukt"
+}
+
+sync_user() {
+  ssh "$PROD_SSH" "mkdir -p '$PROD_WEB_DIR/deelnemen'"
+  rsync -rltz --delete --no-perms --no-owner --no-group \
+    "$DEV_USER_DIR/dist/" "$PROD_SSH:$PROD_WEB_DIR/deelnemen/"
+  ok "Deelnemersapp gedeployed: https://jota.nl${PROD_BASE_PATH}/deelnemen/"
 }
 
 # ---------------- MENU ----------------
@@ -420,8 +442,9 @@ echo "1) Server inrichten (eenmalig: mappen, database, .env, nginx)"
 echo "2) Database (dev → prod, overschrijft prod!)"
 echo "3) API"
 echo "4) Admin"
-echo "5) API + Admin"
-echo "6) Alles (Database + API + Admin)"
+echo "5) API + Admin + Deelnemersapp"
+echo "6) Alles (Database + API + Admin + Deelnemersapp)"
+echo "7) Deelnemersapp"
 echo
 
 read -rp "Keuze: " choice
@@ -456,8 +479,10 @@ case "$choice" in
     preflight_prod
     build_api
     build_admin
+    build_user
     sync_api
     sync_admin
+    sync_user
     ;;
   6)
     check_base_dependencies
@@ -466,9 +491,17 @@ case "$choice" in
     confirm_db_overwrite
     build_api
     build_admin
+    build_user
     sync_db
     sync_api
     sync_admin
+    sync_user
+    ;;
+  7)
+    check_base_dependencies
+    preflight_prod
+    build_user
+    sync_user
     ;;
   *)
     fail "Ongeldige keuze"

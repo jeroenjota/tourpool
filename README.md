@@ -6,9 +6,107 @@ Monorepo met npm workspaces:
 | --- | --- | --- |
 | `apps/api` | `@tourpool/api` | REST-API (Node.js, Express, TypeScript, MariaDB), migraties en tests |
 | `apps/admin` | `@tourpool/admin` | Beheermodule (Vue 3, Vite, Tailwind) |
-| `packages/*` | | Gedeelde code tussen apps (gereserveerd, nog leeg) |
+| `apps/user` | `@tourpool/user` | Deelnemersapp met registratie, eigen tourploegen en PDF |
+| `packages/client` | `@tourpool/client` | Gedeelde sessieclient en accountformulieren |
 
-Later komt er een gebruikersapp bij in `apps/`.
+## Accounts en autorisatie
+
+Voer op bestaande databases eerst `apps/api/migrations/20261007_add_accounts.sql`
+uit. Deze voegt accounts en sessies toe en maakt adresnummers automatisch
+gegenereerd. De bestaande adressen en inschrijvingen blijven behouden.
+Nieuwe databases bevatten deze structuur via `tourpool.sql`.
+
+Gebruikers registreren zichzelf met naam, e-mailadres en een wachtwoord van
+minimaal 12 tekens. Woonplaats en telefoon zijn optioneel. Registratie maakt
+altijd een **user** aan, met een nieuw adres. Bestaande adressen/inschrijvingen
+worden niet automatisch op e-mailadres gekoppeld: dat zou eigendom toekennen
+zonder controle. Bestaande inschrijvingen blijven door de admin beheerd.
+De admin kan een bestaande inschrijving handmatig koppelen via
+**Pools > Deelnemers > Bewerken > Koppelen aan gebruikersaccount**.
+Kies het reeds geregistreerde account en bevestig **Account koppelen**.
+Alleen die inschrijving krijgt het adres-ID van het gekozen account; andere
+inschrijvingen en het oude adres blijven behouden. Renners, roepnaam, punten
+en betaalstatus veranderen niet. Persoonsgegevens op de inschrijving/PDF
+komen voortaan uit het gekozen account. Het oude account verliest toegang
+als een inschrijving opnieuw wordt gekoppeld. Een dubbele roepnaam binnen
+dezelfde pool/account wordt geweigerd: pas dan eerst de roepnaam aan.
+Koppelen staat los van **Opslaan** van roepnaam/betaling; sla die wijzigingen
+zo nodig eerst op. Er worden nooit wachtwoorden in het accountoverzicht getoond.
+De adminroutes hiervoor zijn `GET /api/accounts` en
+`PUT /api/participants/:deelnID/account` met `accountID` en `expectedAdrID`;
+die laatste voorkomt koppelen op basis van een verouderd overzicht.
+
+Maak de eerste admin vanuit `apps/api` aan (na de migratie):
+
+```sh
+read -rp "Admin e-mail: " ADMIN_EMAIL
+read -rsp "Admin wachtwoord (minimaal 12 tekens): " ADMIN_PASSWORD; echo
+export ADMIN_EMAIL ADMIN_PASSWORD
+npm run create-admin
+unset ADMIN_EMAIL ADMIN_PASSWORD
+```
+
+In productie kan dit zonder ontwikkeldependencies met
+`node dist/scripts/createAdmin.js`. Het script overschrijft geen bestaande accounts.
+Er is geen standaardwachtwoord of publieke route om admin te worden.
+Wachtwoorden worden met scrypt en een willekeurige salt opgeslagen. Sessies
+duren 12 uur en gebruiken een HttpOnly-cookie (Secure in productie), met een
+CSRF-token voor mutaties. Log opnieuw in als de sessie is verlopen.
+
+De bestaande beheer-API is uitsluitend voor admins: ook reads van adressen,
+deelnemers en renners. De deelnemersapp gebruikt `/api/me/*`; elke opstelling
+en PDF is server-side beperkt tot het adres van de ingelogde gebruiker.
+Users kunnen meerdere ploegen per pool en in meerdere pools opslaan.
+Elke ploeg heeft binnen die gebruiker/pool een eigen roepnaam/ploegnaam.
+De inschrijving opent op `StartInschr` om 00:00 (of direct wanneer deze ontbreekt)
+en loopt **tot en met `EindInschr`**: sluiten gebeurt om 00:00 op de volgende dag.
+De tourstart om **00:00 uur Europe/Amsterdam** blijft de uiterste grens, ook
+wanneer de einddatum later ligt. Zonder tourstartdatum zijn wijzigingen niet toegestaan.
+Admins behouden hun bestaande beheermogelijkheden, ook na de sluitingsdatum.
+De admin stelt de inschrijfperiode in bij het toevoegen/bewerken van een pool;
+deze velden bevatten alleen een datum, zonder tijd of browser-tijdzoneconversie.
+De periode staat ook in het admin- en deelnemersoverzicht. De API accepteert
+`YYYY-MM-DD`, slaat dat op als middernacht in de bestaande DATETIME-kolommen
+en geeft alleen de datum terug. Oude tijdwaarden worden als kalenderdatum behandeld;
+er is geen databasemigratie nodig. Een einddatum voor de begindatum wordt geweigerd.
+
+Een ploeg mag als concept worden opgeslagen. Voor een PDF is het ingestelde
+aantal renners inclusief reserves vereist. De volgorde bepaalt basisrenners
+en reserves. De PDF bevat de opgeslagen ploeg, inschrijvingsnummer, naam,
+roepnaam, e-mailadres, eventuele woonplaats/telefoon en inleg/betaalstatus.
+De PDF blijft na sluiting beschikbaar. De gebruiker levert deze in en betaalt
+bij de organisatie; de admin gebruikt het bestaande betaalveld bij
+**Pools > Deelnemers** om `Betaald` op true te zetten. Users kunnen dit veld
+niet wijzigen, ook niet via een handmatig API-verzoek.
+In het ploegformulier slaat **Opslaan en PDF downloaden** eerst de ploeg op
+en downloadt daarna het afdrukbare formulier. Bij een downloadfout blijft het
+formulier open en is de ploeg wel opgeslagen; opnieuw opslaan werkt diezelfde
+inschrijving bij. Opslagfouten staan bij de knoppen. Na succesvol opslaan
+kan de gebruiker vanuit het pooloverzicht nog een ploeg invullen, in dezelfde
+of een andere pool. Een deelnemer maakt daarmee een inschrijving aan, geen
+nieuwe poolcompetitie; dat laatste blijft een adminfunctie.
+Bij **Mijn tourploegen** kiest de gebruiker een opgeslagen ploeg in een dropdown
+met roepnaam, poolnaam en inschrijvingsnummer. **Bekijken / wijzigen** opent
+die ploeg; **PDF downloaden** gebruikt dezelfde selectie. Na opslaan blijft
+de zojuist opgeslagen ploeg geselecteerd. Gesloten pools blijven alleen-lezen.
+
+Authenticatie-endpoints: `POST /api/auth/register`, `POST /api/auth/login`,
+`GET /api/auth/session`, `POST /api/auth/logout`.
+Deelnemers-endpoints: `GET/PUT /api/me/profile`, `GET /api/me/pools`,
+`GET /api/me/pools/:poolID/riders`, `GET/POST /api/me/entries`,
+`GET/PUT /api/me/entries/:deelnID`, `GET /api/me/entries/:deelnID/pdf`.
+Mutaties na het inloggen vereisen `X-CSRF-Token` uit de sessieresponse.
+Inloggen/registreren is begrensd op 20 pogingen per IP per 15 minuten
+(per API-proces). E-mailverificatie en wachtwoordherstel zijn nog niet aanwezig.
+
+De autorisatietests draaien standaard zonder databasewijzigingen. De optionele
+MariaDB-integratietest maakt een willekeurig benoemd, leeg testschema aan,
+kopieert alleen tabeldefinities (geen bestaande gegevens) en verwijdert dat
+schema na afloop. De databasegebruiker moet schema's mogen aanmaken/verwijderen:
+
+```sh
+TOURPOOL_DB_TEST=1 node --import tsx --test apps/api/tests/authDatabase.test.mjs
+```
 
 ## Ontwikkelen
 
@@ -23,6 +121,7 @@ Start daarna in aparte terminals:
 ```sh
 npm run dev:api     # API op http://localhost:3000
 npm run dev:admin   # admin op http://localhost:5173 (proxy /api -> :3000)
+npm run dev:user    # deelnemers op http://localhost:5174 (proxy /api -> :3000)
 ```
 
 Overige scripts vanuit de hoofdmap:
@@ -31,7 +130,8 @@ Overige scripts vanuit de hoofdmap:
 npm run build        # bouwt alle apps (apps/*/dist)
 npm run build:api
 npm run build:admin
-npm run check        # typecheck API en admin
+npm run build:user
+npm run check        # typecheck API, admin en deelnemers
 npm test             # API-tests
 ```
 
@@ -41,9 +141,22 @@ npm test             # API-tests
 
 1. Eenmalig **optie 1**: maakt mappen, database `tourpool` + gebruiker, de prod-`.env` (met gegenereerd wachtwoord) en `/etc/nginx/snippets/tourpool.conf` (optioneel met basic auth). Voeg daarna eenmalig `include /etc/nginx/snippets/tourpool.conf;` toe aan het 443-serverblok in `jota.conf` en herlaad nginx.
 2. **Optie 2** zet de dev-database over (eerst backup naar `~/apps/backups`). De dump wordt aangepast voor MariaDB 10.11 (collatie, DEFINER).
-3. **Optie 3/4/5** bouwt en deployt API en/of admin.
+3. **Optie 3/4/5/7** bouwt en deployt API, admin en/of deelnemersapp.
+
+Bij een bestaande productie-installatie: voer de accountmigratie uit, maak
+een admin aan en voeg `AUTH_ORIGINS=https://jota.nl` en `TRUST_PROXY=1`
+toe aan de API-`.env` voordat je de nieuwe API activeert.
+Optie 1 schrijft de aangepaste nginx-snippet; deze geeft
+`/tourpool/deelnemen/` een eigen SPA-fallback en laat de API zonder nginx
+basic auth werken. Bestaande snippets moeten dus ook worden bijgewerkt.
+Eventuele basic auth kan als extra laag voor alleen de admin blijven staan.
+Gebruik voor een update **niet** optie 2/6: die overschrijft productiegegevens.
+Een volledige import van `tourpool.sql` verwijdert ook oude accounts/sessies;
+maak daarna opnieuw een admin aan. Gebruik de losse migratie voor bestaande data.
 
 Het basispad van de admin staat in `apps/admin/.env.production` (`VITE_BASE_PATH`, `VITE_API_URL`).
+De deelnemersapp gebruikt `apps/user/.env.production` en staat in
+`/var/www/tourpool/deelnemen`.
 
 ## Wat is aangepast voor MariaDB
 
@@ -94,6 +207,11 @@ Bij het aanmaken van een pool worden de standaardprestaties en hun punten,
 uitslagtype, plaats en volgorde gekopieerd naar de pool. De poolinstellingen zijn daarna
 aanpasbaar via **Puntentoekenning** op de poolkaart bij Pools; het scherm
 **Standaard Punten** blijft de basisinstellingen beheren.
+Het formulier voor het aanmaken/bewerken van een pool bevat geen prestaties.
+Bij aanmaken kopieert de API automatisch alle standaardprestaties naar
+`tblPuntenToekenning` (een record per prestatie), samen met de pool en opties
+in dezelfde transactie. Bewerken van poolgegevens wijzigt geen poolpunten;
+puntenbeheer gebeurt uitsluitend via **Puntentoekenning**.
 Op elk poolprestatiekaartje worden de punten direct in een invoerveld aangepast.
 Bij verlaten van het veld of Enter worden alleen de punten opgeslagen; via het
 vuilnisbakje wordt de prestatie direct uit de pool verwijderd, zonder bevestiging.

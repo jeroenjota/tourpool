@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../db.js';
+import { HttpError, isDuplicate, requireAdmin } from '../auth.js';
 
 export const participantsRouter = Router();
 
@@ -181,6 +182,39 @@ participantsRouter.post('/', async (request, response, next) => {
   } finally {
     connection.release();
   }
+});
+
+participantsRouter.put('/:deelnID/account', requireAdmin, async (request, response, next) => {
+  let connection;
+  try {
+    const deelnID = z.coerce.number().int().positive().parse(request.params.deelnID);
+    const payload = z.object({
+      accountID: z.number().int().positive(),
+      expectedAdrID: z.number().int().positive()
+    }).strict().parse(request.body);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const accounts = await connection.query(
+      "SELECT adrID FROM tblAccounts WHERE accountID = ? AND role = 'user' FOR UPDATE",
+      [payload.accountID]
+    ) as Array<{ adrID: number }>;
+    if (!accounts[0]) throw new HttpError(404, 'Gebruikersaccount niet gevonden.');
+    const participants = await connection.query(
+      'SELECT adrID FROM tblDeelnemers WHERE deelnID = ? FOR UPDATE', [deelnID]
+    ) as Array<{ adrID: number }>;
+    if (!participants[0]) throw new HttpError(404, 'Deelnemer niet gevonden.');
+    if (participants[0].adrID !== payload.expectedAdrID) {
+      throw new HttpError(409, 'De deelnemer is ondertussen gewijzigd. Ververs het overzicht voordat je koppelt.');
+    }
+    await connection.query('UPDATE tblDeelnemers SET adrID = ? WHERE deelnID = ?', [accounts[0].adrID, deelnID]);
+    await connection.commit();
+    response.json({ deelnID, adrID: accounts[0].adrID });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    next(isDuplicate(error)
+      ? new HttpError(409, 'Dit account heeft al een ploeg met dezelfde roepnaam in deze pool. Pas eerst de roepnaam aan.')
+      : error);
+  } finally { connection?.release(); }
 });
 
 participantsRouter.put('/:deelnID', async (request, response, next) => {

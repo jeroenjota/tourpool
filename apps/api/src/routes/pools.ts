@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../db.js';
+import { enrollmentDateSchema } from '../enrollment.js';
+import { HttpError } from '../auth.js';
 
 export const poolsRouter = Router();
 
@@ -8,17 +10,19 @@ const createPoolSchema = z.object({
   tourID: z.number().int(),
   Naam: z.string().max(255).nullable().optional(),
   Org: z.string().max(255).nullable().optional(),
-  StartInschr: z.string().datetime().nullable().optional(),
-  EindInschr: z.string().datetime().nullable().optional()
+  StartInschr: enrollmentDateSchema.nullable().optional(),
+  EindInschr: enrollmentDateSchema.nullable().optional()
 });
 
 const updatePoolSchema = createPoolSchema.partial();
 
-const toMariaDbDateTime = (value: string | null | undefined) => {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toISOString().slice(0, 19).replace('T', ' ');
+const toMariaDbDateTime = (value: string | null | undefined) =>
+  value ? `${value} 00:00:00` : null;
+
+const validatePeriod = (start: string | null | undefined, end: string | null | undefined) => {
+  if (start && end && start > end) {
+    throw new HttpError(400, 'De einddatum van de inschrijving mag niet voor de begindatum liggen.');
+  }
 };
 
 poolsRouter.get('/', async (_request, response, next) => {
@@ -29,8 +33,8 @@ poolsRouter.get('/', async (_request, response, next) => {
         p.tourID,
         p.Naam,
         p.Org,
-        p.StartInschr,
-        p.EindInschr,
+        DATE_FORMAT(p.StartInschr, '%Y-%m-%d') AS StartInschr,
+        DATE_FORMAT(p.EindInschr, '%Y-%m-%d') AS EindInschr,
         t.naam AS tourNaam,
         t.StartDatum AS tourStartDatum
       FROM tblPools p
@@ -46,7 +50,10 @@ poolsRouter.get('/', async (_request, response, next) => {
 poolsRouter.get('/:poolID', async (request, response, next) => {
   try {
     const poolID = Number(request.params.poolID);
-    const rows = await pool.query('SELECT poolID, tourID, Naam, Org, StartInschr, EindInschr FROM tblPools WHERE poolID = ?', [poolID]);
+    const rows = await pool.query(`SELECT poolID, tourID, Naam, Org,
+      DATE_FORMAT(StartInschr, '%Y-%m-%d') AS StartInschr,
+      DATE_FORMAT(EindInschr, '%Y-%m-%d') AS EindInschr
+      FROM tblPools WHERE poolID = ?`, [poolID]);
     const item = (rows as Array<Record<string, unknown>>)[0];
 
     if (!item) {
@@ -65,6 +72,7 @@ poolsRouter.post('/', async (request, response, next) => {
 
   try {
     const payload = createPoolSchema.parse(request.body);
+    validatePeriod(payload.StartInschr, payload.EindInschr);
     await connection.beginTransaction();
     // Get the last options for the most recently created pool
     const optionRows = await connection.query(`
@@ -162,8 +170,14 @@ poolsRouter.put('/:poolID', async (request, response, next) => {
     const poolID = Number(request.params.poolID);
     const payload = updatePoolSchema.parse(request.body);
 
-    const rows = await pool.query('SELECT poolID, tourID, Naam, Org, StartInschr, EindInschr FROM tblPools WHERE poolID = ?', [poolID]);
-    const current = (rows as Array<Record<string, unknown>>)[0];
+    const rows = await pool.query(`SELECT poolID, tourID, Naam, Org,
+      DATE_FORMAT(StartInschr, '%Y-%m-%d') AS StartInschr,
+      DATE_FORMAT(EindInschr, '%Y-%m-%d') AS EindInschr
+      FROM tblPools WHERE poolID = ?`, [poolID]) as Array<{
+        poolID: number; tourID: number; Naam: string | null; Org: string | null;
+        StartInschr: string | null; EindInschr: string | null;
+      }>;
+    const current = rows[0];
 
     if (!current) {
       response.status(404).json({ message: 'Pool not found' });
@@ -177,10 +191,11 @@ poolsRouter.put('/:poolID', async (request, response, next) => {
       StartInschr: payload.StartInschr !== undefined ? payload.StartInschr : current.StartInschr,
       EindInschr: payload.EindInschr !== undefined ? payload.EindInschr : current.EindInschr
     };
+    validatePeriod(updatedPool.StartInschr, updatedPool.EindInschr);
 
     await pool.query(
       'UPDATE tblPools SET tourID = ?, Naam = ?, Org = ?, StartInschr = ?, EindInschr = ? WHERE poolID = ?',
-      [updatedPool.tourID, updatedPool.Naam, updatedPool.Org, toMariaDbDateTime(String(updatedPool.StartInschr ?? '')), toMariaDbDateTime(String(updatedPool.EindInschr ?? '')), poolID]
+      [updatedPool.tourID, updatedPool.Naam, updatedPool.Org, toMariaDbDateTime(updatedPool.StartInschr), toMariaDbDateTime(updatedPool.EindInschr), poolID]
     );
 
     response.json({ poolID, ...updatedPool });

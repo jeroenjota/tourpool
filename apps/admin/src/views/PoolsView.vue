@@ -35,32 +35,11 @@ interface Stage {
   etappeNr?: number | null;
 }
 
-interface StandardPoint {
-  prestatieID: number;
-  uitslagtype: string | null;
-  plaats: number | null;
-  Omschrijving: string | null;
-  punten: number;
-  volgorde?: number | null;
-}
-
-interface PointAllocation {
-  prestatieID: number;
-  poolID: number;
-  Omschrijving?: string | null;
-  Punten?: number | null;
-  volgorde?: number | null;
-}
-
 const pools = ref<Pool[]>([]);
 const tours = ref<{ tourID: number; naam: string }[]>([]);
 const loading = ref(true);
 const modalOpen = ref(false);
 const editingPool = ref<Partial<Pool> | null>(null);
-const standardPoints = ref<StandardPoint[]>([]);
-const selectedPrestatieIds = ref<number[]>([]);
-const allocationPoints = ref<Record<number, number>>({});
-const loadingPointAllocations = ref(false);
 const savingPool = ref(false);
 const participants = ref<Participant[]>([]);
 const poolOptions = ref<PoolOption[]>([]);
@@ -147,10 +126,14 @@ const prizeBreakdowns = computed(() => {
 const formatPrizeAmount = (amountCents: number) =>
   prizeCurrencyFormatter.format(amountCents / 100);
 
+const formatEnrollmentDate = (value: string) => {
+  const [year, month, day] = value.slice(0, 10).split('-');
+  return `${day}-${month}-${year}`;
+};
+
 onMounted(async () => {
   try {
-    tours.value = await apiFetch<any[]>('/tours');
-    standardPoints.value = await apiFetch<StandardPoint[]>('/standard-points');
+    tours.value = await apiFetch<typeof tours.value>('/tours');
   } catch (err) {
     console.error(err);
   }
@@ -159,78 +142,25 @@ onMounted(async () => {
 
 const openCreateModal = () => {
   editingPool.value = { tourID: tours.value[0]?.tourID || 1, Naam: '', Org: '' };
-  selectedPrestatieIds.value = standardPoints.value.map(point => point.prestatieID);
-  allocationPoints.value = Object.fromEntries(
-    standardPoints.value.map(point => [point.prestatieID, point.punten])
-  );
   modalOpen.value = true;
 };
 
-const openEditModal = async (pool: Pool) => {
-  editingPool.value = { ...pool };
-  selectedPrestatieIds.value = [];
-  allocationPoints.value = {};
+const openEditModal = (pool: Pool) => {
+  editingPool.value = {
+    ...pool,
+    StartInschr: pool.StartInschr?.slice(0, 10) || '',
+    EindInschr: pool.EindInschr?.slice(0, 10) || ''
+  };
   modalOpen.value = true;
-
-  loadingPointAllocations.value = true;
-  try {
-    const allocations = await apiFetch<PointAllocation[]>(`/point-allocations?poolID=${pool.poolID}`);
-    selectedPrestatieIds.value = allocations.map(allocation => allocation.prestatieID);
-    allocationPoints.value = Object.fromEntries(
-      allocations.map(allocation => {
-        const standardPoint = standardPoints.value.find(point => point.prestatieID === allocation.prestatieID);
-        return [allocation.prestatieID, allocation.Punten ?? standardPoint?.punten ?? 0];
-      })
-    );
-  } catch (err) {
-    modalOpen.value = false;
-    alert(`Fout bij laden van prestaties: ${err instanceof Error ? err.message : err}`);
-  } finally {
-    loadingPointAllocations.value = false;
-  }
-};
-
-const onPointSelectionChange = (point: StandardPoint) => {
-  if (selectedPrestatieIds.value.includes(point.prestatieID) && allocationPoints.value[point.prestatieID] === undefined) {
-    allocationPoints.value[point.prestatieID] = point.punten;
-  }
-};
-
-const syncPointAllocations = async (poolID: number) => {
-  const allocations = await apiFetch<PointAllocation[]>(`/point-allocations?poolID=${poolID}`);
-  const selectedIds = new Set(selectedPrestatieIds.value);
-  const currentByPointId = new Map(allocations.map(allocation => [allocation.prestatieID, allocation]));
-
-  await Promise.all([
-    ...allocations
-      .filter(allocation => !selectedIds.has(allocation.prestatieID))
-      .map(allocation => apiFetch(`/point-allocations/${allocation.prestatieID}/${poolID}`, { method: 'DELETE' })),
-    ...allocations
-      .filter(allocation => selectedIds.has(allocation.prestatieID))
-      .filter(allocation => allocation.Punten !== allocationPoints.value[allocation.prestatieID])
-      .map(allocation => apiFetch(`/point-allocations/${allocation.prestatieID}/${poolID}`, {
-        method: 'PUT',
-        body: JSON.stringify({ Punten: allocationPoints.value[allocation.prestatieID] ?? 0 })
-      })),
-    ...standardPoints.value
-      .filter(point => selectedIds.has(point.prestatieID) && !currentByPointId.has(point.prestatieID))
-      .map(point => apiFetch('/point-allocations', {
-        method: 'POST',
-        body: JSON.stringify({
-          prestatieID: point.prestatieID,
-          poolID,
-          Omschrijving: point.Omschrijving,
-          Punten: allocationPoints.value[point.prestatieID] ?? point.punten,
-          uitslagtype: point.uitslagtype,
-          plaats: point.plaats,
-          volgorde: point.volgorde
-        })
-      }))
-  ]);
 };
 
 const savePool = async () => {
   if (!editingPool.value || !editingPool.value.Naam) return;
+  if (editingPool.value.StartInschr && editingPool.value.EindInschr &&
+      editingPool.value.StartInschr > editingPool.value.EindInschr) {
+    alert('De einddatum van de inschrijving mag niet voor de begindatum liggen.');
+    return;
+  }
 
   savingPool.value = true;
   try {
@@ -242,22 +172,16 @@ const savePool = async () => {
       EindInschr: editingPool.value.EindInschr || null
     };
 
-    let poolID = editingPool.value.poolID;
-    if (poolID) {
+    if (editingPool.value.poolID) {
       await apiFetch(`/pools/${editingPool.value.poolID}`, {
         method: 'PUT',
         body: JSON.stringify(payload)
       });
     } else {
-      const createdPool = await apiFetch<Pool>('/pools', {
+      await apiFetch<Pool>('/pools', {
         method: 'POST',
         body: JSON.stringify(payload)
       });
-      poolID = createdPool.poolID;
-    }
-
-    if (poolID && standardPoints.value.length > 0) {
-      await syncPointAllocations(poolID);
     }
     modalOpen.value = false;
     await fetchPools();
@@ -307,6 +231,13 @@ const deletePool = async (id: number) => {
           <span class="font-mono text-xs text-slate-400">Pool #{{ p.poolID }} (Tour #{{ p.tourID }})</span>
           <h3 class="text-lg font-bold text-slate-900">{{ p.Naam }}</h3>
           <p class="text-xs text-slate-500">Organisator: <span class="font-semibold text-slate-800">{{ p.Org || 'Onbekend' }}</span></p>
+          <p class="text-xs text-slate-600">
+            Inschrijving:
+            <span class="font-semibold text-slate-800">
+              vanaf {{ p.StartInschr ? formatEnrollmentDate(p.StartInschr) : 'direct' }}
+              {{ p.EindInschr ? `tot en met ${formatEnrollmentDate(p.EindInschr)}` : 'tot de tourstart' }}
+            </span>
+          </p>
           <nav class="flex flex-wrap gap-2" :aria-label="`Onderdelen van ${p.Naam}`">
             <RouterLink
               v-for="item in poolPages"
@@ -391,7 +322,7 @@ const deletePool = async (id: number) => {
 
     <!-- Modal -->
     <div v-if="modalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div class="w-full max-w-md space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+      <div class="w-full max-w-xl space-y-5 rounded-2xl border-4 border-slate-500 bg-yellow-100 p-6 shadow-xl">
         <div class="flex items-center justify-between border-b border-slate-200 pb-4">
           <h3 class="text-lg font-bold text-slate-900">
             {{ editingPool?.poolID ? `Pool #${editingPool.poolID} bewerken` : 'Nieuwe pool aanmaken' }}
@@ -402,74 +333,55 @@ const deletePool = async (id: number) => {
         </div>
 
         <div class="space-y-4">
-          <div>
-            <label class="mb-1 block text-xs font-semibold text-slate-700">Poolnaam *</label>
-            <input 
-              v-model="editingPool!.Naam" 
-              class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" 
-              placeholder="bv. Tour de France 2026 Pool"
-            />
+          <div class="flex flex-col gap-4 md:flex-row">
+            <div class="min-w-0 flex-1">
+              <label class="mb-1 ml-2 block text-base font-semibold text-slate-700">Poolnaam *</label>
+              <input
+                v-model="editingPool!.Naam"
+                class="w-full rounded-lg border border-slate-500 bg-slate-50 px-2 py-2 text-base text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none"
+                placeholder="bv. Tour de France 2026 Pool"
+              />
+            </div>
+            <div class="md:w-40 md:shrink-0">
+              <label class="mb-1 block text-base font-semibold text-slate-700">Koppel aan Tour</label>
+              <select
+                v-model="editingPool!.tourID"
+                class="w-full rounded-lg border border-slate-500 bg-slate-50 px-3 py-2 text-base text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none"
+              >
+                <option v-for="t in tours" :key="t.tourID" :value="t.tourID">
+                  {{ t.naam }}
+                </option>
+              </select>
+            </div>
           </div>
-
           <div>
-            <label class="mb-1 block text-xs font-semibold text-slate-700">Organisator</label>
+            <label class="mb-1 block text-base font-semibold text-slate-700">Organisator</label>
             <input 
               v-model="editingPool!.Org" 
-              class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" 
+              class="w-full rounded-lg border border-slate-500 bg-slate-50 px-3 py-2 text-base text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" 
               placeholder="bv. Jeroen"
             />
           </div>
 
-          <div>
-            <label class="mb-1 block text-xs font-semibold text-slate-700">Koppel aan Tour</label>
-            <select 
-              v-model="editingPool!.tourID" 
-              class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none"
-            >
-              <option v-for="t in tours" :key="t.tourID" :value="t.tourID">
-                {{ t.naam }} (ID #{{ t.tourID }})
-              </option>
-            </select>
+          <div class="flex flex-col justify-around gap-2 border-t border-slate-200 pt-4 text-center md:flex-row">
+            <label class="mb-3 block text-base font-semibold text-slate-700">
+              Inschrijving vanaf
+              <input v-model="editingPool!.StartInschr" type="date" :max="editingPool!.EindInschr || undefined" class="mt-1 block w-full rounded-lg border border-slate-500 bg-white px-3 py-2 text-base" />
+            </label>
+            <label class="mb-3 block text-base font-semibold text-slate-700">
+              tot en met
+              <input v-model="editingPool!.EindInschr" type="date" :min="editingPool!.StartInschr || undefined" class="mt-1 block w-full rounded-lg border border-slate-500 bg-white px-3 py-2 text-base" />
+            </label>
           </div>
 
-          <div class="border-t border-slate-200 pt-4">
-            <div class="mb-2 flex items-center justify-between">
-              <label class="block text-xs font-semibold text-slate-700">Prestaties en punten</label>
-              <span class="text-xs text-slate-400">{{ selectedPrestatieIds.length }} geselecteerd</span>
-            </div>
-            <div v-if="loadingPointAllocations" class="rounded-lg bg-slate-50 px-3 py-4 text-center text-xs text-slate-500">
-              Prestaties laden...
-            </div>
-            <div v-else-if="standardPoints.length === 0" class="rounded-lg bg-slate-50 px-3 py-4 text-center text-xs text-slate-500">
-              Geen standaardprestaties beschikbaar.
-            </div>
-            <div v-else class="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
-              <label
-                v-for="point in standardPoints"
-                :key="point.prestatieID"
-                class="flex cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50"
-              >
-                <span class="flex min-w-0 items-center gap-2">
-                  <input v-model="selectedPrestatieIds" type="checkbox" :value="point.prestatieID" @change="onPointSelectionChange(point)" class="h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-500" />
-                  <span class="truncate text-slate-700">{{ point.Omschrijving }}</span>
-                </span>
-                <input
-                  v-if="selectedPrestatieIds.includes(point.prestatieID)"
-                  v-model.number="allocationPoints[point.prestatieID]"
-                  type="number"
-                  min="0"
-                  class="w-20 rounded border border-slate-200 bg-white px-2 py-1 text-right font-mono text-xs text-slate-700 focus:border-amber-500 focus:outline-none"
-                  aria-label="Aantal punten voor deze prestatie"
-                />
-                <span v-else class="shrink-0 font-mono text-xs text-slate-400">{{ point.punten }} pt</span>
-              </label>
-            </div>
-          </div>
+          <p v-if="!editingPool?.poolID" class="text-xs text-slate-600">
+            De standaardpunten worden automatisch gekopieerd naar deze pool.
+          </p>
         </div>
 
         <div class="flex justify-end gap-3 border-t border-slate-200 pt-4">
           <button @click="modalOpen = false" class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Annuleren</button>
-          <button @click="savePool" :disabled="savingPool || loadingPointAllocations" class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50">{{ savingPool ? 'Opslaan...' : 'Opslaan' }}</button>
+          <button @click="savePool" :disabled="savingPool" class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50">{{ savingPool ? 'Opslaan...' : 'Opslaan' }}</button>
         </div>
       </div>
     </div>

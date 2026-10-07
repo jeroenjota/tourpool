@@ -15,6 +15,10 @@ import { participantPointsRouter } from './participantPoints.js';
 import { optionsRouter } from './options.js';
 import { standardPointsRouter } from './standardPoints.js';
 import { pointAllocationsRouter } from './pointAllocations.js';
+import { authenticate, requireAdmin } from '../auth.js';
+import { authRouter } from './auth.js';
+import { meRouter } from './me.js';
+import { accountsRouter } from './accounts.js';
 
 export const apiRouter = Router();
 
@@ -43,6 +47,11 @@ apiRouter.get('/', (_request, response) => {
   });
 });
 
+apiRouter.use('/auth', authRouter);
+apiRouter.use(authenticate);
+apiRouter.use('/me', meRouter);
+apiRouter.use(requireAdmin);
+apiRouter.use('/accounts', accountsRouter);
 apiRouter.use('/tours', toursRouter);
 apiRouter.use('/pools', poolsRouter);
 apiRouter.use('/addresses', addressesRouter);

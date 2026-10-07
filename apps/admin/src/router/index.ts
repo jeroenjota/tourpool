@@ -13,6 +13,8 @@ import OptionsView from '../views/OptionsView.vue';
 import StandardPointsView from '../views/StandardPointsView.vue';
 import StandingsView from '../views/StandingsView.vue';
 import PointAllocationsView from '../views/PointAllocationsView.vue';
+import LoginView from '../views/LoginView.vue';
+import { auth, loadSession } from '@tourpool/client';
 
 const redirectToPoolPage = (page: string) => {
   const poolID = useActivePoolStore().activePoolID;
@@ -22,6 +24,7 @@ const redirectToPoolPage = (page: string) => {
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/login', name: 'login', component: LoginView },
     {
       path: '/',
       name: 'dashboard',
@@ -110,7 +113,10 @@ export const router = createRouter({
   ]
 });
 
-router.beforeEach(to => {
+router.beforeEach(async to => {
+  if (!auth.checked) await loadSession();
+  if (to.name !== 'login' && auth.account?.role !== 'admin') return { name: 'login' };
+  if (to.name === 'login' && auth.account?.role === 'admin') return { name: 'dashboard' };
   const poolID = Number(to.params.poolID);
   if (to.meta.poolPage && Number.isInteger(poolID) && poolID > 0) {
     useActivePoolStore().setActivePool(poolID);

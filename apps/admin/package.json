@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tourpool/client": "0.1.0",
     "@fontsource/eb-garamond": "^5.3.0",
     "@lucide/vue": "^1.45.0",
     "@tailwindcss/postcss": "^4.3.3",
