@@ -1,16 +1,43 @@
 import { Router } from 'express';
+import { createRequire } from 'node:module';
 import { z } from 'zod';
 import PDFDocument from 'pdfkit';
 import { pool } from '../db.js';
-import { getAccount, HttpError, isDuplicate, profileSchema } from '../auth.js';
+import { getAccount, HttpError, isDuplicate, profileSchema, usernameSchema } from '../auth.js';
 import { assertEnrollmentOpen, enrollmentStatus, validateRiders, type EnrollmentPool } from '../enrollment.js';
 
 export const meRouter = Router();
+const require = createRequire(import.meta.url);
+const garamondLatin = require.resolve('@fontsource/eb-garamond/files/eb-garamond-latin-400-normal.woff');
+const garamondLatinExt = require.resolve('@fontsource/eb-garamond/files/eb-garamond-latin-ext-400-normal.woff');
+const lato = require.resolve('lato-font/fonts/lato-normal/lato-normal.woff');
+const latinExtCharacter = /[\u0100-\u024f\u1e00-\u1eff\u2c60-\u2c7f\ua720-\ua7ff]/u;
+
+function writePdfText(doc: InstanceType<typeof PDFDocument>, text: string, heading = false, lineGap?: number) {
+  if (!heading) {
+    doc.font(lato).text(text, lineGap === undefined ? {} : { lineGap });
+    return;
+  }
+  const parts: { text: string; extended: boolean }[] = [];
+  for (const character of text) {
+    const extended = latinExtCharacter.test(character);
+    const lastPart = parts.at(-1);
+    if (lastPart?.extended === extended) lastPart.text += character;
+    else parts.push({ text: character, extended });
+  }
+  parts.forEach((part, index) => {
+    doc.font(part.extended ? garamondLatinExt : garamondLatin).text(part.text, {
+      continued: index < parts.length - 1,
+      ...(lineGap === undefined ? {} : { lineGap })
+    });
+  });
+}
+
 type Connection = Awaited<ReturnType<typeof pool.getConnection>>;
 const idSchema = z.coerce.number().int().positive();
 const entrySchema = z.object({
   poolID: z.number().int().positive(),
-  roepnaam: z.string().trim().min(1).max(255),
+  ploegnaam: z.string().trim().min(1).max(255),
   riders: z.array(z.number().int().positive()).max(25)
 }).strict();
 const poolSelect = `
@@ -26,22 +53,24 @@ interface Profile {
   plaats: string | null; tel: string | null;
 }
 interface Entry {
-  deelnID: number; poolID: number; roepnaam: string; Betaald: boolean | number | null;
+  deelnID: number; poolID: number; ploegnaam: string; Betaald: boolean | number | null;
 }
 interface Rider {
   rennerID: number; Rugnummer: number | null; vnaam: string | null;
   tnaam: string | null; anaam: string; ploegNaam: string | null; positie?: number;
 }
 const profileSelect = 'SELECT vNaam, tNaam, aNaam, email, plaats, tel FROM tblAdressen WHERE adrID = ?';
+const profileUpdateSchema = profileSchema.extend({ username: usernameSchema }).strict();
 
 async function loadPool(connection: Connection, poolID: number, lock = false) {
-  const rows = await connection.query(`${poolSelect} WHERE p.poolID = ?${lock ? ' FOR UPDATE' : ''}`, [poolID]) as EnrollmentPool[];
+  const rows = await connection.query(`${poolSelect} WHERE p.poolID = ? AND p.visibleToUsers = TRUE${lock ? ' FOR UPDATE' : ''}`, [poolID]) as EnrollmentPool[];
   if (!rows[0]) throw new HttpError(404, 'Pool niet gevonden.');
   return rows[0];
 }
 async function ownedEntry(connection: Connection, deelnID: number, adrID: number, lock = false) {
   const rows = await connection.query(
-    `SELECT deelnID, poolID, roepnaam, Betaald FROM tblDeelnemers WHERE deelnID = ? AND adrID = ?${lock ? ' FOR UPDATE' : ''}`,
+    `SELECT deelnID, poolID, roepnaam AS ploegnaam, Betaald FROM tblDeelnemers WHERE deelnID = ? AND adrID = ?
+     AND EXISTS (SELECT 1 FROM tblPools p WHERE p.poolID = tblDeelnemers.poolID AND p.visibleToUsers = TRUE)${lock ? ' FOR UPDATE' : ''}`,
     [deelnID, adrID]
   ) as Entry[];
   if (!rows[0]) throw new HttpError(404, 'Tourploeg niet gevonden.');
@@ -68,26 +97,41 @@ async function entryRiders(connection: Connection, deelnID: number): Promise<Rid
 
 meRouter.get('/profile', async (request, response, next) => {
   try {
-    const rows = await pool.query(profileSelect, [getAccount(request).adrID]) as Profile[];
+    const account = getAccount(request);
+    const rows = await pool.query(profileSelect, [account.adrID]) as Profile[];
     if (!rows[0]) throw new HttpError(404, 'Profiel niet gevonden.');
-    response.json(rows[0]);
+    response.json({ ...rows[0], username: account.username });
   } catch (error) { next(error); }
 });
 
 meRouter.put('/profile', async (request, response, next) => {
+  let connection;
   try {
-    const p = profileSchema.parse(request.body);
-    await pool.query(
-      'UPDATE tblAdressen SET vNaam = ?, tNaam = ?, aNaam = ?, plaats = ?, tel = ? WHERE adrID = ?',
-      [p.vNaam, p.tNaam, p.aNaam, p.plaats, p.tel, getAccount(request).adrID]
+    const p = profileUpdateSchema.parse(request.body);
+    const account = getAccount(request);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const conflicts = await connection.query(
+      'SELECT accountID FROM tblAccounts WHERE username = ? AND accountID <> ? FOR UPDATE',
+      [p.username, account.accountID]
     );
+    if (conflicts.length) throw new HttpError(409, 'Deze gebruikersnaam is al in gebruik.');
+    await connection.query('UPDATE tblAccounts SET username = ? WHERE accountID = ?', [p.username, account.accountID]);
+    await connection.query(
+      'UPDATE tblAdressen SET vNaam = ?, tNaam = ?, aNaam = ?, plaats = ?, tel = ? WHERE adrID = ?',
+      [p.vNaam, p.tNaam, p.aNaam, p.plaats, p.tel, account.adrID]
+    );
+    await connection.commit();
     response.json(p);
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (connection) await connection.rollback();
+    next(isDuplicate(error) ? new HttpError(409, 'Deze gebruikersnaam is al in gebruik.') : error);
+  } finally { connection?.release(); }
 });
 
 meRouter.get('/pools', async (_request, response, next) => {
   try {
-    const rows = await pool.query(`${poolSelect} ORDER BY t.StartDatum DESC, p.poolID DESC`) as EnrollmentPool[];
+    const rows = await pool.query(`${poolSelect} WHERE p.visibleToUsers = TRUE ORDER BY t.StartDatum DESC, p.poolID DESC`) as EnrollmentPool[];
     response.json(rows.map(p => ({ ...p, ...enrollmentStatus(p) })));
   } catch (error) { next(error); }
 });
@@ -105,9 +149,9 @@ meRouter.get('/pools/:poolID/riders', async (request, response, next) => {
 meRouter.get('/entries', async (request, response, next) => {
   try {
     const rows = await pool.query(
-      `SELECT d.deelnID, d.poolID, d.roepnaam, d.Betaald, p.Naam AS poolNaam
+      `SELECT d.deelnID, d.poolID, d.roepnaam AS ploegnaam, d.Betaald, p.Naam AS poolNaam
        FROM tblDeelnemers d JOIN tblPools p ON p.poolID = d.poolID
-       WHERE d.adrID = ? ORDER BY d.deelnID DESC`, [getAccount(request).adrID]
+       WHERE d.adrID = ? AND p.visibleToUsers = TRUE ORDER BY d.deelnID DESC`, [getAccount(request).adrID]
     );
     response.json(rows);
   } catch (error) { next(error); }
@@ -135,12 +179,12 @@ async function saveEntry(connection: Connection, adrID: number, payload: z.infer
   const available = await availableRiders(connection, p.tourID);
   validateRiders(p, payload.riders, available.map(r => r.rennerID));
   if (deelnID) {
-    await connection.query('UPDATE tblDeelnemers SET roepnaam = ? WHERE deelnID = ? AND adrID = ?', [payload.roepnaam, deelnID, adrID]);
+    await connection.query('UPDATE tblDeelnemers SET roepnaam = ? WHERE deelnID = ? AND adrID = ?', [payload.ploegnaam, deelnID, adrID]);
     await connection.query('DELETE FROM tblDeelnemRenners WHERE deelnID = ?', [deelnID]);
   } else {
     const result = await connection.query(
       'INSERT INTO tblDeelnemers (poolID, adrID, roepnaam, Betaald) VALUES (?, ?, ?, 0)',
-      [payload.poolID, adrID, payload.roepnaam]
+      [payload.poolID, adrID, payload.ploegnaam]
     );
     deelnID = Number(result.insertId);
   }
@@ -162,7 +206,7 @@ meRouter.post('/entries', async (request, response, next) => {
     response.status(201).json({ deelnID });
   } catch (error) {
     if (connection) await connection.rollback();
-    next(isDuplicate(error) ? new HttpError(409, 'Je hebt al een tourploeg met deze roepnaam in deze pool.') : error);
+    next(isDuplicate(error) ? new HttpError(409, 'Je hebt al een tourploeg met deze ploegnaam in deze pool.') : error);
   } finally { connection?.release(); }
 });
 
@@ -176,7 +220,7 @@ meRouter.put('/entries/:deelnID', async (request, response, next) => {
     response.json({ deelnID });
   } catch (error) {
     if (connection) await connection.rollback();
-    next(isDuplicate(error) ? new HttpError(409, 'Je hebt al een tourploeg met deze roepnaam in deze pool.') : error);
+    next(isDuplicate(error) ? new HttpError(409, 'Je hebt al een tourploeg met deze ploegnaam in deze pool.') : error);
   } finally { connection?.release(); }
 });
 
@@ -206,26 +250,36 @@ meRouter.get('/entries/:deelnID/pdf', async (request, response, next) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
     });
-    doc.fontSize(20).text('Tourpool - Inschrijfformulier');
-    doc.moveDown().fontSize(12).text(`${p.Org || 'Organisatie'} - ${p.Naam || `Pool ${p.poolID}`}`);
-    doc.text(`${p.tourNaam} | Inschrijving #${deelnID}`);
-    doc.moveDown().text(`Naam: ${[profile.vNaam, profile.tNaam, profile.aNaam].filter(Boolean).join(' ')}`);
-    doc.text(`Roepnaam / ploegnaam: ${entry.roepnaam}`);
-    doc.text(`E-mail: ${getAccount(request).email}`);
-    if (profile.plaats) doc.text(`Woonplaats: ${profile.plaats}`);
-    if (profile.tel) doc.text(`Telefoon: ${profile.tel}`);
-    doc.text(`Inleg: EUR ${Number(p.inleg ?? 0).toFixed(2)} | Betaald: ${entry.Betaald ? 'Ja' : 'Nee'}`);
-    doc.moveDown().fontSize(14).text('Tourploeg (op volgorde)');
+    doc.fontSize(20);
+    writePdfText(doc, 'Tourpool - Inschrijfformulier', true);
+    doc.moveDown().fontSize(12);
+    writePdfText(doc, `${p.Org || 'Organisatie'} - ${p.Naam || `Pool ${p.poolID}`}`);
+    writePdfText(doc, `${p.tourNaam} | Inschrijving #${deelnID}`);
+    doc.moveDown();
+    writePdfText(doc, `Naam: ${[profile.vNaam, profile.tNaam, profile.aNaam].filter(Boolean).join(' ')}`);
+    writePdfText(doc, `Ploegnaam: ${entry.ploegnaam}`);
+    writePdfText(doc, `E-mail: ${getAccount(request).email}`);
+    if (profile.plaats) writePdfText(doc, `Woonplaats: ${profile.plaats}`);
+    if (profile.tel) writePdfText(doc, `Telefoon: ${profile.tel}`);
+    writePdfText(doc, `Inleg: EUR ${Number(p.inleg ?? 0).toFixed(2)} | Betaald: ${entry.Betaald ? 'Ja' : 'Nee'}`);
+    doc.moveDown().fontSize(14);
+    writePdfText(doc, 'Tourploeg (op volgorde)', true);
     const mainCount = p.PloegRennerAantal! - p.PloegReserveAantal!;
     for (const [index, r] of riders.entries()) {
-      if (index === mainCount) doc.moveDown(0.4).fontSize(12).text('Reserves');
-      doc.fontSize(10).text(
+      if (index === mainCount) {
+        doc.moveDown(0.4).fontSize(12);
+        writePdfText(doc, 'Reserves');
+      }
+      doc.fontSize(10);
+      writePdfText(doc,
         `${index + 1}. ${r.Rugnummer ?? '-'} - ${[r.vnaam, r.tnaam, r.anaam].filter(Boolean).join(' ')} (${r.ploegNaam || '-'})`,
-        { lineGap: 3 }
+        false,
+        3
       );
     }
-    doc.moveDown().fontSize(10).text('Lever dit formulier in bij de organisatie en betaal daar de inleg. Alleen de organisatie bevestigt de betaling.');
-    doc.text(`Gegenereerd: ${new Date().toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam' })}`);
+    doc.moveDown().fontSize(10);
+    writePdfText(doc, 'Lever dit formulier in bij de organisatie en betaal daar de inleg. Alleen de organisatie bevestigt de betaling.');
+    writePdfText(doc, `Gegenereerd: ${new Date().toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam' })}`);
     doc.end();
     const buffer = await pdf;
     response.set({

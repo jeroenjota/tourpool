@@ -50,13 +50,14 @@ interface Participant {
   plaats?: string | null;
   tel?: string | null;
   email?: string | null;
-  roepnaam?: string | null;
+  ploegnaam?: string | null;
   Betaald?: number | boolean | null;
 }
 
 interface UserAccount {
   accountID: number;
   adrID: number;
+  username: string;
   email: string;
   vNaam: string | null;
   tNaam: string | null;
@@ -121,8 +122,8 @@ const loading = ref(true);
 
 const searchQuery = ref('');
 const filterPaidStatus = ref<'all' | 'paid' | 'unpaid'>('all');
-const participantSort = ref<{ key: 'roepnaam' | 'naam'; direction: 'asc' | 'desc' } | null>({
-  key: 'roepnaam',
+const participantSort = ref<{ key: 'ploegnaam' | 'naam'; direction: 'asc' | 'desc' } | null>({
+  key: 'ploegnaam',
   direction: 'asc'
 });
 
@@ -152,12 +153,12 @@ const manageRiderDragOverIdx = ref<number | null>(null);
 // State for Adding Participant
 const addForm = ref<{
   adrID: number | null;
-  roepnaam: string;
+  ploegnaam: string;
   Betaald: boolean;
   selectedRiders: Array<{ rennerID: number; positie: number }>;
 }>({
   adrID: null,
-  roepnaam: '',
+  ploegnaam: '',
   Betaald: false,
   selectedRiders: []
 });
@@ -267,7 +268,7 @@ const sortedAddresses = computed(() => {
   return [...allAddresses.value].sort((a, b) => (a.aNaam || '').localeCompare(b.aNaam || ''));
 });
 
-const toggleParticipantSort = (key: 'roepnaam' | 'naam') => {
+const toggleParticipantSort = (key: 'ploegnaam' | 'naam') => {
   if (participantSort.value?.key !== key) {
     participantSort.value = { key, direction: 'asc' };
     return;
@@ -278,14 +279,14 @@ const toggleParticipantSort = (key: 'roepnaam' | 'naam') => {
     : null;
 };
 
-const participantSortIcon = (key: 'roepnaam' | 'naam') => {
+const participantSortIcon = (key: 'ploegnaam' | 'naam') => {
   if (participantSort.value?.key !== key) return ArrowUpDown;
   return participantSort.value.direction === 'asc' ? ArrowUp : ArrowDown;
 };
 
 const printableParticipantPages = computed(() => {
   const sortedParticipants = [...participants.value].sort((a, b) =>
-    (a.roepnaam || '').localeCompare(b.roepnaam || '', 'nl', { sensitivity: 'base' })
+    (a.ploegnaam || '').localeCompare(b.ploegnaam || '', 'nl', { sensitivity: 'base' })
   );
   const pages: Participant[][] = [];
   const participantsPerPage = 12;
@@ -372,7 +373,7 @@ const filteredParticipants = computed(() => {
     list = list.filter(p => 
       (p.aNaam && p.aNaam.toLowerCase().includes(q)) ||
       (p.vNaam && p.vNaam.toLowerCase().includes(q)) ||
-      (p.roepnaam && p.roepnaam.toLowerCase().includes(q)) ||
+      (p.ploegnaam && p.ploegnaam.toLowerCase().includes(q)) ||
       (p.plaats && p.plaats.toLowerCase().includes(q)) ||
       (p.email && p.email.toLowerCase().includes(q))
     );
@@ -387,8 +388,8 @@ const filteredParticipants = computed(() => {
   if (participantSort.value) {
     const { key, direction } = participantSort.value;
     list.sort((a, b) => {
-      const aValue = key === 'roepnaam' ? (a.roepnaam || '') : formatFullName(a);
-      const bValue = key === 'roepnaam' ? (b.roepnaam || '') : formatFullName(b);
+      const aValue = key === 'ploegnaam' ? (a.ploegnaam || '') : formatFullName(a);
+      const bValue = key === 'ploegnaam' ? (b.ploegnaam || '') : formatFullName(b);
       const comparison = aValue.localeCompare(bValue, 'nl', { sensitivity: 'base' });
       return direction === 'asc' ? comparison : -comparison;
     });
@@ -547,7 +548,7 @@ const sortSelectedRiders = (
 const openAddModal = () => {
   addForm.value = {
     adrID: sortedAddresses.value[0]?.adrID || null,
-    roepnaam: '',
+    ploegnaam: '',
     Betaald: false,
     selectedRiders: []
   };
@@ -606,15 +607,15 @@ const addParticipant = async () => {
     return;
   }
 
-  const trimmedRoepnaam = addForm.value.roepnaam.trim();
+  const trimmedPloegnaam = addForm.value.ploegnaam.trim();
 
-  const duplicate = trimmedRoepnaam
+  const duplicate = trimmedPloegnaam
     ? participants.value.find(
-      p => p.adrID === addForm.value.adrID && (p.roepnaam || '').trim().toLowerCase() === trimmedRoepnaam.toLowerCase()
+      p => p.adrID === addForm.value.adrID && (p.ploegnaam || '').trim().toLowerCase() === trimmedPloegnaam.toLowerCase()
     )
     : undefined;
   if (duplicate) {
-    alert(`Dit adres doet al mee onder de roepnaam "${duplicate.roepnaam}". Kies een andere roepnaam voor de extra deelname (bijv. "${trimmedRoepnaam} 2").`);
+    alert(`Dit adres doet al mee onder de ploegnaam "${duplicate.ploegnaam}". Kies een andere ploegnaam voor de extra deelname (bijv. "${trimmedPloegnaam} 2").`);
     return;
   }
 
@@ -624,7 +625,7 @@ const addParticipant = async () => {
       body: JSON.stringify({
         poolID: selectedPoolID.value,
         adrID: Number(addForm.value.adrID),
-        roepnaam: trimmedRoepnaam || null,
+        ploegnaam: trimmedPloegnaam || null,
         Betaald: addForm.value.Betaald ? 1 : 0,
         riders: addForm.value.selectedRiders
       })
@@ -788,19 +789,19 @@ const linkAccount = async () => {
 const saveParticipant = async () => {
   if (!editingParticipant.value) return;
 
-  const trimmedRoepnaam = (editingParticipant.value.roepnaam || '').trim();
-  if (!trimmedRoepnaam) {
-    alert('Vul een roepnaam/teamnaam in.');
+  const trimmedPloegnaam = (editingParticipant.value.ploegnaam || '').trim();
+  if (!trimmedPloegnaam) {
+    alert('Vul een ploegnaam in.');
     return;
   }
 
   const duplicate = participants.value.find(
     p => p.deelnID !== editingParticipant.value!.deelnID &&
          p.adrID === editingParticipant.value!.adrID &&
-         (p.roepnaam || '').trim().toLowerCase() === trimmedRoepnaam.toLowerCase()
+         (p.ploegnaam || '').trim().toLowerCase() === trimmedPloegnaam.toLowerCase()
   );
   if (duplicate) {
-    alert(`Dit adres heeft al een deelname met de roepnaam "${duplicate.roepnaam}". Kies een andere roepnaam.`);
+    alert(`Dit adres heeft al een deelname met de ploegnaam "${duplicate.ploegnaam}". Kies een andere ploegnaam.`);
     return;
   }
 
@@ -808,7 +809,7 @@ const saveParticipant = async () => {
     await apiFetch(`/participants/${editingParticipant.value.deelnID}`, {
       method: 'PUT',
       body: JSON.stringify({
-        roepnaam: trimmedRoepnaam,
+        ploegnaam: trimmedPloegnaam,
         Betaald: editingParticipant.value.Betaald ? 1 : 0
       })
     });
@@ -940,7 +941,7 @@ const deleteParticipant = async (p: Participant) => {
         <Search class="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
         <input 
           v-model="searchQuery" 
-          placeholder="Zoek op naam, roepnaam, plaats of e-mail..." 
+          placeholder="Zoek op naam, ploegnaam, plaats of e-mail..."
           class="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:border-amber-500 focus:bg-white focus:outline-none"
         />
       </div>
@@ -981,7 +982,7 @@ const deleteParticipant = async (p: Participant) => {
       <div v-else class="grid grid-cols-1 gap-x-6 divide-y divide-slate-100 md:grid-cols-2 md:divide-y-0">
         <div v-for="(column, columnIndex) in participantColumns" :key="columnIndex" class="col-span-1 min-w-0">
           <div class="participant-header-fields grid grid-cols-6 border-b border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 md:px-2">
-            <button @click="toggleParticipantSort('roepnaam')" class="flex items-center gap-0.5 text-left hover:text-slate-800" title="Sorteer op roepnaam">Roepnaam <component :is="participantSortIcon('roepnaam')" class="h-3 w-3" /></button>
+            <button @click="toggleParticipantSort('ploegnaam')" class="flex items-center gap-0.5 text-left hover:text-slate-800" title="Sorteer op ploegnaam">Ploegnaam <component :is="participantSortIcon('ploegnaam')" class="h-3 w-3" /></button>
             <button @click="toggleParticipantSort('naam')" class="flex items-center gap-0.5 text-left hover:text-slate-800" title="Sorteer op naam">Naam <component :is="participantSortIcon('naam')" class="h-3 w-3" /></button>
             <span>Renners</span>
             <span>Contact</span>
@@ -993,10 +994,10 @@ const deleteParticipant = async (p: Participant) => {
             :key="p.deelnID"
             class="participant-fields grid grid-cols-6 gap-x-1 border-b border-slate-100 px-3 py-1 text-sm text-slate-700 transition hover:bg-slate-50/80 md:px-2"
           >
-          <!-- Roepnaam -->
-          <div class="min-w-0" title="Roepnaam">
-            <span v-if="p.roepnaam" class="block truncate rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-xs font-semibold text-amber-800">
-              {{ p.roepnaam }}
+          <!-- Ploegnaam -->
+          <div class="min-w-0" title="Ploegnaam">
+            <span v-if="p.ploegnaam" class="block truncate rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-xs font-semibold text-amber-800">
+              {{ p.ploegnaam }}
             </span>
             <span v-else class="text-xs italic text-slate-400">-</span>
           </div>
@@ -1119,9 +1120,9 @@ const deleteParticipant = async (p: Participant) => {
             </div>
 
             <div>
-              <label class="mb-1 block text-xs font-semibold text-slate-700">Roepnaam / Teamnaam in Pool (optioneel)</label>
+              <label class="mb-1 block text-xs font-semibold text-slate-700">Ploegnaam in pool (optioneel)</label>
               <input 
-                v-model="addForm.roepnaam" 
+                v-model="addForm.ploegnaam"
                 class="shadow-2xs w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:outline-none" 
                 placeholder="bv. Ploeg Jansen" 
               />
@@ -1262,7 +1263,7 @@ const deleteParticipant = async (p: Participant) => {
       <div class="flex max-h-[90vh] w-full max-w-3xl flex-col space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
         <div class="flex shrink-0 items-center justify-between border-b border-slate-200 pb-4">
           <>
-            <h3 class="text-lg font-bold text-slate-900">Ploegopstelling {{ managingParticipant.roepnaam }}</h3>
+            <h3 class="text-lg font-bold text-slate-900">Ploegopstelling {{ managingParticipant.ploegnaam }}</h3>
             <p class="text-xs text-slate-500"></p>
             <label class="mt-2 flex items-center gap-2 text-xs font-semibold text-slate-700">
               <span>Opstelling t/m etappe:</span>
@@ -1409,9 +1410,9 @@ const deleteParticipant = async (p: Participant) => {
 
         <fieldset :disabled="linkingAccount" class="space-y-4">
           <div>
-            <label class="mb-1 block text-xs font-semibold text-slate-700">Roepnaam / Teamnaam</label>
+            <label class="mb-1 block text-xs font-semibold text-slate-700">Ploegnaam</label>
             <input 
-              v-model="editingParticipant.roepnaam" 
+              v-model="editingParticipant.ploegnaam"
               class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" 
               placeholder="bv. Ploeg Jansen" 
             />
@@ -1434,10 +1435,10 @@ const deleteParticipant = async (p: Participant) => {
             <select id="participant-account" v-model="selectedAccountID" :disabled="loadingAccounts" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
               <option :value="null">Kies een gebruikersaccount</option>
               <option v-for="account in userAccounts" :key="account.accountID" :value="account.accountID">
-                {{ [account.vNaam, account.tNaam, account.aNaam].filter(Boolean).join(' ') }} — {{ account.email }}
+                {{ account.username }} — {{ [account.vNaam, account.tNaam, account.aNaam].filter(Boolean).join(' ') }} — {{ account.email }}
               </option>
             </select>
-            <p class="mt-2 text-xs text-slate-500">Koppelt alleen deze inschrijving. Renners, roepnaam en betaling blijven behouden. Het account moet al bestaan.</p>
+            <p class="mt-2 text-xs text-slate-500">Koppelt alleen deze inschrijving. Renners, ploegnaam en betaling blijven behouden. Het account moet al bestaan.</p>
             <p v-if="accountError" role="alert" class="mt-2 text-sm text-red-700">{{ accountError }}</p>
             <button type="button" :disabled="loadingAccounts || !selectedAccountID || userAccounts.find(account => account.accountID === selectedAccountID)?.adrID === editingParticipant.adrID" class="mt-2 rounded-lg bg-amber-100 px-3 py-2 text-sm font-semibold text-slate-900 disabled:opacity-50" @click="linkAccount">
               {{ linkingAccount ? 'Bezig met koppelen...' : 'Account koppelen' }}
@@ -1528,7 +1529,7 @@ const deleteParticipant = async (p: Participant) => {
       </header>
       <div class="pool-print-grid">
         <section v-for="participant in page" :key="participant.deelnID" class="pool-print-participant">
-          <h2>{{ participant.roepnaam?.trim() || 'Huh?' }}</h2>
+          <h2>{{ participant.ploegnaam?.trim() || 'Huh?' }}</h2>
           <div class="pool-print-rider-heading">
             <span>Nr</span><span>Naam</span><span>Ploeg</span>
           </div>

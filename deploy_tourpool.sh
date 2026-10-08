@@ -105,9 +105,12 @@ command -v curl > /dev/null 2>&1 || { echo "curl niet geïnstalleerd op server";
 command -v mariadb > /dev/null 2>&1 || { echo "mariadb-client niet geïnstalleerd op server"; exit 1; }
 
 [ -f "$PROD_ENV_FILE" ] || { echo "Ontbreekt: $PROD_ENV_FILE  -> voer eerst optie 1 (server inrichten) uit"; exit 1; }
-for key in PORT DB_HOST DB_USER DB_PASSWORD DB_NAME; do
+for key in PORT DB_USER DB_PASSWORD DB_NAME; do
   grep -Eq "^${key}=" "$PROD_ENV_FILE" || { echo "Ontbreekt ${key}=... in $PROD_ENV_FILE"; exit 1; }
 done
+grep -Eq '^DB_HOST=' "$PROD_ENV_FILE" \
+  || { [ -f /home/jeroen/config/shared.env ] && grep -Eq '^DB_HOST=' /home/jeroen/config/shared.env; } \
+  || { echo "DB_HOST ontbreekt in app- en gedeelde configuratie"; exit 1; }
 for dir in "$PROD_API_DIR" "$PROD_WEB_DIR"; do
   [ -w "$dir" ] || { echo "Geen schrijfrechten op $dir -> voer eerst optie 1 (server inrichten) uit"; exit 1; }
 done
@@ -182,6 +185,10 @@ DB_NAME=${PROD_DB}
 AUTH_ORIGINS=https://jota.nl
 TRUST_PROXY=1
 ENV
+  if [ -f /home/jeroen/config/shared.env ]; then
+    sed -i '/^DB_HOST=/d; /^DB_PORT=/d' "$PROD_ENV_FILE"
+    sed -i '1i# SMTP_*, DB_HOST en DB_PORT staan in /home/jeroen/config/shared.env.\n# PM2 laadt deze via /home/jeroen/config/load-shared.cjs voordat de API start.' "$PROD_ENV_FILE"
+  fi
   echo ".env aangemaakt: $PROD_ENV_FILE"
 else
   echo ".env bestaat al, niet overschreven: $PROD_ENV_FILE"
@@ -304,7 +311,15 @@ backup_and_import_prod_db() {
     'bash -se' << 'EOF'
 set -euo pipefail
 
-val() { sed -nE "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*['\"]?([^'\"]*)['\"]?[[:space:]]*$/\1/p" "$PROD_ENV_FILE" | head -n 1; }
+val() {
+  local file="$PROD_ENV_FILE"
+  if [[ "$1" == DB_HOST || "$1" == DB_PORT ]] \
+    && ! grep -Eq "^[[:space:]]*$1[[:space:]]*=" "$file" \
+    && [ -f /home/jeroen/config/shared.env ]; then
+    file=/home/jeroen/config/shared.env
+  fi
+  sed -nE "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*['\"]?([^'\"]*)['\"]?[[:space:]]*$/\1/p" "$file" | head -n 1
+}
 DB_USER="$(val DB_USER)"
 DB_NAME="$(val DB_NAME)"
 
@@ -377,10 +392,16 @@ export NVM_DIR="$HOME/.nvm"
 
 npm install --omit=dev --no-audit --no-fund
 
+shared_node_args=()
+if [ -f /home/jeroen/config/load-shared.cjs ]; then
+  shared_node_args=(--node-args="--require /home/jeroen/config/load-shared.cjs")
+elif [ -f /home/jeroen/config/load-smtp.cjs ]; then
+  shared_node_args=(--node-args="--require /home/jeroen/config/load-smtp.cjs")
+fi
 if pm2 describe "$PROD_PM2_NAME" > /dev/null 2>&1; then
-  pm2 restart "$PROD_PM2_NAME" --update-env
+  pm2 restart "$PROD_PM2_NAME" --update-env "${shared_node_args[@]}"
 else
-  pm2 start dist/server.js --name "$PROD_PM2_NAME" --cwd "$PROD_API_DIR" --time
+  pm2 start dist/server.js --name "$PROD_PM2_NAME" --cwd "$PROD_API_DIR" --time "${shared_node_args[@]}"
 fi
 pm2 save > /dev/null
 

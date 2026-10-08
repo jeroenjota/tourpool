@@ -7,9 +7,10 @@ accountsRouter.use(requireAdmin);
 accountsRouter.get('/', async (_request, response, next) => {
   try {
     const rows = await pool.query(
-      `SELECT a.accountID, a.adrID, a.email, p.vNaam, p.tNaam, p.aNaam
+      `SELECT a.accountID, a.adrID, a.username, a.email, p.vNaam, p.tNaam, p.aNaam
        FROM tblAccounts a JOIN tblAdressen p ON p.adrID = a.adrID
-       WHERE a.role = 'user' ORDER BY p.aNaam, p.vNaam, a.email`
+       WHERE a.role = 'user' AND a.emailVerified = TRUE
+       ORDER BY p.aNaam, p.vNaam, a.email`
     );
     response.json(rows);
   } catch (error) { next(error); }

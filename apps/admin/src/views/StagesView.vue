@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { apiFetch } from "../services/api";
-import { RefreshCw, X, Save, Check, Plus, Edit2 } from "@lucide/vue";
+import { RefreshCw, X, Save, Check, Plus, Edit2, Trash2 } from "@lucide/vue";
+
+const props = defineProps<{ management?: boolean; tourID?: number; tourName?: string }>();
+const emit = defineEmits<{ saving: [value: boolean] }>();
 
 interface Stage {
   tour: string;
@@ -63,6 +66,17 @@ interface StageResultItem {
 }
 
 const stages = ref<Stage[]>([]);
+const stageList = ref<HTMLDivElement | null>(null);
+const stageListWidth = ref(0);
+let stageListObserver: ResizeObserver | undefined;
+const measureStageList = () => {
+  stageListWidth.value = stageList.value?.getBoundingClientRect().width ?? 0;
+};
+const stageColumns = computed(() => {
+  if (stageListWidth.value < 1024 || stages.value.length < 2) return [stages.value];
+  const midpoint = Math.ceil(stages.value.length / 2);
+  return [stages.value.slice(0, midpoint), stages.value.slice(midpoint)];
+});
 const tours = ref<Tour[]>([]);
 const selectedTourID = ref<number | null>(null);
 const tourRiders = ref<TourRider[]>([]);
@@ -122,6 +136,12 @@ const targetCounts = computed(() => ({
 const fetchData = async () => {
   loading.value = true;
   try {
+    if (props.management) {
+      selectedTourID.value = props.tourID ?? null;
+      tours.value = props.tourID == null ? [] : [{ tourID: props.tourID, naam: props.tourName ?? "" }];
+      stages.value = props.tourID == null ? [] : await apiFetch<Stage[]>(`/stages?tour=${props.tourID}`);
+      return;
+    }
     tours.value = await apiFetch<Tour[]>("/tours");
     if (!tours.value.some((tour) => tour.tourID === selectedTourID.value)) {
       selectedTourID.value = tours.value[0]?.tourID ?? null;
@@ -156,6 +176,7 @@ const fetchData = async () => {
     allStageResults.value = resultsRes;
   } catch (err) {
     console.error("Error fetching stage data:", err);
+    alert(`Etappes laden mislukt: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     loading.value = false;
   }
@@ -170,6 +191,20 @@ const onTourChange = () => {
 };
 
 onMounted(fetchData);
+onMounted(() => {
+  stageListObserver = new ResizeObserver(([entry]) => {
+    stageListWidth.value = entry.contentRect.width;
+  });
+  if (stageList.value) {
+    measureStageList();
+    stageListObserver.observe(stageList.value);
+  }
+  window.addEventListener("resize", measureStageList);
+});
+onBeforeUnmount(() => {
+  stageListObserver?.disconnect();
+  window.removeEventListener("resize", measureStageList);
+});
 
 const openCreateStageModal = () => {
   editingStage.value = null;
@@ -202,8 +237,29 @@ const openEditStageModal = (stage: Stage) => {
 };
 
 const closeStageModal = () => {
+  if (saving.value) return;
   createStageModalOpen.value = false;
   editingStage.value = null;
+};
+
+const deleteStage = async (stage: Stage) => {
+  if (saving.value) return;
+  const label = stage.etappeNr == null ? `rustdag ${String(stage.datum).slice(0, 10)}` : `etappe ${stage.etappeNr}`;
+  if (!confirm(`Weet je zeker dat je ${label} wilt verwijderen? Etappes met uitslagen of punten kunnen niet worden verwijderd.`)) return;
+  saving.value = true;
+  emit("saving", true);
+  try {
+    const endpoint = stage.etappeNr == null
+      ? `/stages/rest-day/${stage.tour}/${String(stage.datum).slice(0, 10)}`
+      : `/stages/${stage.tour}/${stage.etappeNr}`;
+    await apiFetch(endpoint, { method: "DELETE" });
+    await fetchData();
+  } catch (error) {
+    alert(`Etappe verwijderen mislukt: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    saving.value = false;
+    emit("saving", false);
+  }
 };
 
 const saveStage = async () => {
@@ -212,6 +268,7 @@ const saveStage = async () => {
   const isRestDay = stageForm.value.type === "rustdag";
   if (!editingStage.value && !isRestDay && stageForm.value.etappeNr === "") return;
   saving.value = true;
+  emit("saving", true);
 
   try {
     const payload = {
@@ -242,12 +299,14 @@ const saveStage = async () => {
         }),
       });
     }
-    closeStageModal();
+    createStageModalOpen.value = false;
+    editingStage.value = null;
     await fetchData();
   } catch (err) {
     alert(`Fout bij ${editingStage.value ? "wijzigen" : "toevoegen"} etappe: ${err instanceof Error ? err.message : err}`);
   } finally {
     saving.value = false;
+    emit("saving", false);
   }
 };
 
@@ -284,7 +343,6 @@ const formatStageDate = (d?: string | null) => {
     weekday: "short",
     day: "numeric",
     month: "short",
-    year: "numeric",
   });
 };
 
@@ -299,6 +357,7 @@ const hasStageResults = (stage: Stage) =>
 
 // Modal openen om uitslag in te voeren
 const openResultModal = (s: Stage) => {
+  if (props.management) return;
   if (isRestDay(s) || !s.etappeNr) return;
 
   activeStage.value = s;
@@ -391,17 +450,18 @@ const saveResults = async () => {
 <template>
   <div class="space-y-6">
     <!-- Header -->
-    <div class="flex flex-wrap items-center justify-between gap-3 bg-yellow-300">
+    <div class="flex flex-wrap items-center justify-between gap-3 bg-amber-300">
       <div>
         <h2 class="mt-2 text-xl font-bold text-slate-900">
-          Etappe-overzicht & Uitslagen
+          {{ management ? "Touretappes" : "Uitslagen" }}
         </h2>
         <p class="text-xs text-slate-500">
-          Klik op een etapperij om de daguitslag en klassementstruien in te voeren
+          {{ management ? "Beheer de etappes en rustdagen van deze tour" : "Klik op een etapperij om de daguitslag en klassementstruien in te voeren" }}
         </p>
       </div>
       <div class="flex items-center gap-2">
         <button
+          v-if="management"
           type="button"
           :disabled="loading || selectedTourID === null"
           class="flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
@@ -409,7 +469,7 @@ const saveResults = async () => {
           <Plus class="h-4 w-4" />
           <span>Etappe toevoegen</span>
         </button>
-        <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
+        <label v-if="!management" class="flex items-center gap-2 text-sm font-medium text-slate-700">
           <span>Tour</span>
           <select
             v-model="selectedTourID"
@@ -430,84 +490,98 @@ const saveResults = async () => {
       </div>
     </div>
 
+    <div ref="stageList" class="grid items-start gap-4" :class="stageColumns.length === 2 ? 'grid-cols-2' : 'grid-cols-1'">
     <div
-      class="shadow-xs overflow-x-auto rounded-xl border border-yellow-800 bg-white">
+      v-for="(column, columnIndex) in stageColumns"
+      :key="columnIndex"
+      class="shadow-xs min-w-0 overflow-x-auto rounded-xl border border-yellow-800 bg-white">
       <table class="min-w-120 w-full border-collapse border text-left text-sm">
         <thead
           class="bg-yellow-300 text-xs font-semibold uppercase text-slate-600">
           <tr>
-            <th scope="col" class="px-4 py-2">Etappe</th>
-            <th scope="col" class="px-4 py-2">Datum</th>
-            <th scope="col" class="px-4 py-2">Parcours</th>
-            <th scope="col" class="px-4 py-2">Lengte</th>
-            <th scope="col" class="px-4 py-2">Type</th>
-            <th scope="col" class="px-4 py-2">Acties</th>
+            <th scope="col" class="px-2 py-1">Et</th>
+            <th scope="col" class="px-2 py-1">Datum</th>
+            <th scope="col" class="px-2 py-1">Parcours</th>
+            <th scope="col" class="px-2 py-1">Lengte</th>
+            <th scope="col" class="px-2 py-1">Type</th>
+            <th v-if="management" scope="col" class="px-2 py-1">Acties</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-200">
           <tr v-if="loading && stages.length === 0">
-            <td colspan="6" class="px-4 py-10 text-center text-slate-400">
+            <td :colspan="management ? 6 : 5" class="px-4 py-1 text-center text-slate-400">
               Etappes laden...
             </td>
           </tr>
           <tr v-else-if="stages.length === 0">
-            <td colspan="6" class="px-4 py-10 text-center text-slate-400">
+            <td :colspan="management ? 6 : 5" class="px-4 py-1 text-center text-slate-400">
               Geen etappes gevonden.
             </td>
           </tr>
           <tr
-            v-for="s in stages"
+            v-for="s in column"
             :key="`${s.tour}-${s.datum}-${s.etappeNr}`"
             :class="
-              isRestDay(s)
+              management ? 'bg-white' : isRestDay(s)
                 ? 'bg-yellow-50/70'
                 : hasStageResults(s)
                 ? 'cursor-pointer bg-yellow-200 hover:bg-emerald-100'
                 : 'cursor-pointer bg-yellow-100 hover:bg-yellow-200'
             "
             @click="openResultModal(s)">
-            <td class="whitespace-nowrap px-4 py-2 font-medium">
+            <td class="whitespace-nowrap px-2 py-1 font-medium">
               <span class="inline-flex items-center gap-2">
                 <button
-                  v-if="!isRestDay(s) && s.etappeNr"
+                  v-if="!management && !isRestDay(s) && s.etappeNr"
                   type="button"
                   class="font-semibold text-amber-700 hover:text-amber-900 hover:underline"
                   :aria-label="`Uitslag invoeren voor etappe ${s.etappeNr}`"
                   @click.stop="openResultModal(s)">
                   {{ s.etappeNr }}
                 </button>
+                <span v-else>{{ s.etappeNr }}</span>
                 <Check
                   v-if="hasStageResults(s)"
                   class="h-4 w-4 text-emerald-700"
                   aria-label="Uitslag ingevoerd" />
               </span>
             </td>
-            <td class="whitespace-nowrap px-4 py-2 text-slate-700">
+            <td class="whitespace-nowrap px-2 py-1 text-slate-700">
               {{ formatStageDate(s.datum) }}
             </td>
-            <td class="px-4 py-2 font-medium text-slate-900">
+            <td class="px-2 py-1 font-medium text-slate-900">
               <span v-if="isRestDay(s)">Rustdag</span>
               <span v-else>{{ s.Start || "?" }} - {{ s.Finish || "?" }}</span>
             </td>
-            <td class="whitespace-nowrap px-4 py-2 text-slate-700">
-              <span v-if="!isRestDay(s) && s.kms != null">{{ s.kms }} km</span>
+            <td class="whitespace-nowrap px-2 py-1 text-slate-700">
+              <span v-if="!isRestDay(s) && s.kms != null">{{ s.kms }}</span>
             </td>
-            <td class="px-4 py-2 capitalize text-slate-700">
+            <td class="px-2 py-1 capitalize text-slate-700">
               {{ isRestDay(s) ? "" : s.type }}
             </td>
-            <td class="whitespace-nowrap px-4 py-2">
+            <td v-if="management" class="whitespace-nowrap px-2 py-1">
               <button
                 type="button"
                 class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100 hover:text-amber-900"
                 :aria-label="`Etappe ${isRestDay(s) ? 'rustdag' : s.etappeNr} wijzigen`"
+                :disabled="saving"
                 @click.stop="openEditStageModal(s)">
                 <Edit2 class="h-3.5 w-3.5" />
-                Wijzigen
+              </button>
+              <button
+                type="button"
+                :disabled="saving"
+                :aria-label="`${isRestDay(s) ? 'Rustdag' : `Etappe ${s.etappeNr}`} verwijderen`"
+                title="Verwijderen"
+                class="inline-flex rounded-md p-1.5 text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                @click.stop="deleteStage(s)">
+                <Trash2 class="h-4 w-4" />
               </button>
             </td>
           </tr>
         </tbody>
       </table>
+    </div>
     </div>
 
     <!-- Etappe toevoegen of wijzigen -->

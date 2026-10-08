@@ -8,7 +8,7 @@ export const participantsRouter = Router();
 const createParticipantSchema = z.object({
   poolID: z.number().int(),
   adrID: z.number().int(),
-  roepnaam: z.string().max(255).nullable().optional(),
+  ploegnaam: z.string().max(255).nullable().optional(),
   Betaald: z.union([z.boolean(), z.number().int().min(0).max(1)]).nullable().optional(),
   riders: z.array(z.object({
     rennerID: z.number().int(),
@@ -18,7 +18,7 @@ const createParticipantSchema = z.object({
 
 const updateParticipantSchema = createParticipantSchema.partial();
 
-const generateRoepnaam = async (connection: Awaited<ReturnType<typeof pool.getConnection>>, poolID: number, adrID: number) => {
+const generatePloegnaam = async (connection: Awaited<ReturnType<typeof pool.getConnection>>, poolID: number, adrID: number) => {
   const addressRows = await connection.query(
     'SELECT vNaam, aNaam FROM tblAdressen WHERE adrID = ?',
     [adrID]
@@ -32,10 +32,10 @@ const generateRoepnaam = async (connection: Awaited<ReturnType<typeof pool.getCo
   const firstName = (address.vNaam || 'Deelnemer').trim();
   const lastName = (address.aNaam || '').trim();
   const existingRows = await connection.query(
-    'SELECT roepnaam FROM tblDeelnemers WHERE poolID = ? AND roepnaam IS NOT NULL',
+    'SELECT roepnaam AS ploegnaam FROM tblDeelnemers WHERE poolID = ? AND roepnaam IS NOT NULL',
     [poolID]
-  ) as Array<{ roepnaam?: string | null }>;
-  const existingNames = new Set(existingRows.map(row => row.roepnaam?.trim().toLocaleLowerCase()).filter(Boolean));
+  ) as Array<{ ploegnaam?: string | null }>;
+  const existingNames = new Set(existingRows.map(row => row.ploegnaam?.trim().toLocaleLowerCase()).filter(Boolean));
   const normalizedFirstName = firstName.toLocaleLowerCase();
   const normalizedLastName = lastName.toLocaleLowerCase();
 
@@ -74,7 +74,7 @@ participantsRouter.get('/', async (request, response, next) => {
         a.plaats,
         a.tel,
         a.email,
-        d.roepnaam, 
+        d.roepnaam AS ploegnaam,
         d.Betaald 
       FROM tblDeelnemers d
       JOIN tblAdressen a ON d.adrID = a.adrID
@@ -121,7 +121,7 @@ participantsRouter.get('/:deelnID', async (request, response, next) => {
         a.plaats,
         a.tel,
         a.email,
-        d.roepnaam, 
+        d.roepnaam AS ploegnaam,
         d.Betaald 
       FROM tblDeelnemers d
       JOIN tblAdressen a ON d.adrID = a.adrID
@@ -148,12 +148,12 @@ participantsRouter.post('/', async (request, response, next) => {
   try {
     const payload = createParticipantSchema.parse(request.body);
     const betaaldVal = payload.Betaald === undefined || payload.Betaald === null ? null : (payload.Betaald ? 1 : 0);
-    const roepnaam = payload.roepnaam?.trim() || await generateRoepnaam(connection, payload.poolID, payload.adrID);
+    const ploegnaam = payload.ploegnaam?.trim() || await generatePloegnaam(connection, payload.poolID, payload.adrID);
 
     await connection.beginTransaction();
     const result = await connection.query(
       'INSERT INTO tblDeelnemers (poolID, adrID, roepnaam, Betaald) VALUES (?, ?, ?, ?)',
-      [payload.poolID, payload.adrID, roepnaam, betaaldVal]
+      [payload.poolID, payload.adrID, ploegnaam, betaaldVal]
     );
 
     const deelnID = Number((result as { insertId: number | bigint }).insertId);
@@ -173,7 +173,7 @@ participantsRouter.post('/', async (request, response, next) => {
 
     response.status(201).json({
       ...payload,
-      roepnaam,
+      ploegnaam,
       deelnID
     });
   } catch (error) {
@@ -212,7 +212,7 @@ participantsRouter.put('/:deelnID/account', requireAdmin, async (request, respon
   } catch (error) {
     if (connection) await connection.rollback();
     next(isDuplicate(error)
-      ? new HttpError(409, 'Dit account heeft al een ploeg met dezelfde roepnaam in deze pool. Pas eerst de roepnaam aan.')
+      ? new HttpError(409, 'Dit account heeft al een ploeg met dezelfde ploegnaam in deze pool. Pas eerst de ploegnaam aan.')
       : error);
   } finally { connection?.release(); }
 });
@@ -222,7 +222,7 @@ participantsRouter.put('/:deelnID', async (request, response, next) => {
     const deelnID = Number(request.params.deelnID);
     const payload = updateParticipantSchema.parse(request.body);
 
-    const rows = await pool.query('SELECT deelnID, poolID, adrID, roepnaam, Betaald FROM tblDeelnemers WHERE deelnID = ?', [deelnID]);
+    const rows = await pool.query('SELECT deelnID, poolID, adrID, roepnaam AS ploegnaam, Betaald FROM tblDeelnemers WHERE deelnID = ?', [deelnID]);
     const current = (rows as Array<Record<string, unknown>>)[0];
 
     if (!current) {
@@ -237,13 +237,13 @@ participantsRouter.put('/:deelnID', async (request, response, next) => {
     const updated = {
       poolID: payload.poolID !== undefined ? payload.poolID : current.poolID,
       adrID: payload.adrID !== undefined ? payload.adrID : current.adrID,
-      roepnaam: payload.roepnaam !== undefined ? payload.roepnaam : current.roepnaam,
+      ploegnaam: payload.ploegnaam !== undefined ? payload.ploegnaam : current.ploegnaam,
       Betaald: betaaldVal
     };
 
     await pool.query(
       'UPDATE tblDeelnemers SET poolID = ?, adrID = ?, roepnaam = ?, Betaald = ? WHERE deelnID = ?',
-      [updated.poolID, updated.adrID, updated.roepnaam, updated.Betaald, deelnID]
+      [updated.poolID, updated.adrID, updated.ploegnaam, updated.Betaald, deelnID]
     );
 
     response.json({ deelnID, ...updated });

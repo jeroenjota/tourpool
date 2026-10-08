@@ -1,12 +1,14 @@
 import { reactive } from 'vue';
 
 export interface Account {
-  accountID: number; adrID: number; email: string; role: 'admin' | 'user';
+  accountID: number; adrID: number; username: string; email: string; role: 'admin' | 'user';
 }
 export interface Profile {
-  vNaam: string; tNaam: string; aNaam: string; plaats: string; tel: string;
+  username: string; email: string; vNaam: string; tNaam: string; aNaam: string; plaats: string; tel: string;
 }
-export const emptyProfile = (): Profile => ({ vNaam: '', tNaam: '', aNaam: '', plaats: '', tel: '' });
+export const emptyProfile = (): Profile => ({
+  username: '', email: '', vNaam: '', tNaam: '', aNaam: '', plaats: '', tel: ''
+});
 export const auth = reactive<{ account: Account | null; csrfToken: string; checked: boolean }>({
   account: null, csrfToken: '', checked: false
 });
@@ -52,9 +54,9 @@ export async function loadSession() {
   }
   return auth.account;
 }
-export async function login(email: string, password: string) {
+export async function login(username: string, password: string) {
   const session = await apiFetch<{ account: Account; csrfToken: string }>('/auth/login', {
-    method: 'POST', body: JSON.stringify({ email, password })
+    method: 'POST', body: JSON.stringify({ username, password })
   });
   Object.assign(auth, session, { checked: true });
 }

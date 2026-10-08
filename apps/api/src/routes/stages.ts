@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../db.js';
+import { HttpError } from '../auth.js';
 
 export const stagesRouter = Router();
+
+const stageSelect = "SELECT tour, etappeNr, DATE_FORMAT(datum, '%Y-%m-%d') AS datum, Start, Finish, kms, type FROM tblEtappes";
 
 const createStageSchema = z.object({
   tour: z.string().max(10),
@@ -25,7 +28,7 @@ const updateStageSchema = z.object({
 stagesRouter.get('/', async (request, response, next) => {
   try {
     const { tour } = request.query;
-    let query = 'SELECT tour, etappeNr, datum, Start, Finish, kms, type FROM tblEtappes';
+    let query = stageSelect;
     const params: unknown[] = [];
 
     if (typeof tour === 'string' && tour.trim() !== '') {
@@ -48,7 +51,7 @@ stagesRouter.get('/:tour/:etappeNr', async (request, response, next) => {
     const etappeNr = Number(request.params.etappeNr);
 
     const rows = await pool.query(
-      'SELECT tour, etappeNr, datum, Start, Finish, kms, type FROM tblEtappes WHERE tour = ? AND etappeNr = ?',
+      `${stageSelect} WHERE tour = ? AND etappeNr = ?`,
       [tour, etappeNr]
     );
     const item = (rows as Array<Record<string, unknown>>)[0];
@@ -84,7 +87,7 @@ stagesRouter.put('/rest-day/:tour/:datum', async (request, response, next) => {
     const datum = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(request.params.datum);
     const payload = updateStageSchema.parse(request.body);
     const rows = await pool.query(
-      'SELECT tour, etappeNr, datum, Start, Finish, kms, type FROM tblEtappes WHERE tour = ? AND datum = ? AND etappeNr IS NULL',
+      `${stageSelect} WHERE tour = ? AND datum = ? AND etappeNr IS NULL`,
       [tour, datum]
     ) as Array<Record<string, unknown>>;
 
@@ -124,7 +127,7 @@ stagesRouter.put('/:tour/:etappeNr', async (request, response, next) => {
     const payload = updateStageSchema.parse(request.body);
 
     const rows = await pool.query(
-      'SELECT tour, etappeNr, datum, Start, Finish, kms, type FROM tblEtappes WHERE tour = ? AND etappeNr = ?',
+      `${stageSelect} WHERE tour = ? AND etappeNr = ?`,
       [tour, etappeNr]
     );
     const current = (rows as Array<Record<string, unknown>>)[0];
@@ -153,12 +156,37 @@ stagesRouter.put('/:tour/:etappeNr', async (request, response, next) => {
   }
 });
 
+stagesRouter.delete('/rest-day/:tour/:datum', async (request, response, next) => {
+  try {
+    const tour = String(request.params.tour);
+    const datum = z.string().date().parse(request.params.datum);
+    const result = await pool.query(
+      'DELETE FROM tblEtappes WHERE tour = ? AND datum = ? AND etappeNr IS NULL',
+      [tour, datum]
+    );
+    if (!result.affectedRows) throw new HttpError(404, 'Rustdag niet gevonden.');
+    response.status(204).send();
+  } catch (error) { next(error); }
+});
+
 stagesRouter.delete('/:tour/:etappeNr', async (request, response, next) => {
   try {
     const tour = String(request.params.tour);
     const etappeNr = Number(request.params.etappeNr);
 
-    await pool.query('DELETE FROM tblEtappes WHERE tour = ? AND etappeNr = ?', [tour, etappeNr]);
+    const result = await pool.query(
+      `DELETE FROM tblEtappes WHERE tour = ? AND etappeNr = ?
+       AND NOT EXISTS (SELECT 1 FROM tblEtappeUitslag WHERE tourID = ? AND etappeNr = ?)
+       AND NOT EXISTS (SELECT 1 FROM tblDeelnemerPunten dp
+         JOIN tblDeelnemers d ON d.deelnID = dp.deelnemID JOIN tblPools p ON p.poolID = d.poolID
+         WHERE p.tourID = ? AND dp.etappeNr = ?)`,
+      [tour, etappeNr, tour, etappeNr, tour, etappeNr]
+    );
+    if (!result.affectedRows) {
+      const rows = await pool.query('SELECT etappeNr FROM tblEtappes WHERE tour = ? AND etappeNr = ?', [tour, etappeNr]);
+      if (!rows.length) throw new HttpError(404, 'Etappe niet gevonden.');
+      throw new HttpError(409, 'Deze etappe heeft uitslagen of punten en kan niet worden verwijderd.');
+    }
     response.status(204).send();
   } catch (error) {
     next(error);

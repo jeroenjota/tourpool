@@ -1831,6 +1831,7 @@ CREATE TABLE `tblPools` (
   `Org` varchar(255) DEFAULT NULL,
   `StartInschr` datetime DEFAULT NULL,
   `EindInschr` datetime DEFAULT NULL,
+  `visibleToUsers` tinyint(1) NOT NULL DEFAULT 1,
   PRIMARY KEY (`poolID`),
   KEY `tourID` (`tourID`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1843,7 +1844,7 @@ CREATE TABLE `tblPools` (
 LOCK TABLES `tblPools` WRITE;
 /*!40000 ALTER TABLE `tblPools` DISABLE KEYS */;
 set autocommit=0;
-INSERT INTO `tblPools` VALUES
+INSERT INTO `tblPools` (`poolID`, `tourID`, `Naam`, `Org`, `StartInschr`, `EindInschr`) VALUES
 (1,1,'TDF Pool 2026','Cafe de Laurierboom','2026-06-30 14:00:00','2026-10-30 19:00:00'),
 (3,1,'Nog een 2026 Pool','Jota',NULL,NULL);
 /*!40000 ALTER TABLE `tblPools` ENABLE KEYS */;
@@ -2406,11 +2407,23 @@ SET character_set_client = @saved_cs_client;
 /*!50001 SET collation_connection      = @saved_col_connection */;
 CREATE TABLE IF NOT EXISTS tblAccounts (
   accountID INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(64) NOT NULL,
   adrID INT NOT NULL UNIQUE,
   email VARCHAR(64) NOT NULL UNIQUE,
+  emailVerified BOOLEAN NOT NULL DEFAULT TRUE,
   passwordHash VARCHAR(255) NOT NULL,
   role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
+  UNIQUE KEY tblAccounts_username_UQ (username),
   CONSTRAINT tblAccounts_address_FK FOREIGN KEY (adrID) REFERENCES tblAdressen (adrID)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS tblEmailVerifications (
+  tokenHash CHAR(64) NOT NULL PRIMARY KEY,
+  accountID INT NOT NULL UNIQUE,
+  expiresAt DATETIME NOT NULL,
+  INDEX (expiresAt),
+  CONSTRAINT tblEmailVerifications_account_FK
+    FOREIGN KEY (accountID) REFERENCES tblAccounts (accountID) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS tblSessions (

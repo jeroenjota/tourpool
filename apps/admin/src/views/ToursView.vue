@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { apiFetch } from '../services/api';
-import { 
-  Plus, 
-  Trash2, 
-  Edit2, 
-  X, 
-  RefreshCw, 
-  Calendar, 
-  Check
-} from '@lucide/vue';
+import { ref, computed, onMounted } from "vue";
+import { apiFetch } from "../services/api";
+import StagesView from "./StagesView.vue";
+import TourManagementDialog from "../components/TourManagementDialog.vue";
+import {
+  Plus,
+  Trash2,
+  Edit2,
+  X,
+  RefreshCw,
+  Calendar,
+  Check,
+} from "@lucide/vue";
 
 interface Tour {
   tourID: number;
@@ -41,29 +43,37 @@ const allTeams = ref<Team[]>([]);
 const tourTeams = ref<TourTeamItem[]>([]);
 const loading = ref(true);
 const savingTeam = ref<number | null>(null);
+const teamsModalOpen = ref(false);
+const stagesModalOpen = ref(false);
+const savingStage = ref(false);
 
 // Zoek- en filterstatussen
-const searchQuery = ref('');
-const filterStatus = ref<'all' | 'selected' | 'unselected'>('all');
+const searchQuery = ref("");
+const filterStatus = ref<"all" | "selected" | "unselected">("all");
 
 // Modal voor Tour bewerken/toevoegen
 const tourModalOpen = ref(false);
-const editingTour = ref<{ tourID?: number; naam: string; StartDatum: string; EindDatum: string }>({
-  naam: '',
-  StartDatum: '',
-  EindDatum: ''
+const editingTour = ref<{
+  tourID?: number;
+  naam: string;
+  StartDatum: string;
+  EindDatum: string;
+}>({
+  naam: "",
+  StartDatum: "",
+  EindDatum: "",
 });
 
 const activeTour = computed(() => {
-  return tours.value.find(t => t.tourID === selectedTourID.value) || null;
+  return tours.value.find((t) => t.tourID === selectedTourID.value) || null;
 });
 
 const fetchInitialData = async () => {
   loading.value = true;
   try {
     const [toursRes, teamsRes] = await Promise.all([
-      apiFetch<Tour[]>('/tours'),
-      apiFetch<Team[]>('/teams')
+      apiFetch<Tour[]>("/tours"),
+      apiFetch<Team[]>("/teams"),
     ]);
     tours.value = toursRes;
     allTeams.value = teamsRes;
@@ -74,7 +84,7 @@ const fetchInitialData = async () => {
 
     await fetchTourTeams();
   } catch (err) {
-    console.error('Error fetching data:', err);
+    console.error("Error fetching data:", err);
   } finally {
     loading.value = false;
   }
@@ -83,9 +93,11 @@ const fetchInitialData = async () => {
 const fetchTourTeams = async () => {
   if (!selectedTourID.value) return;
   try {
-    tourTeams.value = await apiFetch<TourTeamItem[]>(`/tour-teams?tourID=${selectedTourID.value}`);
+    tourTeams.value = await apiFetch<TourTeamItem[]>(
+      `/tour-teams?tourID=${selectedTourID.value}`,
+    );
   } catch (err) {
-    console.error('Error fetching tour teams:', err);
+    console.error("Error fetching tour teams:", err);
   }
 };
 
@@ -100,7 +112,7 @@ const selectTour = async (tourID: number) => {
 
 // Set van deelnemende ploeg IDs
 const selectedPloegIdsSet = computed(() => {
-  return new Set(tourTeams.value.map(tt => tt.ploegID));
+  return new Set(tourTeams.value.map((tt) => tt.ploegID));
 });
 
 // Map van ploegID naar volgorde
@@ -114,37 +126,41 @@ const ploegVolgordeMap = computed(() => {
 
 // Gefilterde en gesorteerde lijst van alle ploegen
 const filteredTeams = computed(() => {
-  let list = allTeams.value.map(team => {
+  let list = allTeams.value.map((team) => {
     const isSelected = selectedPloegIdsSet.value.has(team.ploegID);
     const volgorde = ploegVolgordeMap.value.get(team.ploegID) ?? null;
     return {
       ...team,
       isSelected,
-      volgorde
+      volgorde,
     };
   });
 
   // Zoekfilter
-  if (searchQuery.value.trim() !== '') {
+  if (searchQuery.value.trim() !== "") {
     const q = searchQuery.value.toLowerCase().trim();
-    list = list.filter(t => 
-      t.naam.toLowerCase().includes(q) || 
-      (t.ploegCode && t.ploegCode.toLowerCase().includes(q)) ||
-      (t.landID && t.landID.toLowerCase().includes(q))
+    list = list.filter(
+      (t) =>
+        t.naam.toLowerCase().includes(q) ||
+        (t.ploegCode && t.ploegCode.toLowerCase().includes(q)) ||
+        (t.landID && t.landID.toLowerCase().includes(q)),
     );
   }
 
   // Deelname-filter
-  if (filterStatus.value === 'selected') {
-    list = list.filter(t => t.isSelected);
-  } else if (filterStatus.value === 'unselected') {
-    list = list.filter(t => !t.isSelected);
+  if (filterStatus.value === "selected") {
+    list = list.filter((t) => t.isSelected);
+  } else if (filterStatus.value === "unselected") {
+    list = list.filter((t) => !t.isSelected);
   }
 
   // Sortering: geselecteerde ploegen eerst op volgorde, daarna niet-geselecteerde alfabetisch
   return list.sort((a, b) => {
     if (a.isSelected && b.isSelected) {
-      return (a.volgorde ?? 9999) - (b.volgorde ?? 9999) || a.naam.localeCompare(b.naam);
+      return (
+        (a.volgorde ?? 9999) - (b.volgorde ?? 9999) ||
+        a.naam.localeCompare(b.naam)
+      );
     }
     if (a.isSelected && !b.isSelected) return -1;
     if (!a.isSelected && b.isSelected) return 1;
@@ -153,31 +169,41 @@ const filteredTeams = computed(() => {
 });
 
 // Toggle deelname van ploeg in de geselecteerde tour
-const toggleTeamParticipation = async (team: Team, currentlySelected: boolean) => {
-  if (!selectedTourID.value) return;
+const toggleTeamParticipation = async (
+  team: Team,
+  currentlySelected: boolean,
+) => {
+  if (!selectedTourID.value || savingTeam.value !== null) return;
   savingTeam.value = team.ploegID;
 
   try {
     if (currentlySelected) {
       // Verwijderen uit tour
       await apiFetch(`/tour-teams/${selectedTourID.value}/${team.ploegID}`, {
-        method: 'DELETE'
+        method: "DELETE",
       });
     } else {
       // Toevoegen aan tour met volgende volgordenummer
-      const currentMax = tourTeams.value.reduce((max, t) => Math.max(max, t.volgorde || 0), 0);
-      await apiFetch('/tour-teams', {
-        method: 'POST',
+      const currentMax = tourTeams.value.reduce(
+        (max, t) => Math.max(max, t.volgorde || 0),
+        0,
+      );
+      await apiFetch("/tour-teams", {
+        method: "POST",
         body: JSON.stringify({
           tourID: selectedTourID.value,
           ploegID: team.ploegID,
-          volgorde: currentMax + 1
-        })
+          volgorde: currentMax + 1,
+        }),
       });
     }
     await fetchTourTeams();
   } catch (err) {
-    alert(`Fout bij aanpassen deelname: ${err instanceof Error ? err.message : err}`);
+    alert(
+      `Fout bij aanpassen deelname: ${
+        err instanceof Error ? err.message : err
+      }`,
+    );
   } finally {
     savingTeam.value = null;
   }
@@ -185,26 +211,31 @@ const toggleTeamParticipation = async (team: Team, currentlySelected: boolean) =
 
 // Update volgorde van een geselecteerde ploeg
 const updateTeamOrder = async (team: Team, newOrder: number | null) => {
-  if (!selectedTourID.value) return;
+  if (!selectedTourID.value || savingTeam.value !== null) return;
+  savingTeam.value = team.ploegID;
   try {
     await apiFetch(`/tour-teams/${selectedTourID.value}/${team.ploegID}`, {
-      method: 'PUT',
+      method: "PUT",
       body: JSON.stringify({
-        volgorde: newOrder !== null && !isNaN(newOrder) ? Number(newOrder) : null
-      })
+        volgorde:
+          newOrder !== null && !isNaN(newOrder) ? Number(newOrder) : null,
+      }),
     });
     await fetchTourTeams();
   } catch (err) {
-    console.error('Error updating team order:', err);
+    console.error("Error updating team order:", err);
+    alert(`Volgorde opslaan mislukt: ${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    savingTeam.value = null;
   }
 };
 
 // Tour modal logica
 const openCreateTourModal = () => {
   editingTour.value = {
-    naam: '',
-    StartDatum: '',
-    EindDatum: ''
+    naam: "",
+    StartDatum: "",
+    EindDatum: "",
   };
   tourModalOpen.value = true;
 };
@@ -213,8 +244,8 @@ const openEditTourModal = (t: Tour) => {
   editingTour.value = {
     tourID: t.tourID,
     naam: t.naam,
-    StartDatum: t.StartDatum ? t.StartDatum.substring(0, 10) : '',
-    EindDatum: t.EindDatum ? t.EindDatum.substring(0, 10) : ''
+    StartDatum: t.StartDatum ? t.StartDatum.substring(0, 10) : "",
+    EindDatum: t.EindDatum ? t.EindDatum.substring(0, 10) : "",
   };
   tourModalOpen.value = true;
 };
@@ -225,22 +256,26 @@ const saveTour = async () => {
   try {
     const payload = {
       naam: editingTour.value.naam,
-      StartDatum: editingTour.value.StartDatum ? new Date(editingTour.value.StartDatum).toISOString() : null,
-      EindDatum: editingTour.value.EindDatum ? new Date(editingTour.value.EindDatum).toISOString() : null
+      StartDatum: editingTour.value.StartDatum
+        ? new Date(editingTour.value.StartDatum).toISOString()
+        : null,
+      EindDatum: editingTour.value.EindDatum
+        ? new Date(editingTour.value.EindDatum).toISOString()
+        : null,
     };
 
     if (editingTour.value.tourID) {
       await apiFetch(`/tours/${editingTour.value.tourID}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload)
+        method: "PUT",
+        body: JSON.stringify(payload),
       });
     } else {
-      const created = await apiFetch<Tour>('/tours', {
-        method: 'POST',
+      const created = await apiFetch<Tour>("/tours", {
+        method: "POST",
         body: JSON.stringify({
           tourID: Date.now() % 100000,
-          ...payload
-        })
+          ...payload,
+        }),
       });
       selectedTourID.value = created.tourID;
     }
@@ -255,11 +290,13 @@ const saveTour = async () => {
 const deleteTour = async (id: number) => {
   if (!confirm(`Weet je zeker dat je Tour #${id} wilt verwijderen?`)) return;
   try {
-    await apiFetch(`/tours/${id}`, { method: 'DELETE' });
+    await apiFetch(`/tours/${id}`, { method: "DELETE" });
     selectedTourID.value = null;
     await fetchInitialData();
   } catch (err) {
-    alert(`Fout bij verwijderen tour: ${err instanceof Error ? err.message : err}`);
+    alert(
+      `Fout bij verwijderen tour: ${err instanceof Error ? err.message : err}`,
+    );
   }
 };
 </script>
@@ -267,24 +304,27 @@ const deleteTour = async (id: number) => {
 <template>
   <div class="space-y-6">
     <!-- Header -->
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div
+      class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <h2 class="text-xl font-bold text-slate-900">Tours & Deelnemende Ploegen</h2>
-        <p class="text-xs text-slate-500">Selecteer en beheer welke ploegen deelnemen aan elke ronde</p>
+        <h2 class="text-xl font-bold text-slate-900 md:text-3xl">
+          Tours
+        </h2>
+        <p class="text-xs text-slate-500">
+          Beheer tours, deelnemende ploegen en touretappes
+        </p>
       </div>
 
       <div class="flex items-center gap-3">
-        <button 
-          @click="fetchInitialData" 
+        <button
+          @click="fetchInitialData"
           class="shadow-xs rounded-lg border border-slate-200 bg-white p-2.5 text-slate-600 transition hover:bg-slate-50"
-          title="Verversen"
-        >
+          title="Verversen">
           <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />
         </button>
-        <button 
-          @click="openCreateTourModal" 
-          class="shadow-xs flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400"
-        >
+        <button
+          @click="openCreateTourModal"
+          class="shadow-xs flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400">
           <Plus class="h-4 w-4" />
           <span>Nieuwe Tour</span>
         </button>
@@ -292,7 +332,8 @@ const deleteTour = async (id: number) => {
     </div>
 
     <!-- Tour Tabs / Selector -->
-    <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
+    <div
+      class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
       <button
         v-for="t in tours"
         :key="t.tourID"
@@ -300,180 +341,264 @@ const deleteTour = async (id: number) => {
         class="flex items-center gap-2.5 rounded-xl border px-4 py-2.5 text-sm font-semibold transition"
         :class="[
           selectedTourID === t.tourID
-            ? 'border-amber-500/80 bg-amber-500 text-slate-950 shadow-xs'
-            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-        ]"
-      >
+            ? 'border-slate-500/80 bg-amber-300 text-slate-950 shadow-xs'
+            : 'border-slate-500 bg-slate-300 text-slate-700 hover:border-slate-800 hover:bg-amber-100',
+        ]">
         <Calendar class="h-4 w-4" />
         <span>{{ t.naam }}</span>
-        <span 
+        <span
           class="py-0.2 rounded-full px-2 font-mono text-xs font-bold"
-          :class="selectedTourID === t.tourID ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-100 text-slate-600'"
-        >
-          {{ t.tourID === selectedTourID ? `${tourTeams.length} ploegen` : `#${t.tourID}` }}
+          :class="
+            selectedTourID === t.tourID
+              ? ' text-slate-950'
+              : 'bg-slate-100 text-slate-600'
+          ">
+          {{
+            t.tourID === selectedTourID
+              ? `${tourTeams.length} ploegen`
+              : `#${t.tourID}`
+          }}
         </span>
       </button>
     </div>
 
     <!-- Active Tour Info Banner -->
-    <div v-if="activeTour" class="shadow-xs flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 md:flex-row md:items-center">
+    <div
+      v-if="activeTour"
+      class="shadow-xs flex flex-col justify-between gap-4 rounded-2xl border border-slate-500 bg-amber-300 p-5 md:flex-row md:items-center">
       <div class="space-y-1">
-        <div class="flex items-center gap-2">
-          <span class="rounded border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold text-slate-700">
-            Tour ID #{{ activeTour.tourID }}
-          </span>
-          <h3 class="text-lg font-bold text-slate-900">{{ activeTour.naam }}</h3>
-        </div>
-        <div class="flex flex-wrap items-center gap-4 pt-1 text-xs text-slate-500">
-          <span>Periode: <strong class="text-slate-800">{{ activeTour.StartDatum ? new Date(activeTour.StartDatum).toLocaleDateString('nl-NL') : 'Niet ingesteld' }}</strong> t/m <strong class="text-slate-800">{{ activeTour.EindDatum ? new Date(activeTour.EindDatum).toLocaleDateString('nl-NL') : 'Niet ingesteld' }}</strong></span>
-          <span>•</span>
-          <span>Deelnemende ploegen: <strong class="font-mono font-bold text-amber-700">{{ tourTeams.length }}</strong> van de {{ allTeams.length }} beschikbaar</span>
+        <div class="flex items-center justify-between gap-8 align-middle">
+          <h2 class="text-xl font-bold text-slate-900 md:text-3xl">
+            {{ activeTour.naam }}
+          </h2>
+          <div
+            class="flex flex-wrap items-center gap-4 pt-1 text-sm text-slate-800 md:text-lg">
+            <span
+              >Van:
+              <strong class="text-slate-800">{{
+                activeTour.StartDatum
+                  ? new Date(activeTour.StartDatum).toLocaleDateString("nl-NL")
+                  : "Niet ingesteld"
+              }}</strong>
+              t/m
+              <strong class="text-slate-800">{{
+                activeTour.EindDatum
+                  ? new Date(activeTour.EindDatum).toLocaleDateString("nl-NL")
+                  : "Niet ingesteld"
+              }}</strong></span
+            >
+            <span>•</span>
+            <span
+              >Deelnemende ploegen:
+              <strong class="font-mono font-bold text-amber-700">{{
+                tourTeams.length
+              }}</strong>
+               ({{ allTeams.length }} in de database)</span
+            >
+          </div>
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
-        <button 
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          @click="teamsModalOpen = true"
+          class="rounded-lg border border-slate-400 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700">
+          Deelnemende tourploegen
+        </button>
+        <button
+          @click="stagesModalOpen = true"
+          class="rounded-lg border border-slate-400 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700">
+          Touretappes
+        </button>
+        <button
           @click="openEditTourModal(activeTour)"
-          class="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-        >
+          class="flex items-center gap-1.5 rounded-lg border border-slate-400 bg-emerald-100 px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
           <Edit2 class="h-3.5 w-3.5 text-slate-500" />
           <span>Tour bewerken</span>
         </button>
-        <button 
+        <button
           @click="deleteTour(activeTour.tourID)"
-          class="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
-        >
+          class="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100">
           <Trash2 class="h-3.5 w-3.5" />
           <span>Verwijderen</span>
         </button>
       </div>
     </div>
 
+    <TourManagementDialog
+      v-if="teamsModalOpen && activeTour"
+      :title="`Deelnemende tourploegen - ${activeTour.naam}`"
+      :busy="savingTeam !== null"
+      @close="teamsModalOpen = false">
+        <div class="flex flex-wrap gap-3">
+          <input v-model="searchQuery" type="search" placeholder="Zoek ploeg" aria-label="Zoek ploeg" class="rounded-lg border border-slate-300 px-3 py-2" />
+          <select v-model="filterStatus" aria-label="Filter op deelname" class="rounded-lg border border-slate-300 px-3 py-2">
+            <option value="all">Alle ploegen</option>
+            <option value="selected">Deelnemende ploegen</option>
+            <option value="unselected">Niet-deelnemende ploegen</option>
+          </select>
+        </div>
     <!-- Ploegen Selectie Grid -->
-    <div v-if="loading" class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
+    <div
+      v-if="loading"
+      class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
       Ploegen laden...
     </div>
-    <div v-else-if="filteredTeams.length === 0" class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
+    <div
+      v-else-if="filteredTeams.length === 0"
+      class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
       Geen ploegen gevonden voor dit filter.
     </div>
     <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <div 
-        v-for="team in filteredTeams" 
+      <div
+        v-for="team in filteredTeams"
         :key="team.ploegID"
         class="shadow-xs group relative flex items-center justify-between gap-3 rounded-xl border p-3.5 transition"
         :class="[
           team.isSelected
             ? 'border-amber-300/80 bg-amber-50/40 hover:border-amber-400 hover:bg-amber-50/70'
-            : 'border-slate-200 bg-white opacity-70 hover:opacity-100 hover:border-slate-300'
-        ]"
-      >
+            : 'border-slate-200 bg-white opacity-70 hover:opacity-100 hover:border-slate-300',
+        ]">
         <!-- Checkbox + Info -->
-        <div class="flex min-w-0 flex-1 cursor-pointer items-center gap-3" @click="toggleTeamParticipation(team, team.isSelected)">
-          <div 
+        <button
+          type="button"
+          :disabled="savingTeam !== null"
+          :aria-pressed="team.isSelected"
+          class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left disabled:cursor-wait disabled:opacity-60"
+          @click="toggleTeamParticipation(team, team.isSelected)">
+          <div
             class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition"
             :class="[
               team.isSelected
                 ? 'border-amber-500 bg-amber-500 text-slate-950'
-                : 'border-slate-300 bg-white group-hover:border-slate-400'
-            ]"
-          >
+                : 'border-slate-300 bg-white group-hover:border-slate-400',
+            ]">
             <Check v-if="team.isSelected" class="stroke-3 h-3.5 w-3.5" />
           </div>
 
           <div class="min-w-0 flex-1">
-            <h4 
+            <h4
               class="truncate text-sm font-semibold leading-snug"
               :class="team.isSelected ? 'text-slate-900' : 'text-slate-600'"
-              :title="team.naam"
-            >
+              :title="team.naam">
               {{ team.naam }}
             </h4>
-            <div class="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
-              <span v-if="team.ploegCode" class="rounded bg-amber-100/70 px-1 font-mono text-[10px] font-semibold text-amber-700">
+            <div
+              class="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
+              <span
+                v-if="team.ploegCode"
+                class="rounded bg-amber-100/70 px-1 font-mono text-[10px] font-semibold text-amber-700">
                 {{ team.ploegCode }}
               </span>
-              <span v-if="team.landID">
-                ({{ team.landID }})
-              </span>
+              <span v-if="team.landID"> ({{ team.landID }}) </span>
             </div>
           </div>
-        </div>
+        </button>
 
         <!-- Volgorde input voor geselecteerde ploegen -->
-        <div v-if="team.isSelected" class="flex shrink-0 items-center gap-1" title="Volgorde in de Tour">
+        <div
+          v-if="team.isSelected"
+          class="flex shrink-0 items-center gap-1"
+          title="Volgorde in de Tour">
           <span class="text-[10px] font-medium text-slate-400">Nr:</span>
-          <input 
+          <input
             type="number"
+            :disabled="savingTeam !== null"
             :value="team.volgorde"
             @change="e => updateTeamOrder(team, (e.target as HTMLInputElement).valueAsNumber)"
             class="shadow-2xs w-12 rounded border border-slate-200 bg-white px-1.5 py-1 text-center font-mono text-xs font-bold text-slate-800 focus:border-amber-500 focus:outline-none"
-            placeholder="-"
-          />
+            placeholder="-" />
         </div>
       </div>
     </div>
 
     <!-- Footer Summary -->
-    <div class="shadow-xs flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500">
+    <div
+      class="shadow-xs flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500">
       <span>
-        In <strong>{{ activeTour?.naam }}</strong> doen <strong>{{ tourTeams.length }}</strong> van de <strong>{{ allTeams.length }}</strong> ploegen mee.
+        In <strong>{{ activeTour?.naam }}</strong> doen
+        <strong>{{ tourTeams.length }}</strong> van de
+        <strong>{{ allTeams.length }}</strong> ploegen mee.
       </span>
-      <span class="text-slate-400">Klik op een kaart om deelname in/uit te schakelen</span>
+      <span class="text-slate-400"
+        >Klik op een kaart om deelname in/uit te schakelen</span
+      >
     </div>
 
+    </TourManagementDialog>
+
+    <TourManagementDialog
+      v-if="stagesModalOpen && activeTour"
+      :title="`${activeTour.naam}`"
+      :busy="savingStage"
+      @close="stagesModalOpen = false">
+      <StagesView :key="activeTour.tourID" management :tourID="activeTour.tourID" :tour-name="activeTour.naam" @saving="savingStage = $event" />
+    </TourManagementDialog>
+
     <!-- Tour Create / Edit Modal -->
-    <div v-if="tourModalOpen" class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div class="w-full max-w-md space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-        <div class="flex items-center justify-between border-b border-slate-200 pb-4">
+    <div
+      v-if="tourModalOpen"
+      class="backdrop-blur-xs fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div
+        class="w-full max-w-md space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div
+          class="flex items-center justify-between border-b border-slate-200 pb-4">
           <h3 class="text-lg font-bold text-slate-900">
-            {{ editingTour.tourID ? `Tour #${editingTour.tourID} bewerken` : 'Nieuwe Tour toevoegen' }}
+            {{
+              editingTour.tourID
+                ? `Tour #${editingTour.tourID} bewerken`
+                : "Nieuwe Tour toevoegen"
+            }}
           </h3>
-          <button @click="tourModalOpen = false" class="text-slate-400 hover:text-slate-700">
+          <button
+            @click="tourModalOpen = false"
+            class="text-slate-400 hover:text-slate-700">
             <X class="h-5 w-5" />
           </button>
         </div>
 
         <div class="space-y-4">
           <div>
-            <label class="mb-1 block text-xs font-semibold text-slate-700">Tournaam *</label>
-            <input 
-              v-model="editingTour.naam" 
-              class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" 
-              placeholder="bv. Tour 2026"
-            />
+            <label class="mb-1 block text-xs font-semibold text-slate-700"
+              >Tournaam *</label
+            >
+            <input
+              v-model="editingTour.naam"
+              class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none"
+              placeholder="bv. Tour 2026" />
           </div>
 
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="mb-1 block text-xs font-semibold text-slate-700">Startdatum</label>
-              <input 
-                v-model="editingTour.StartDatum" 
+              <label class="mb-1 block text-xs font-semibold text-slate-700"
+                >Startdatum</label
+              >
+              <input
+                v-model="editingTour.StartDatum"
                 type="date"
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" 
-              />
+                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" />
             </div>
             <div>
-              <label class="mb-1 block text-xs font-semibold text-slate-700">Einddatum</label>
-              <input 
-                v-model="editingTour.EindDatum" 
+              <label class="mb-1 block text-xs font-semibold text-slate-700"
+                >Einddatum</label
+              >
+              <input
+                v-model="editingTour.EindDatum"
                 type="date"
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" 
-              />
+                class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" />
             </div>
           </div>
         </div>
 
         <div class="flex justify-end gap-3 border-t border-slate-200 pt-4">
-          <button 
-            @click="tourModalOpen = false" 
-            class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
-          >
+          <button
+            @click="tourModalOpen = false"
+            class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">
             Annuleren
           </button>
-          <button 
-            @click="saveTour" 
-            class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400"
-          >
+          <button
+            @click="saveTour"
+            class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400">
             Opslaan
           </button>
         </div>

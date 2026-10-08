@@ -13,6 +13,9 @@ const createTourSchema = z.object({
 
 const updateTourSchema = createTourSchema.omit({ tourID: true }).partial();
 
+const toMariaDbDateTime = (value: string | null | undefined) =>
+  value == null ? null : value.replace('T', ' ').replace(/Z$/, '');
+
 toursRouter.get('/', async (_request, response, next) => {
   try {
     const rows = await pool.query('SELECT tourID, naam, StartDatum, EindDatum FROM tblTours ORDER BY tourID');
@@ -44,7 +47,7 @@ toursRouter.post('/', async (request, response, next) => {
     const payload = createTourSchema.parse(request.body);
     await pool.query(
       'INSERT INTO tblTours (tourID, naam, StartDatum, EindDatum) VALUES (?, ?, ?, ?)',
-      [payload.tourID, payload.naam ?? null, payload.StartDatum ?? null, payload.EindDatum ?? null]
+      [payload.tourID, payload.naam ?? null, toMariaDbDateTime(payload.StartDatum), toMariaDbDateTime(payload.EindDatum)]
     );
 
     response.status(201).json(payload);
@@ -68,8 +71,8 @@ toursRouter.put('/:tourID', async (request, response, next) => {
 
     const updatedTour = {
       naam: payload.naam !== undefined ? payload.naam : current.naam,
-      StartDatum: payload.StartDatum !== undefined ? payload.StartDatum : current.StartDatum,
-      EindDatum: payload.EindDatum !== undefined ? payload.EindDatum : current.EindDatum
+      StartDatum: payload.StartDatum !== undefined ? toMariaDbDateTime(payload.StartDatum) : current.StartDatum,
+      EindDatum: payload.EindDatum !== undefined ? toMariaDbDateTime(payload.EindDatum) : current.EindDatum
     };
 
     await pool.query(

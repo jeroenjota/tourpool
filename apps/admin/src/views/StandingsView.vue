@@ -15,7 +15,7 @@ interface Pool {
 interface Participant {
   deelnID: number;
   poolID: number;
-  roepnaam?: string | null;
+  ploegnaam?: string | null;
   vNaam?: string | null;
   tNaam?: string | null;
   aNaam?: string | null;
@@ -97,7 +97,7 @@ const participantRows = computed(() => {
       .join(' ');
     return {
       deelnID: participant.deelnID,
-      roepnaam: participant.roepnaam?.trim() || name || `Deelnemer #${participant.deelnID}`,
+      ploegnaam: participant.ploegnaam?.trim() || name || `Deelnemer #${participant.deelnID}`,
       ritPunten: Number(score?.ritPnt ?? 0),
       geelPunten: Number(score?.geelPnt ?? 0),
       groenPunten: Number(score?.groenPnt ?? 0),
@@ -119,7 +119,7 @@ const participantRows = computed(() => {
   }).sort((a, b) =>
     (a.totaalPlaats || Number.MAX_SAFE_INTEGER) - (b.totaalPlaats || Number.MAX_SAFE_INTEGER) ||
     b.totaalPunten - a.totaalPunten ||
-    a.roepnaam.localeCompare(b.roepnaam, 'nl', { sensitivity: 'base' })
+    a.ploegnaam.localeCompare(b.ploegnaam, 'nl', { sensitivity: 'base' })
   );
 });
 
@@ -283,12 +283,12 @@ const chartRows = computed(() => {
       const name = [participant.vNaam, participant.tNaam, participant.aNaam].filter(Boolean).join(' ');
       return {
         deelnID: participant.deelnID,
-        roepnaam: participant.roepnaam?.trim() || name || `Deelnemer #${participant.deelnID}`,
+        ploegnaam: participant.ploegnaam?.trim() || name || `Deelnemer #${participant.deelnID}`,
         segments,
         total: segments.reduce((sum, segment) => sum + segment.points, 0)
       };
     })
-    .sort((a, b) => a.roepnaam.localeCompare(b.roepnaam, 'nl', { sensitivity: 'base' }));
+    .sort((a, b) => a.ploegnaam.localeCompare(b.ploegnaam, 'nl', { sensitivity: 'base' }));
 });
 
 const niceStep = (rawStep: number) => {
@@ -307,7 +307,7 @@ const chart = computed(() => {
   const left = 12;
   const right = 2;
   const top = 6;
-  const longestName = Math.max(...chartRows.value.map(row => row.roepnaam.length), 4);
+  const longestName = Math.max(...chartRows.value.map(row => row.ploegnaam.length), 4);
   const labelHeight = Math.min(Math.max(longestName * 1.75 + 3, 15), 45);
   const axisY = height - labelHeight;
   const plotHeight = axisY - top;
@@ -485,11 +485,11 @@ const rankDescending = (scores: Array<{ deelnID: number; score: number }>) => {
 
 const participantName = (participant: Participant) => {
   const name = [participant.vNaam, participant.tNaam, participant.aNaam].filter(Boolean).join(' ');
-  return participant.roepnaam?.trim() || name || `Deelnemer #${participant.deelnID}`;
+  return participant.ploegnaam?.trim() || name || `Deelnemer #${participant.deelnID}`;
 };
 
-const compareNames = (a: { roepnaam: string }, b: { roepnaam: string }) =>
-  a.roepnaam.localeCompare(b.roepnaam, 'nl', { sensitivity: 'base' });
+const compareNames = (a: { ploegnaam: string }, b: { ploegnaam: string }) =>
+  a.ploegnaam.localeCompare(b.ploegnaam, 'nl', { sensitivity: 'base' });
 
 const stageResultRows = computed(() => {
   const stageNumber = selectedStageNumber.value;
@@ -503,7 +503,7 @@ const stageResultRows = computed(() => {
       const score = pointsByParticipant.get(participant.deelnID);
       return {
         deelnID: participant.deelnID,
-        roepnaam: participantName(participant),
+        ploegnaam: participantName(participant),
         categories: Object.fromEntries(
           allResultCategories.map(category => [category.key, Number(score?.[category.field] ?? 0)])
         ) as Record<CategoryKey, number>,
@@ -539,7 +539,7 @@ const overallResultRows = computed(() => {
     const stagePoint = latest.get(participant.deelnID);
     return {
       deelnID: participant.deelnID,
-      roepnaam: participantName(participant),
+      ploegnaam: participantName(participant),
       totals: total,
       geld: Number(stagePoint?.ttlGeld ?? 0)
     };
@@ -822,7 +822,7 @@ onMounted(async () => {
           <thead class="bg-slate-100 text-xs uppercase tracking-wide text-slate-600">
             <tr>
               <th scope="col" class="px-4 py-3">Plaats</th>
-              <th scope="col" class="px-4 py-3">Roepnaam</th>
+              <th scope="col" class="px-4 py-3">Ploegnaam</th>
               <th scope="col" class="px-4 py-3 text-right">RitPnt</th>
               <th v-for="category in jerseyCategories" :key="category.key" scope="col" class="px-4 py-3 text-right">
                 {{ category.field }}
@@ -844,7 +844,7 @@ onMounted(async () => {
               <td class="px-4 py-3 font-mono font-semibold text-slate-700">
                 {{ row.totaalPlaats || index + 1 }}
               </td>
-              <th scope="row" class="px-4 py-3 font-semibold text-slate-900">{{ row.roepnaam }}</th>
+              <th scope="row" class="px-4 py-3 font-semibold text-slate-900">{{ row.ploegnaam }}</th>
               <td class="px-4 py-3 text-right font-mono">{{ row.ritPunten }}</td>
               <td v-for="category in jerseyCategories" :key="category.key" class="px-4 py-3 text-right font-mono">
                 {{ row.jerseyPunten[category.key] }}
@@ -932,7 +932,7 @@ onMounted(async () => {
             font-size="2.8"
             fill="#172033"
           >
-            {{ bar.roepnaam }}
+            {{ bar.ploegnaam }}
           </text>
         </g>
       </svg>
@@ -1016,7 +1016,7 @@ onMounted(async () => {
             <tbody>
               <tr v-for="row in columnRows" :key="row.deelnID">
                 <td class="result-place">{{ row.plaats || '–' }}</td>
-                <td class="result-name">{{ row.roepnaam }}</td>
+                <td class="result-name">{{ row.ploegnaam }}</td>
                 <td v-for="category in resultCategories" :key="category.key">{{ row.categories[category.key] }}</td>
                 <td class="result-strong">{{ row.punten }}</td>
                 <td class="result-money" :class="{ 'result-strong': row.geld > 0 }">{{ row.geld > 0 ? formatMoney(row.geld) : '' }}</td>
@@ -1041,7 +1041,7 @@ onMounted(async () => {
               <tbody>
                 <tr v-for="row in columnRows" :key="row.deelnID">
                   <td class="result-place">{{ row.plaats }}</td>
-                  <td class="result-name">{{ row.roepnaam }}</td>
+                  <td class="result-name">{{ row.ploegnaam }}</td>
                   <td v-for="category in resultCategories" :key="category.key">
                     {{ row.totals[category.key] }}<span class="result-rank"> ({{ row.ranks[category.key] }})</span>
                   </td>
@@ -1081,7 +1081,7 @@ onMounted(async () => {
             <tbody>
               <tr v-for="row in columnRows" :key="row.deelnID">
                 <td class="result-place">{{ row.plaats }}</td>
-                <td class="result-name">{{ row.roepnaam }}</td>
+                <td class="result-name">{{ row.ploegnaam }}</td>
                 <td v-for="category in resultCategories" :key="category.key">
                   {{ row.totals[category.key] }}<span class="result-rank"> ({{ row.ranks[category.key] }})</span>
                 </td>

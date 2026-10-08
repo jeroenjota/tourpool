@@ -17,26 +17,88 @@ Tailwind-bronscan.
 
 ## Accounts en autorisatie
 
-Voer op bestaande databases eerst `apps/api/migrations/20261007_add_accounts.sql`
-uit. Deze voegt accounts en sessies toe en maakt adresnummers automatisch
-gegenereerd. De bestaande adressen en inschrijvingen blijven behouden.
+In de adminmodule opent **Tours** voor de geselecteerde tour een modal voor
+**Deelnemende tourploegen** (deelname en volgorde) en een voor **Touretappes**
+(etappes en rustdagen toevoegen/bewerken). Het menu **Uitslagen** blijft op
+`/stages` en is bedoeld voor daguitslagen en klassementstruien; etappebeheer
+staat uitsluitend bij Tours.
+Etappelijsten worden vanaf 1024 pixels beschikbare breedte over twee kolommen
+verdeeld, eerst van boven naar beneden links en daarna rechts. Bij minder ruimte
+blijft de lijst in een kolom.
+In de actiekolom van Touretappes kun je een etappe of rustdag verwijderen na
+bevestiging. De API blokkeert het verwijderen van etappes met uitslagen of
+deelnemerspunten; bestaande resultaten blijven behouden.
+De etappe-API geeft datums terug als `YYYY-MM-DD`, zonder tijdzone, zodat het
+openen en opslaan van een etappe of rustdag de kalenderdatum niet verschuift.
+
+### Zichtbaarheid van pools
+
+Voer op bestaande databases ook
+`apps/api/migrations/20261008_add_pool_visibility.sql` uit voordat je de nieuwe
+API gebruikt. Bestaande en nieuwe pools zijn standaard zichtbaar.
+In **Pools beheren** kun je de zichtbaarheid direct omschakelen of instellen
+bij het aanmaken/bewerken van een pool.
+Een onzichtbare pool verdwijnt volledig uit de deelnemersapp: ook bestaande
+inschrijvingen, renners en PDF's zijn via de user-API niet toegankelijk.
+Admins houden toegang en alle gegevens blijven bewaard. Zodra je de pool
+weer zichtbaar maakt, zijn de bestaande inschrijvingen opnieuw toegankelijk;
+de normale inschrijfperiode blijft bepalen of wijzigingen zijn toegestaan.
+
+### Accountregistratie
+
+Voer op bestaande databases achtereenvolgens de migraties
+`20261007_add_accounts.sql`, `20261008_add_account_usernames.sql` en
+`20261009_add_email_verification.sql` uit. Deze voegen accounts, sessies,
+gebruikersnamen en e-mailverificatie toe; bestaande accounts blijven bevestigd.
 Nieuwe databases bevatten deze structuur via `tourpool.sql`.
 
-Gebruikers registreren zichzelf met naam, e-mailadres en een wachtwoord van
-minimaal 12 tekens. Woonplaats en telefoon zijn optioneel. Registratie maakt
+Gebruikers registreren zichzelf met een unieke gebruikersnaam (3-32 letters,
+cijfers, punten, koppeltekens of underscores), naam, e-mailadres en een
+wachtwoord van minimaal 12 tekens. Inloggen kan met de gebruikersnaam of het
+e-mailadres. Woonplaats en telefoon zijn optioneel. Nieuwe accounts moeten
+eerst hun e-mailadres bevestigen via een link die 24 uur geldig is. De registratie
+stuurt daarnaast een melding naar `CONTACT_RECEIVER`; bestaande accounts blijven
+bevestigd na de migratie. Registratie is met een honeypotveld en rate limits
+tegen geautomatiseerde aanmeldingen beschermd. Onbevestigde accounts kunnen
+niet inloggen en verschijnen niet in de admin-accountkeuze. Registratie maakt
 altijd een **user** aan, met een nieuw adres. Bestaande adressen/inschrijvingen
 worden niet automatisch op e-mailadres gekoppeld: dat zou eigendom toekennen
 zonder controle. Bestaande inschrijvingen blijven door de admin beheerd.
+
+Configureer voor e-mail `CONTACT_RECEIVER`, `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, optioneel `SMTP_FROM`, en
+`PUBLIC_API_URL` in `apps/api/.env` (zie `.env.example`). De publieke API-URL
+moet eindigen op `/api`; verificatielinks gebruiken dit adres. SMTP-poort 465
+gebruikt `SMTP_SECURE=true`, poort 587 doorgaans `false`. Bewaar SMTP-gegevens
+alleen in de serveromgeving en commit ze nooit naar Git.
+
+Op piweb staan de gedeelde SMTP-instellingen, `DB_HOST` en `DB_PORT` in
+`/home/jeroen/config/shared.env`. Jota Tours, Golf, Tourpool en Laurierboom laden
+dit bestand bij het starten via de Node-preloader `/home/jeroen/config/load-shared.cjs`;
+deze leidt ook het oudere `SMTP_PASS` af van `SMTP_PASSWORD`.
+De Dynamic DNS-melder gebruikt een symlink naar hetzelfde bestand.
+Het oude `smtp.env` is een compatibiliteitslink; `load-smtp.cjs` verwijst naar de nieuwe loader.
+Bewaar de gedeelde instellingen daar, niet meer in de afzonderlijke server-`.env`-bestanden.
+Deze bestanden bevatten een comment met de locatie en de laadwijze.
+`CONTACT_RECEIVER`, `PUBLIC_API_URL`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` en
+accountinstellingen blijven per app.
+Al ingestelde procesvariabelen hebben voorrang op het centrale bestand.
+De configuratiemap heeft rechten `700`, het gedeelde bestand `600`.
+Na een wijziging: `pm2 restart jota-api gts-api tourpool-api laurierboom-api`.
+De Dynamic DNS-melder leest de instellingen bij elke uitvoering opnieuw.
+Het deployscript behoudt de preloader bij het starten/herstarten van Tourpool.
+Dit vereist Node.js 20.12 of nieuwer. Lokale ontwikkeling blijft `apps/api/.env` gebruiken.
+
 De admin kan een bestaande inschrijving handmatig koppelen via
 **Pools > Deelnemers > Bewerken > Koppelen aan gebruikersaccount**.
 Kies het reeds geregistreerde account en bevestig **Account koppelen**.
 Alleen die inschrijving krijgt het adres-ID van het gekozen account; andere
-inschrijvingen en het oude adres blijven behouden. Renners, roepnaam, punten
+inschrijvingen en het oude adres blijven behouden. Renners, ploegnaam, punten
 en betaalstatus veranderen niet. Persoonsgegevens op de inschrijving/PDF
 komen voortaan uit het gekozen account. Het oude account verliest toegang
-als een inschrijving opnieuw wordt gekoppeld. Een dubbele roepnaam binnen
-dezelfde pool/account wordt geweigerd: pas dan eerst de roepnaam aan.
-Koppelen staat los van **Opslaan** van roepnaam/betaling; sla die wijzigingen
+als een inschrijving opnieuw wordt gekoppeld. Een dubbele ploegnaam binnen
+dezelfde pool/account wordt geweigerd: pas dan eerst de ploegnaam aan.
+Koppelen staat los van **Opslaan** van ploegnaam/betaling; sla die wijzigingen
 zo nodig eerst op. Er worden nooit wachtwoorden in het accountoverzicht getoond.
 De adminroutes hiervoor zijn `GET /api/accounts` en
 `PUT /api/participants/:deelnID/account` met `accountID` en `expectedAdrID`;
@@ -52,6 +114,7 @@ npm run create-admin
 unset ADMIN_EMAIL ADMIN_PASSWORD
 ```
 
+Voor beheerders wordt het e-mailadres ook als gebruikersnaam ingesteld.
 In productie kan dit zonder ontwikkeldependencies met
 `node dist/scripts/createAdmin.js`. Het script overschrijft geen bestaande accounts.
 Er is geen standaardwachtwoord of publieke route om admin te worden.
@@ -63,7 +126,7 @@ De bestaande beheer-API is uitsluitend voor admins: ook reads van adressen,
 deelnemers en renners. De deelnemersapp gebruikt `/api/me/*`; elke opstelling
 en PDF is server-side beperkt tot het adres van de ingelogde gebruiker.
 Users kunnen meerdere ploegen per pool en in meerdere pools opslaan.
-Elke ploeg heeft binnen die gebruiker/pool een eigen roepnaam/ploegnaam.
+Elke ploeg heeft binnen die gebruiker/pool een eigen ploegnaam.
 De inschrijving opent op `StartInschr` om 00:00 (of direct wanneer deze ontbreekt)
 en loopt **tot en met `EindInschr`**: sluiten gebeurt om 00:00 op de volgende dag.
 De tourstart om **00:00 uur Europe/Amsterdam** blijft de uiterste grens, ook
@@ -79,7 +142,7 @@ er is geen databasemigratie nodig. Een einddatum voor de begindatum wordt geweig
 Een ploeg mag als concept worden opgeslagen. Voor een PDF is het ingestelde
 aantal renners inclusief reserves vereist. De volgorde bepaalt basisrenners
 en reserves. De PDF bevat de opgeslagen ploeg, inschrijvingsnummer, naam,
-roepnaam, e-mailadres, eventuele woonplaats/telefoon en inleg/betaalstatus.
+ploegnaam, e-mailadres, eventuele woonplaats/telefoon en inleg/betaalstatus.
 De PDF blijft na sluiting beschikbaar. De gebruiker levert deze in en betaalt
 bij de organisatie; de admin gebruikt het bestaande betaalveld bij
 **Pools > Deelnemers** om `Betaald` op true te zetten. Users kunnen dit veld
@@ -92,7 +155,7 @@ kan de gebruiker vanuit het pooloverzicht nog een ploeg invullen, in dezelfde
 of een andere pool. Een deelnemer maakt daarmee een inschrijving aan, geen
 nieuwe poolcompetitie; dat laatste blijft een adminfunctie.
 Bij **Mijn tourploegen** kiest de gebruiker een opgeslagen ploeg in een dropdown
-met roepnaam, poolnaam en inschrijvingsnummer. **Bekijken / wijzigen** opent
+met ploegnaam, poolnaam en inschrijvingsnummer. **Bekijken / wijzigen** opent
 die ploeg; **PDF downloaden** gebruikt dezelfde selectie. Na opslaan blijft
 de zojuist opgeslagen ploeg geselecteerd. Gesloten pools blijven alleen-lezen.
 

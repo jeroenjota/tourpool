@@ -14,6 +14,7 @@ import StandardPointsView from '../views/StandardPointsView.vue';
 import StandingsView from '../views/StandingsView.vue';
 import PointAllocationsView from '../views/PointAllocationsView.vue';
 import LoginView from '../views/LoginView.vue';
+import EmailTestView from '../views/EmailTestView.vue';
 import { auth, loadSession } from '@tourpool/client';
 
 const redirectToPoolPage = (page: string) => {
@@ -25,6 +26,7 @@ export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/login', name: 'login', component: LoginView },
+    { path: '/email-test', name: 'email-test', component: EmailTestView },
     {
       path: '/',
       name: 'dashboard',

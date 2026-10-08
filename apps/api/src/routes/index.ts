@@ -19,6 +19,7 @@ import { authenticate, requireAdmin } from '../auth.js';
 import { authRouter } from './auth.js';
 import { meRouter } from './me.js';
 import { accountsRouter } from './accounts.js';
+import { adminRouter } from './admin.js';
 
 export const apiRouter = Router();
 
@@ -52,6 +53,7 @@ apiRouter.use(authenticate);
 apiRouter.use('/me', meRouter);
 apiRouter.use(requireAdmin);
 apiRouter.use('/accounts', accountsRouter);
+apiRouter.use('/admin', adminRouter);
 apiRouter.use('/tours', toursRouter);
 apiRouter.use('/pools', poolsRouter);
 apiRouter.use('/addresses', addressesRouter);

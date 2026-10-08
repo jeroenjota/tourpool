@@ -19,6 +19,10 @@ test('Accounts and enrollment work against actual MariaDB in an isolated tempora
   let created = false;
   let apiPool;
   let server;
+  let emailService;
+  let originalSendVerification;
+  let originalSendRegistrationNotice;
+  const verificationTokens = [];
   const oldDatabase = process.env.DB_NAME;
   try {
     await connection.query(`CREATE DATABASE \`${database}\``);
@@ -35,9 +39,37 @@ test('Accounts and enrollment work against actual MariaDB in an isolated tempora
       const migration = await readFile(new URL(`../migrations/${filename}`, import.meta.url), 'utf8');
       for (const sql of migration.split(';').map(value => value.trim()).filter(Boolean)) await connection.query(sql);
     }
+    const legacyAdminAddress = await connection.query(
+      "INSERT INTO tblAdressen (vNaam, aNaam, email) VALUES ('Legacy', 'Admin', 'legacy-admin@example.test')"
+    );
+    await connection.query(
+      "INSERT INTO tblAccounts (adrID, email, passwordHash, role) VALUES (?, ?, ?, 'admin')",
+      [Number(legacyAdminAddress.insertId), 'legacy-admin@example.test', 'legacy-password-hash']
+    );
+    const usernameMigration = await readFile(
+      new URL('../migrations/20261008_add_account_usernames.sql', import.meta.url), 'utf8'
+    );
+    for (const sql of usernameMigration.split(';').map(value => value.trim()).filter(Boolean)) {
+      await connection.query(sql);
+    }
+    const emailMigration = await readFile(
+      new URL('../migrations/20261009_add_email_verification.sql', import.meta.url), 'utf8'
+    );
+    for (const sql of emailMigration.split(';').map(value => value.trim()).filter(Boolean)) {
+      await connection.query(sql);
+    }
+    const [legacyUsername] = await connection.query(
+      'SELECT username FROM tblAccounts WHERE email = ?', ['legacy-admin@example.test']
+    );
+    assert.equal(legacyUsername.username, 'legacy-admin@example.test');
     process.env.DB_NAME = database;
     const { pool } = await import('../src/db.ts');
     apiPool = pool;
+    ({ emailService } = await import('../src/email.ts'));
+    originalSendVerification = emailService.sendVerification;
+    originalSendRegistrationNotice = emailService.sendRegistrationNotice;
+    emailService.sendVerification = async (email, token) => verificationTokens.push({ email, token });
+    emailService.sendRegistrationNotice = async () => {};
     const { apiRouter } = await import('../src/routes/index.ts');
     const { errorHandler } = await import('../src/middleware/errorHandler.ts');
     const app = express();
@@ -52,19 +84,37 @@ test('Accounts and enrollment work against actual MariaDB in an isolated tempora
       }, body: body === undefined ? undefined : JSON.stringify(body)
     });
     const profile = { vNaam: 'Test', tNaam: '', aNaam: 'Deelnemer', plaats: '', tel: '' };
-    async function account(email) {
-      const registration = await request('/auth/register', 'POST', { email, password: 'test-password-for-accounts', profile });
+    async function account(email, username = email.split('@')[0]) {
+      const registration = await request('/auth/register', 'POST', {
+        username, email, password: 'test-password-for-accounts', profile
+      });
       assert.equal(registration.status, 201, await registration.text());
-      const login = await request('/auth/login', 'POST', { email, password: 'test-password-for-accounts' });
+      const verification = verificationTokens.at(-1);
+      assert.equal(verification.email, email);
+      const verified = await request(`/auth/verify-email?token=${verification.token}`);
+      assert.equal(verified.status, 200, await verified.text());
+      const login = await request('/auth/login', 'POST', { username, password: 'test-password-for-accounts' });
       assert.equal(login.status, 200);
       const body = await login.json();
+      assert.equal(body.account.username, username);
       return { ...body, cookie: login.headers.get('set-cookie').split(';')[0] };
     }
-    const user = await account('user@example.test');
-    const other = await account('other@example.test');
+    const user = await account('user@example.test', 'testuser');
+    const other = await account('other@example.test', 'otheruser');
     const admin = await account('admin@example.test');
+    for (const duplicate of [
+      { username: 'testuser', email: 'another@example.test' },
+      { username: 'anotheruser', email: 'user@example.test' }
+    ]) {
+      assert.equal((await request('/auth/register', 'POST', {
+        ...duplicate, password: 'test-password-for-accounts', profile
+      })).status, 409);
+    }
     await connection.query("UPDATE tblAccounts SET role = 'admin' WHERE accountID = ?", [admin.account.accountID]);
     assert.equal((await request('/auth/session', 'GET', undefined, admin)).status, 200);
+    assert.equal((await request('/auth/login', 'POST', {
+      email: 'user@example.test', password: 'test-password-for-accounts'
+    })).status, 200);
     assert.equal((await request('/participants', 'GET', undefined, user)).status, 403);
     assert.equal((await request('/participants')).status, 401);
     await connection.query("INSERT INTO tblTours (tourID, naam, StartDatum) VALUES (1, 'Tour test', '2099-07-04 00:00:00')");
@@ -78,11 +128,11 @@ test('Accounts and enrollment work against actual MariaDB in an isolated tempora
     assert.equal(pools[0].closesAt, '2099-07-03T22:00:00.000Z');
     const riders = await (await request('/me/pools/1/riders', 'GET', undefined, user)).json();
     assert.deepEqual(riders.map(r => r.rennerID), [1, 2]);
-    const payload = { poolID: 1, roepnaam: 'Test ploeg', riders: [1, 2] };
+    const payload = { poolID: 1, ploegnaam: 'Test ploeg', riders: [1, 2] };
     const saved = await request('/me/entries', 'POST', payload, user);
     assert.equal(saved.status, 201, await saved.clone().text());
     const { deelnID } = await saved.json();
-    assert.equal((await request('/me/entries', 'POST', { ...payload, roepnaam: 'Tweede ploeg' }, user)).status, 201);
+    assert.equal((await request('/me/entries', 'POST', { ...payload, ploegnaam: 'Tweede ploeg' }, user)).status, 201);
     assert.equal((await request('/me/entries', 'POST', payload, user)).status, 409);
     assert.equal((await request(`/me/entries/${deelnID}`, 'GET', undefined, other)).status, 404);
     assert.equal((await request(`/me/entries/${deelnID}`, 'PUT', payload, other)).status, 404);
@@ -97,14 +147,31 @@ test('Accounts and enrollment work against actual MariaDB in an isolated tempora
     assert.equal(roster.Betaald, 1);
     assert.deepEqual(roster.riders.map(r => [r.rennerID, r.positie]), [[2, 1], [1, 2]]);
     assert.equal((await request(`/me/entries/${deelnID}`, 'PUT', { ...payload, riders: [1, 1] }, user)).status, 400);
-    const profileUpdate = await request('/me/profile', 'PUT', { ...profile, plaats: 'Utrecht' }, user);
+    const profileUpdate = await request('/me/profile', 'PUT', {
+      ...profile, username: 'renamed-user', plaats: 'Utrecht'
+    }, user);
     assert.equal(profileUpdate.status, 200);
-    assert.equal((await (await request('/me/profile', 'GET', undefined, user)).json()).plaats, 'Utrecht');
+    assert.equal((await profileUpdate.json()).username, 'renamed-user');
+    const updatedProfile = await (await request('/me/profile', 'GET', undefined, user)).json();
+    assert.equal(updatedProfile.username, 'renamed-user');
+    assert.equal(updatedProfile.plaats, 'Utrecht');
+    assert.equal((await request('/auth/login', 'POST', {
+      username: 'renamed-user', password: 'test-password-for-accounts'
+    })).status, 200);
+    assert.equal((await request('/me/profile', 'PUT', {
+      ...profile, username: 'otheruser'
+    }, user)).status, 409);
+    const afterConflict = await (await request('/me/profile', 'GET', undefined, user)).json();
+    assert.equal(afterConflict.username, 'renamed-user');
+    assert.equal((await request('/auth/login', 'POST', {
+      username: 'testuser', password: 'test-password-for-accounts'
+    })).status, 401);
     // Admin linking transfers a legacy entry, not the contact or other entries.
     const accountsResponse = await request('/accounts', 'GET', undefined, admin);
     assert.equal(accountsResponse.status, 200);
     const accounts = await accountsResponse.json();
     assert.deepEqual(accounts.map(a => a.accountID).sort(), [user.account.accountID, other.account.accountID].sort());
+    assert.equal(accounts.find(a => a.accountID === user.account.accountID).username, 'testuser');
     assert.ok(accounts.every(a => !('passwordHash' in a)));
     assert.equal((await request('/accounts', 'GET', undefined, user)).status, 403);
     const legacyAddress = await connection.query(
@@ -129,7 +196,7 @@ test('Accounts and enrollment work against actual MariaDB in an isolated tempora
     assert.equal((await request(`/participants/${legacyID}/account`, 'PUT', { ...linkPayload, expectedAdrID: user.account.adrID }, admin)).status, 409);
     assert.equal((await request(`/participants/${legacyID}/account`, 'PUT', linkPayload, admin)).status, 200);
     const linked = await (await request(`/me/entries/${legacyID}`, 'GET', undefined, other)).json();
-    assert.equal(linked.roepnaam, 'Legacy ploeg');
+    assert.equal(linked.ploegnaam, 'Legacy ploeg');
     assert.equal(linked.Betaald, 1);
     assert.deepEqual(linked.riders.map(r => [r.rennerID, r.positie]), [[2, 1], [1, 2]]);
     assert.equal((await request(`/me/entries/${legacyID}/pdf`, 'GET', undefined, other)).status, 200);
@@ -138,7 +205,7 @@ test('Accounts and enrollment work against actual MariaDB in an isolated tempora
     assert.equal(untouched[0].adrID, legacyAdrID);
     assert.equal((await connection.query('SELECT adrID FROM tblAdressen WHERE adrID = ?', [legacyAdrID])).length, 1);
     // Conflicting names roll back and keep access with the previous owner.
-    await connection.query('UPDATE tblDeelnemers SET roepnaam = ? WHERE deelnID = ?', [payload.roepnaam, legacyID]);
+    await connection.query('UPDATE tblDeelnemers SET roepnaam = ? WHERE deelnID = ?', [payload.ploegnaam, legacyID]);
     assert.equal((await request(`/participants/${legacyID}/account`, 'PUT', {
       accountID: user.account.accountID, expectedAdrID: other.account.adrID
     }, admin)).status, 409);
@@ -214,6 +281,10 @@ test('Accounts and enrollment work against actual MariaDB in an isolated tempora
   } finally {
     if (server) await new Promise(resolve => server.close(resolve));
     if (apiPool) await apiPool.end();
+    if (emailService) {
+      emailService.sendVerification = originalSendVerification;
+      emailService.sendRegistrationNotice = originalSendRegistrationNotice;
+    }
     if (oldDatabase === undefined) delete process.env.DB_NAME;
     else process.env.DB_NAME = oldDatabase;
     if (created) await connection.query(`DROP DATABASE \`${database}\``);

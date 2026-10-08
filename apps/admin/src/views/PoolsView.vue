@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { apiFetch } from '../services/api';
 import { RouterLink } from 'vue-router';
-import { Plus, Trash2, Edit2, X, UserCheck, Trophy, Award, Sliders } from '@lucide/vue';
+import { Plus, Trash2, Edit2, X, UserCheck, Trophy, Award, Sliders, Eye, EyeOff } from '@lucide/vue';
 
 interface Pool {
   poolID: number;
@@ -11,6 +11,7 @@ interface Pool {
   Org?: string | null;
   StartInschr?: string | null;
   EindInschr?: string | null;
+  visibleToUsers: boolean | number;
 }
 
 interface PoolOption {
@@ -41,6 +42,7 @@ const loading = ref(true);
 const modalOpen = ref(false);
 const editingPool = ref<Partial<Pool> | null>(null);
 const savingPool = ref(false);
+const changingVisibility = ref<Set<number>>(new Set());
 const participants = ref<Participant[]>([]);
 const poolOptions = ref<PoolOption[]>([]);
 const stages = ref<Stage[]>([]);
@@ -141,13 +143,14 @@ onMounted(async () => {
 });
 
 const openCreateModal = () => {
-  editingPool.value = { tourID: tours.value[0]?.tourID || 1, Naam: '', Org: '' };
+  editingPool.value = { tourID: tours.value[0]?.tourID || 1, Naam: '', Org: '', visibleToUsers: true };
   modalOpen.value = true;
 };
 
 const openEditModal = (pool: Pool) => {
   editingPool.value = {
     ...pool,
+    visibleToUsers: Boolean(pool.visibleToUsers),
     StartInschr: pool.StartInschr?.slice(0, 10) || '',
     EindInschr: pool.EindInschr?.slice(0, 10) || ''
   };
@@ -169,7 +172,8 @@ const savePool = async () => {
       Naam: editingPool.value.Naam,
       Org: editingPool.value.Org || null,
       StartInschr: editingPool.value.StartInschr || null,
-      EindInschr: editingPool.value.EindInschr || null
+      EindInschr: editingPool.value.EindInschr || null,
+      visibleToUsers: Boolean(editingPool.value.visibleToUsers)
     };
 
     if (editingPool.value.poolID) {
@@ -202,6 +206,22 @@ const deletePool = async (id: number) => {
     alert(`Fout bij verwijderen: ${err instanceof Error ? err.message : err}`);
   }
 };
+
+const toggleVisibility = async (item: Pool) => {
+  if (changingVisibility.value.has(item.poolID)) return;
+  changingVisibility.value.add(item.poolID);
+  try {
+    const updated = await apiFetch<Pool>(`/pools/${item.poolID}`, {
+      method: 'PUT',
+      body: JSON.stringify({ visibleToUsers: !item.visibleToUsers })
+    });
+    item.visibleToUsers = updated.visibleToUsers;
+  } catch (err) {
+    alert(`Zichtbaarheid wijzigen mislukt: ${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    changingVisibility.value.delete(item.poolID);
+  }
+};
 </script>
 
 <template>
@@ -230,6 +250,17 @@ const deletePool = async (id: number) => {
         <div class="space-y-3">
           <span class="font-mono text-xs text-slate-400">Pool #{{ p.poolID }} (Tour #{{ p.tourID }})</span>
           <h3 class="text-lg font-bold text-slate-900">{{ p.Naam }}</h3>
+          <button
+            type="button"
+            :disabled="changingVisibility.has(p.poolID)"
+            :aria-pressed="Boolean(p.visibleToUsers)"
+            :aria-label="`${p.Naam}: ${p.visibleToUsers ? 'verbergen' : 'zichtbaar maken'} voor gebruikers`"
+            @click="toggleVisibility(p)"
+            class="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+            :class="p.visibleToUsers ? 'border-green-200 bg-green-50 text-green-800' : 'border-slate-300 bg-slate-100 text-slate-700'">
+            <component :is="p.visibleToUsers ? Eye : EyeOff" class="h-4 w-4" />
+            {{ changingVisibility.has(p.poolID) ? 'Opslaan...' : p.visibleToUsers ? 'Zichtbaar voor gebruikers' : 'Onzichtbaar voor gebruikers' }}
+          </button>
           <p class="text-xs text-slate-500">Organisator: <span class="font-semibold text-slate-800">{{ p.Org || 'Onbekend' }}</span></p>
           <p class="text-xs text-slate-600">
             Inschrijving:
@@ -374,6 +405,15 @@ const deletePool = async (id: number) => {
             </label>
           </div>
 
+          <div>
+            <label class="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <input v-model="editingPool!.visibleToUsers" type="checkbox" class="h-4 w-4 accent-amber-500" />
+              Zichtbaar voor gebruikers
+            </label>
+            <p class="mt-1 text-xs text-slate-600">
+              Bij onzichtbare pools kunnen gebruikers ook hun bestaande ploegen en PDF's niet openen. De gegevens blijven bewaard.
+            </p>
+          </div>
           <p v-if="!editingPool?.poolID" class="text-xs text-slate-600">
             De standaardpunten worden automatisch gekopieerd naar deze pool.
           </p>

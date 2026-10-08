@@ -14,8 +14,8 @@ async function main() {
       'INSERT INTO tblAdressen (vNaam, aNaam, email) VALUES (?, ?, ?)', ['Beheerder', 'Tourpool', email]
     );
     await connection.query(
-      "INSERT INTO tblAccounts (adrID, email, passwordHash, role) VALUES (?, ?, ?, 'admin')",
-      [Number(result.insertId), email, await hashPassword(password)]
+      "INSERT INTO tblAccounts (adrID, username, email, passwordHash, role) VALUES (?, ?, ?, ?, 'admin')",
+      [Number(result.insertId), email, email, await hashPassword(password)]
     );
     await connection.commit();
     console.log('Beheerdersaccount aangemaakt.');

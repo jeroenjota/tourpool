@@ -17,7 +17,8 @@ import {
   Award,
   ArrowLeft,
   Menu,
-  X
+  X,
+  Mail
 } from '@lucide/vue';
 
 const route = useRoute();
@@ -83,9 +84,10 @@ const navItems = [
   { name: 'Renners', path: '/riders', icon: Bike },
   { name: 'Ploegen', path: '/teams', icon: Shield },
   { name: 'Ploegopstellingen', path: '/team-riders', icon: Users },
-  { name: 'Etappes', path: '/stages', icon: MapPin },
+  { name: 'Uitslagen', path: '/stages', icon: MapPin },
   { name: 'Standaard Punten', path: '/standard-points', icon: Award },
   { name: 'Pools', path: '/pools', icon: Trophy },
+  { name: 'E-mail testen', path: '/email-test', icon: Mail },
 ];
 
 const poolNavItems = [

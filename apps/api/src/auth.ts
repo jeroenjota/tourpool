@@ -10,6 +10,7 @@ export const sessionLifetime = 12 * 60 * 60 * 1000;
 export interface Account {
   accountID: number;
   adrID: number;
+  username: string;
   email: string;
   role: 'admin' | 'user';
 }
@@ -35,6 +36,9 @@ export const profileSchema = z.object({
   plaats: z.string().trim().max(24).default(''),
   tel: z.string().trim().max(12).default('')
 }).strict();
+export const usernameSchema = z.string().trim().min(3).max(32)
+  .regex(/^[a-zA-Z0-9._-]+$/)
+  .transform(value => value.toLowerCase());
 export const emailSchema = z.string().trim().email().max(64).transform(value => value.toLowerCase());
 export const passwordSchema = z.string().min(12).max(128);
 export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -86,7 +90,7 @@ export const authenticate: RequestHandler = async (request, response, next) => {
       return;
     }
     const rows = await pool.query(
-      `SELECT a.accountID, a.adrID, a.email, a.role, s.csrfToken
+      `SELECT a.accountID, a.adrID, a.username, a.email, a.role, s.csrfToken
        FROM tblSessions s JOIN tblAccounts a ON a.accountID = s.accountID
        WHERE s.tokenHash = ? AND s.expiresAt > UTC_TIMESTAMP()`, [hashToken(cookie)]
     ) as Array<Account & { csrfToken: string }>;
@@ -95,7 +99,10 @@ export const authenticate: RequestHandler = async (request, response, next) => {
       response.status(401).json({ message: 'Je sessie is verlopen. Log opnieuw in.' });
       return;
     }
-    request.account = { accountID: account.accountID, adrID: account.adrID, email: account.email, role: account.role };
+    request.account = {
+      accountID: account.accountID, adrID: account.adrID, username: account.username,
+      email: account.email, role: account.role
+    };
     request.session = { tokenHash: hashToken(cookie), csrfToken: account.csrfToken };
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && request.get('X-CSRF-Token') !== account.csrfToken) {
       response.status(403).json({ message: 'Ongeldige beveiligingstoken. Log opnieuw in.' });
