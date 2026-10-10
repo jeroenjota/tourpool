@@ -76,6 +76,25 @@ export async function downloadPdf(deelnID: number) {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+export async function openParticipantPdf(deelnID: number) {
+  // Het tabblad direct openen, anders blokkeert de browser het als pop-up na de await.
+  const tab = window.open('', '_blank');
+  try {
+    const response = await request(`/participants/${deelnID}/pdf`);
+    const url = URL.createObjectURL(await response.blob());
+    if (tab) tab.location.href = url;
+    else {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `tourpool-inschrijving-${deelnID}.pdf`;
+      link.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (error) {
+    tab?.close();
+    throw error;
+  }
+}
 export async function changeUsername(username: string) {
   const result = await apiFetch<{ username: string }>('/me/username', {
     method: 'PUT', body: JSON.stringify({ username })

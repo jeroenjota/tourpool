@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { pool } from '../db.js';
 import { HttpError, isDuplicate } from '../auth.js';
 import { recalculatePoolPoints } from './stageResults.js';
+import { participantPdf } from './me.js';
 
 export const participantsRouter = Router();
 
@@ -123,6 +124,8 @@ participantsRouter.get('/', async (request, response, next) => {
     next(error);
   }
 });
+
+participantsRouter.get('/:deelnID/pdf', participantPdf);
 
 participantsRouter.get('/:deelnID', async (request, response, next) => {
   try {

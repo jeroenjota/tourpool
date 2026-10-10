@@ -32,6 +32,30 @@ function drawPdfLine(doc: InstanceType<typeof PDFDocument>, color = '#a16207') {
   doc.save().moveTo(left, doc.y).lineTo(right, doc.y).lineWidth(1).strokeColor(color).stroke().restore();
   doc.moveDown(0.5);
 }
+// Gecentreerde tekst gevolgd door een (aangevinkt) vakje; het vinkje wordt getekend omdat Lato geen ✓ heeft.
+function writePaidLine(doc: InstanceType<typeof PDFDocument>, text: string, checked: boolean) {
+  doc.font(lato);
+  const left = doc.page.margins.left;
+  const available = doc.page.width - left - doc.page.margins.right;
+  const size = doc.currentLineHeight() * 0.8;
+  const gap = size / 2;
+  const x = left + (available - doc.widthOfString(text) - gap - size) / 2;
+  const y = doc.y;
+  doc.text(text, x, y, { lineBreak: false });
+  const boxX = x + doc.widthOfString(text) + gap;
+  const boxY = y + (doc.currentLineHeight() - size) / 2;
+  doc.save().lineWidth(1).rect(boxX, boxY, size, size).stroke();
+  if (checked) {
+    doc.lineWidth(1.8).lineCap('round').lineJoin('round')
+      .moveTo(boxX + size * 0.2, boxY + size * 0.55)
+      .lineTo(boxX + size * 0.42, boxY + size * 0.78)
+      .lineTo(boxX + size * 0.82, boxY + size * 0.25)
+      .stroke();
+  }
+  doc.restore();
+  doc.x = left;
+  doc.y = y + doc.currentLineHeight(true);
+}
 function writePdfText(doc: InstanceType<typeof PDFDocument>, text: string, { heading = false, lineGap, align }: PdfTextOptions = {}) {
   const textOptions = { ...(lineGap === undefined ? {} : { lineGap }), ...(align ? { align } : {}) };
   if (!heading) {
@@ -306,6 +330,45 @@ meRouter.get('/entries/:deelnID/pdf', async (request, response, next) => {
   } finally { connection?.release(); }
 });
 
+// Beheer: PDF van elke deelname; toegang tot de pool wordt al door poolScope gecontroleerd.
+export const participantPdf: RequestHandler = async (request, response, next) => {
+  try {
+    const deelnID = idSchema.parse(request.params.deelnID);
+    const rows = await pool.query(
+      `SELECT d.deelnID, d.poolID, d.roepnaam AS ploegnaam, d.Betaald, d.gast, d.adrID,
+        d.aangemaakt + INTERVAL ? HOUR AS gastDeadline,
+        (SELECT ac.email FROM tblAccounts ac WHERE ac.adrID = d.adrID ORDER BY ac.accountID LIMIT 1) AS accountEmail
+       FROM tblDeelnemers d WHERE d.deelnID = ?`, [guestEntryLifetimeHours, deelnID]
+    ) as Array<Entry & { gast: number | null; adrID: number; gastDeadline: Date | null; accountEmail: string | null }>;
+    const entry = rows[0];
+    if (!entry) throw new HttpError(404, 'Deelname niet gevonden.');
+    const pools = await pool.query(`${poolSelect} WHERE p.poolID = ?`, [entry.poolID]) as EnrollmentPool[];
+    const p = pools[0];
+    if (!p) throw new HttpError(404, 'Pool niet gevonden.');
+    const profiles = await pool.query(profileSelect, [entry.adrID]) as Profile[];
+    const profile = profiles[0];
+    if (!profile) throw new HttpError(404, 'Persoon niet gevonden.');
+    const riders = await pool.query(
+      `SELECT dr.rennerID, dr.positie, r.vnaam, r.tnaam, r.anaam, pr.Rugnummer, pl.naam AS ploegNaam
+       FROM tblDeelnemRenners dr JOIN tblRenners r ON r.rennerID = dr.rennerID
+       LEFT JOIN tblPloegRenners pr ON pr.tourID = ? AND pr.rennerID = dr.rennerID
+       LEFT JOIN tblPloegen pl ON pl.ploegID = pr.ploegID
+       WHERE dr.deelnID = ? ORDER BY dr.positie, dr.rennerID`, [p.tourID, deelnID]
+    ) as Rider[];
+    const guestDeadline = entry.gast && !entry.Betaald && entry.gastDeadline ? new Date(entry.gastDeadline) : undefined;
+    const buffer = await renderEntryPdf({
+      deelnID, p, entry, profile, email: entry.accountEmail || profile.email || null, riders, guestDeadline
+    });
+    response.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="tourpool-inschrijving-${deelnID}.pdf"`,
+      'Cache-Control': 'no-store'
+    }).send(buffer);
+  } catch (error) {
+    next(error);
+  }
+};
+
 interface EntryPdfData {
   deelnID: number; p: EnrollmentPool; entry: Entry; profile: Profile; email: string | null; riders: Rider[];
   guestDeadline?: Date;
@@ -313,9 +376,13 @@ interface EntryPdfData {
 function dropOffAddress(p: EnrollmentPool) {
   const street = [p.orgStraat, p.orgHuisnummer].filter(Boolean).join(' ');
   const town = [p.orgPostcode, p.orgPlaats].filter(Boolean).join(' ');
-  const contact = [p.orgTel && `tel. ${p.orgTel}`, p.orgEmail].filter(Boolean).join(', ');
+  const contact = [p.orgTel && `tel. ${p.orgTel}`, p.orgEmail].filter(Boolean).join(' / ');
   if (!street && !town && !contact) return null;
-  return [p.Org, street, town, contact].filter(Boolean).join(', ');
+  return [street, town, contact].filter(Boolean).join('\n');
+}
+
+function poolOrg(p: EnrollmentPool){
+  return p.Org || 'de organisatie';
 }
 
 async function renderEntryPdf({ deelnID, p, entry, profile, email, riders, guestDeadline }: EntryPdfData) {
@@ -343,8 +410,9 @@ async function renderEntryPdf({ deelnID, p, entry, profile, email, riders, guest
     writePdfText(doc, `${p.Org || 'Organisatie'} - ${p.Naam}`, { heading: true, align: 'center' });
     doc.moveDown();
     doc.fontSize(16)
-    writePdfText(doc, `Naam: ${[profile.vNaam, profile.tNaam, profile.aNaam].filter(Boolean).join(' ')} ${email ? ` email:${email}` : ''} ${profile.tel ?? ''}`,{heading: true, align: 'center'});
-    writePdfText(doc, `Inschrijfnummer: ${deelnID} | Inleg: EUR ${Number(p.inleg ?? 0).toFixed(2)} | Betaald: ${entry.Betaald ? 'OK' : 'Nog niet'}`,{align: 'center'});
+    writePdfText(doc, `Pool van: ${[profile.vNaam, profile.tNaam, profile.aNaam].filter(Boolean).join(' ')}`,{heading: true, align: 'center'});
+    writePdfText(doc, `${email ? `email:${email}` : ''} ${profile.tel ?? ''}`,{heading: true, align: 'center'});
+    writePaidLine(doc, `Inleg: EUR ${Number(p.inleg ?? 0).toFixed(2)} | Betaald:`, Boolean(entry.Betaald));
     if (guestDeadline) {
       doc.moveDown(0.5).fillColor('#b91c1c').fontSize(12);
       writePdfText(doc, 'LET OP: deze ploeg doet pas mee nadat de inleg is betaald.', { heading: true, align: 'center' });
@@ -382,10 +450,19 @@ async function renderEntryPdf({ deelnID, p, entry, profile, email, riders, guest
     drawPdfLine(doc);
     doc.moveDown().fontSize(10);
     const dropOff = dropOffAddress(p);
-    writePdfText(doc, dropOff
-      ? `Lever dit formulier in en betaal de inleg bij: ${dropOff}. Alleen de organisatie bevestigt de betaling.`
-      : 'Lever dit formulier in bij de organisatie en betaal daar de inleg. Alleen de organisatie bevestigt de betaling.');
-    writePdfText(doc, `Gegenereerd: ${new Date().toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam' })}`);
+    const org = poolOrg(p); 
+    if (!entry.Betaald) {
+    writePdfText(doc,`Lever dit formulier in en betaal de inleg bij:`, { align: 'center' });
+    } else {
+      writePdfText(doc,`Veel plezier met de pool. Controleer de stand en je positie elke dag bij:`, { align: 'center' });
+    }
+    doc.moveDown().fontSize(16);
+    writePdfText(doc,  org ? `${org}`:``, { align: 'center' , heading: true });
+    doc.fontSize(12);
+    writePdfText(doc,  dropOff ? `${dropOff}.`:``, { align: 'center' , heading: false});
+    doc.moveDown();
+    doc.moveDown().fontSize(10);
+    writePdfText(doc, `Formulier afgedrukt: ${new Date().toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam' })}`, { align: 'center' });
     doc.end();
     return pdf;
 }

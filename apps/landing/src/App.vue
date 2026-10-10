@@ -20,7 +20,7 @@ const base = import.meta.env.BASE_URL;
           Stel je eigen tourploeg samen en strijd mee om de punten
         </p>
       </div>
-      <div class="mt-4 rounded-2xl border border-yellow-700 bg-yellow-100 p-4 px-8 text-center">
+      <div class="mt-4 rounded-2xl border border-yellow-700 bg-amber-300 p-4 px-8 text-center">
       <img :src="`${base}tour_logo.png`" alt="Jota" class="p-4h-14 w-auto md:h-20" />
       </div>
     </header>

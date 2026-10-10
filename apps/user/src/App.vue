@@ -456,13 +456,13 @@ async function pdf(entry: Entry) {
         class="mx-auto my-4 max-w-sm rounded-xl border border-yellow-700 bg-yellow-100 p-3 md:max-w-xl md:p-5">
         <h2 class="mb-2 text-xl font-bold">Meedoen zonder account?</h2>
         <p class="my-2">
-          Vul je tourploeg in en druk het formulier af om in te leveren bij de
-          organisatie. Zonder account kun je je ploeg achteraf niet meer
+          Vul je tourploeg in en druk het formulier 2 keer af; één voor jezelf en één om in te leveren bij de
+          organisatie.<br />Zonder account kun je je ploeg achteraf niet meer
           bekijken of wijzigen.
         </p>
         <p class="my-2 font-semibold text-red-800">
-          Je ploeg doet pas mee nadat de inleg is betaald. Niet betaald binnen
-          48 uur? Dan wordt de inschrijving automatisch verwijderd.
+          Je ploeg doet pas mee nadat de inleg is betaald.<br />Niet betaald binnen
+          48 uur? Dan wordt de inschrijving verwijderd.
         </p>
         <button class="btn max-[600px]:min-h-11 m-1" @click="startGuest">
           Inschrijven zonder account

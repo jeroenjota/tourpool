@@ -82,6 +82,7 @@ export const poolRules = {
   participants: [
     { method: 'GET', path: /^\/?$/, pools: request => [toPoolID(request.query.poolID)] },
     { method: 'GET', path: /^\/(\d+)\/?$/, pools: async (_request, match) => [await poolOfParticipant(match[1])] },
+    { method: 'GET', path: /^\/(\d+)\/pdf\/?$/, pools: async (_request, match) => [await poolOfParticipant(match[1])] },
     { method: 'POST', path: /^\/?$/, pools: request => [toPoolID(request.body?.poolID)] },
     { method: 'PUT', path: /^\/(\d+)\/account\/?$/, pools: async (_request, match) => [await poolOfParticipant(match[1])] },
     {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { apiFetch } from '../services/api';
-import { auth } from '@tourpool/client';
+import { auth, openParticipantPdf } from '@tourpool/client';
 import { useActivePoolStore } from '../stores/activePool';
 import { loadPrintFonts } from '../services/printFonts';
 import { 
@@ -20,7 +20,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Printer
+  Printer,
+  FileText
 } from '@lucide/vue';
 
 interface Pool {
@@ -871,6 +872,14 @@ const deleteParticipant = async (p: Participant) => {
     alert(`Fout bij verwijderen: ${err instanceof Error ? err.message : err}`);
   }
 };
+
+const openEntryPdf = async (p: Participant) => {
+  try {
+    await openParticipantPdf(p.deelnID);
+  } catch (err) {
+    alert(`Fout bij openen inschrijfformulier: ${err instanceof Error ? err.message : err}`);
+  }
+};
 </script>
 
 <template>
@@ -1100,6 +1109,13 @@ const deleteParticipant = async (p: Participant) => {
           <!-- Acties -->
           <div class="min-w-0" title="Acties">
             <div class="flex items-center gap-1">
+            <button
+              @click="openEntryPdf(p)"
+              class="rounded p-0.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              title="Inschrijfformulier (PDF) openen"
+            >
+              <FileText class="h-3.5 w-3.5" />
+            </button>
             <button
               @click="openEditModal(p)"
               class="rounded p-0.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
