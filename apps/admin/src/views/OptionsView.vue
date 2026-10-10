@@ -246,7 +246,7 @@ const saveOptions = async () => {
         v-if="options"
         @click="saveOptions"
         :disabled="saving || !isPercentageValid"
-        class="shadow-xs flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50">
+        class="btn flex items-center gap-2 text-sm">
         <Save class="h-4 w-4" />
         <span>{{ saving ? "Opslaan..." : "Wijzigingen opslaan" }}</span>
       </button>

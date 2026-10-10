@@ -142,7 +142,7 @@ const formatTeamName = (team: Team) => {
         </button>
         <button 
           @click="openCreateModal" 
-          class="shadow-xs flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400"
+          class="btn flex items-center gap-2 text-sm"
         >
           <Plus class="h-4 w-4" />
           <span>Nieuwe ploeg</span>
@@ -243,13 +243,13 @@ const formatTeamName = (team: Team) => {
         <div class="flex justify-end gap-3 border-t border-slate-200 pt-4">
           <button 
             @click="modalOpen = false" 
-            class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+            class="btn text-sm"
           >
             Annuleren
           </button>
           <button 
             @click="saveTeam" 
-            class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400"
+            class="btn text-sm"
           >
             Opslaan
           </button>

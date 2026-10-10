@@ -4,6 +4,7 @@ import cors from 'cors';
 import { apiRouter } from './routes/index.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { allowedOrigins, checkOrigin } from './auth.js';
+import { scheduleGuestCleanup } from './guestCleanup.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
@@ -22,4 +23,5 @@ app.use(errorHandler);
 
 app.listen(port, () => {
   console.log(`Tourpool API running on http://localhost:${port}`);
+  scheduleGuestCleanup();
 });

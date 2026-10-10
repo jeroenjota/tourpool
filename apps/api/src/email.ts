@@ -78,7 +78,37 @@ const verificationLink = (token: string) => {
   return link.toString();
 };
 
+// The participant app handles ?reset=TOKEN; defaults to /deelnemen/ next to the API in production.
+const passwordResetLink = (token: string) => {
+  const configured = process.env.PUBLIC_APP_URL?.trim();
+  const fallback = process.env.NODE_ENV === 'production'
+    ? requiredSetting('PUBLIC_API_URL').replace(/\/+$/, '').replace(/\/api$/, '/deelnemen/')
+    : 'http://localhost:5174/';
+  let link: URL;
+  try {
+    link = new URL(configured || fallback);
+  } catch {
+    throw new HttpError(503, 'PUBLIC_APP_URL moet een geldige URL zijn.');
+  }
+  if (process.env.NODE_ENV === 'production' && link.protocol !== 'https:') {
+    throw new HttpError(503, 'PUBLIC_APP_URL moet in productie HTTPS gebruiken.');
+  }
+  link.searchParams.set('reset', token);
+  return link.toString();
+};
+
 export const emailService = {
+  async sendPasswordReset(email: string, token: string) {
+    const link = passwordResetLink(token);
+    await createTransport().sendMail({
+      from: fromAddress(),
+      to: email,
+      subject: 'Nieuw wachtwoord voor je Tourpool-account',
+      text: `Er is een nieuw wachtwoord aangevraagd voor je Tourpool-account. Kies een nieuw wachtwoord via deze link:\n${link}\n\nDe link is 1 uur geldig. Heb je dit niet aangevraagd? Dan kun je deze e-mail negeren.`,
+      html: `<p>Er is een nieuw wachtwoord aangevraagd voor je Tourpool-account.</p><p><a href="${escapeHtml(link)}">Nieuw wachtwoord kiezen</a></p><p>De link is 1 uur geldig. Heb je dit niet aangevraagd? Dan kun je deze e-mail negeren.</p>`
+    });
+  },
+
   async sendVerification(email: string, token: string) {
     const link = verificationLink(token);
     await createTransport().sendMail({

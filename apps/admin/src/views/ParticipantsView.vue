@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { apiFetch } from '../services/api';
+import { auth } from '@tourpool/client';
 import { useActivePoolStore } from '../stores/activePool';
 import { loadPrintFonts } from '../services/printFonts';
 import { 
@@ -52,6 +53,8 @@ interface Participant {
   email?: string | null;
   ploegnaam?: string | null;
   Betaald?: number | boolean | null;
+  gast?: number | boolean | null;
+  gastSecondenOver?: number | string | null;
 }
 
 interface UserAccount {
@@ -107,6 +110,10 @@ interface ParticipantRiderItem {
   ploegCode?: string | null;
 }
 
+// Poolbeheerders hebben geen adresboek: zij kiezen een geregistreerd account of voeren een nieuwe persoon in.
+const isAdmin = computed(() => auth.account?.role === 'admin');
+const NEW_PERSON_ID = -1;
+const pendingNewAddress = ref<Omit<Address, 'adrID'> | null>(null);
 const pools = ref<Pool[]>([]);
 const activePoolStore = useActivePoolStore();
 const selectedPoolID = ref<number | null>(activePoolStore.activePoolID);
@@ -186,7 +193,11 @@ const fetchInitialData = async () => {
   try {
     const [poolsRes, addressesRes] = await Promise.all([
       apiFetch<Pool[]>('/pools'),
-      apiFetch<Address[]>('/addresses')
+      isAdmin.value
+        ? apiFetch<Address[]>('/addresses')
+        : apiFetch<UserAccount[]>('/accounts').then(accounts => accounts.map(a => ({
+          adrID: a.adrID, vNaam: a.vNaam, tNaam: a.tNaam, aNaam: a.aNaam, email: a.email, plaats: null, tel: null
+        })))
     ]);
     pools.value = poolsRes;
     allAddresses.value = addressesRes;
@@ -232,7 +243,7 @@ const fetchPoolData = async () => {
     }
 
     // Haal alle geselecteerde renners van de deelnemers in deze pool op
-    const allPartRiders = await apiFetch<ParticipantRiderItem[]>('/participant-riders');
+    const allPartRiders = await apiFetch<ParticipantRiderItem[]>(`/participant-riders?poolID=${selectedPoolID.value}`);
     const map: Record<number, ParticipantRiderItem[]> = {};
     for (const pr of allPartRiders) {
       if (!map[pr.deelnID]) map[pr.deelnID] = [];
@@ -371,6 +382,7 @@ const filteredParticipants = computed(() => {
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase().trim();
     list = list.filter(p => 
+      String(p.deelnID) === q.replace(/^#/, '') ||
       (p.aNaam && p.aNaam.toLowerCase().includes(q)) ||
       (p.vNaam && p.vNaam.toLowerCase().includes(q)) ||
       (p.ploegnaam && p.ploegnaam.toLowerCase().includes(q)) ||
@@ -407,6 +419,12 @@ const participantColumns = computed(() => {
 });
 
 // Statistieken
+// Niet-betaalde gastinschrijvingen worden 48 uur na aanmaken door de API verwijderd (elk uur gecontroleerd).
+const guestDeadline = (p: Participant) => {
+  if (p.gastSecondenOver == null) return '';
+  const deadline = new Date(Date.now() + Number(p.gastSecondenOver) * 1000);
+  return deadline.toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+};
 const paidCount = computed(() => participants.value.filter(p => !!p.Betaald).length);
 const unpaidCount = computed(() => participants.value.length - paidCount.value);
 const inlegBedrag = computed(() => poolOption.value?.inleg ?? 10.00);
@@ -546,6 +564,10 @@ const sortSelectedRiders = (
 // --- MODALS OPENEN & SLUITEN ---
 
 const openAddModal = () => {
+  if (pendingNewAddress.value) {
+    allAddresses.value = allAddresses.value.filter(a => a.adrID !== NEW_PERSON_ID);
+    pendingNewAddress.value = null;
+  }
   addForm.value = {
     adrID: sortedAddresses.value[0]?.adrID || null,
     ploegnaam: '',
@@ -584,6 +606,17 @@ const addAddress = async () => {
     tel: form.tel.trim() || null,
     email: form.email.trim() || null
   };
+
+  if (!isAdmin.value) {
+    pendingNewAddress.value = address;
+    allAddresses.value = [
+      ...allAddresses.value.filter(a => a.adrID !== NEW_PERSON_ID),
+      { adrID: NEW_PERSON_ID, ...address }
+    ];
+    addForm.value.adrID = NEW_PERSON_ID;
+    addAddressModalOpen.value = false;
+    return;
+  }
 
   savingNewAddress.value = true;
   try {
@@ -624,13 +657,19 @@ const addParticipant = async () => {
       method: 'POST',
       body: JSON.stringify({
         poolID: selectedPoolID.value,
-        adrID: Number(addForm.value.adrID),
+        ...(addForm.value.adrID === NEW_PERSON_ID && pendingNewAddress.value
+          ? { newAddress: pendingNewAddress.value }
+          : { adrID: Number(addForm.value.adrID) }),
         ploegnaam: trimmedPloegnaam || null,
         Betaald: addForm.value.Betaald ? 1 : 0,
         riders: addForm.value.selectedRiders
       })
     });
     addModalOpen.value = false;
+    if (pendingNewAddress.value) {
+      allAddresses.value = allAddresses.value.filter(a => a.adrID !== NEW_PERSON_ID);
+      pendingNewAddress.value = null;
+    }
     await fetchPoolData();
   } catch (err) {
     alert(`Fout bij toevoegen deelnemer: ${err instanceof Error ? err.message : err}`);
@@ -840,7 +879,7 @@ const deleteParticipant = async (p: Participant) => {
     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div>
         <h2 class="text-xl font-bold text-slate-900">Deelnemers</h2>
-        <p class="text-xs text-slate-500">Kies uit het adresboek en stel hun rennersploeg samen</p>
+        <p class="text-xs text-slate-500">{{ isAdmin ? 'Kies uit het adresboek' : 'Kies een account of voeg een nieuwe persoon toe' }} en stel hun rennersploeg samen</p>
       </div>
 
       <!-- Knoppen rechts -->
@@ -866,7 +905,7 @@ const deleteParticipant = async (p: Participant) => {
         <button
           @click="printParticipantRosters"
           :disabled="loading || participants.length === 0"
-          class="shadow-xs flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          class="btn flex items-center gap-2 text-sm"
           title="Deelnemers en renners als PDF afdrukken"
         >
           <Printer class="h-4 w-4" />
@@ -882,7 +921,7 @@ const deleteParticipant = async (p: Participant) => {
         <button 
           @click="openAddModal" 
           :disabled="!selectedPoolID || allAddresses.length === 0"
-          class="shadow-xs flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+          class="btn flex items-center gap-2 text-sm"
         >
           <Plus class="h-4 w-4" />
           <span>Deelnemer toevoegen</span>
@@ -941,7 +980,7 @@ const deleteParticipant = async (p: Participant) => {
         <Search class="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
         <input 
           v-model="searchQuery" 
-          placeholder="Zoek op naam, ploegnaam, plaats of e-mail..."
+          placeholder="Zoek op naam, ploegnaam, plaats, e-mail of inschrijfnummer..."
           class="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:border-amber-500 focus:bg-white focus:outline-none"
         />
       </div>
@@ -1050,6 +1089,12 @@ const deleteParticipant = async (p: Participant) => {
               <span class="h-1.5 w-1.5 rounded-full" :class="p.Betaald ? 'bg-emerald-500' : 'bg-amber-500'"></span>
               <span class="truncate">{{ p.Betaald ? 'Betaald' : 'Open' }}</span>
             </button>
+            <span
+              v-if="p.gast && !p.Betaald"
+              class="mt-0.5 block truncate text-[10px] text-red-700"
+              :title="'Ingeschreven zonder account. Wordt verwijderd als hij niet voor deze tijd betaald is.'">
+              Gast, vervalt {{ guestDeadline(p) }}
+            </span>
           </div>
 
           <!-- Acties -->
@@ -1097,7 +1142,7 @@ const deleteParticipant = async (p: Participant) => {
           <!-- Basisgegevens -->
           <div class="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5 sm:grid-cols-2">
             <div>
-              <label class="mb-1 block text-xs font-semibold text-slate-700">Selecteer adres uit adresboek *</label>
+              <label class="mb-1 block text-xs font-semibold text-slate-700">{{ isAdmin ? 'Selecteer adres uit adresboek *' : 'Kies een geregistreerd account of voeg een nieuwe persoon toe *' }}</label>
               <div class="flex gap-2">
                 <select
                   v-model="addForm.adrID"
@@ -1105,16 +1150,16 @@ const deleteParticipant = async (p: Participant) => {
                 >
                   <option :value="null" disabled>Kies een persoon...</option>
                   <option v-for="a in sortedAddresses" :key="a.adrID" :value="a.adrID">
-                    {{ formatFullName(a) }} {{ a.plaats ? `(${a.plaats})` : '' }}
+                    {{ formatFullName(a) }} {{ a.adrID === NEW_PERSON_ID ? '(nieuw)' : a.plaats ? `(${a.plaats})` : isAdmin ? '' : a.email ? `(${a.email})` : '' }}
                   </option>
                 </select>
                 <button
                   type="button"
                   @click="openAddAddressModal"
-                  class="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                  class="btn flex shrink-0 items-center gap-1 text-xs"
                 >
                   <Plus class="h-4 w-4" />
-                  Nieuw adres
+                  {{ isAdmin ? 'Nieuw adres' : 'Nieuwe persoon' }}
                 </button>
               </div>
             </div>
@@ -1252,8 +1297,8 @@ const deleteParticipant = async (p: Participant) => {
         </div>
 
         <div class="flex shrink-0 justify-end gap-3 border-t border-slate-200 pt-4">
-          <button @click="addModalOpen = false" class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Annuleren</button>
-          <button @click="addParticipant" class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400">Deelnemer Opslaan</button>
+          <button @click="addModalOpen = false" class="btn text-sm">Annuleren</button>
+          <button @click="addParticipant" class="btn text-sm">Deelnemer Opslaan</button>
         </div>
       </div>
     </div>
@@ -1385,11 +1430,11 @@ const deleteParticipant = async (p: Participant) => {
         </div>
 
         <div class="flex shrink-0 justify-end gap-3 border-t border-slate-200 pt-4">
-          <button @click="manageRidersModalOpen = false" class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Annuleren</button>
+          <button @click="manageRidersModalOpen = false" class="btn text-sm">Annuleren</button>
           <button 
             @click="saveManagingRiders" 
             :disabled="savingRiders"
-            class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50"
+            class="btn text-sm"
           >
             {{ savingRiders ? 'Opslaan...' : 'Opstelling Opslaan' }}
           </button>
@@ -1447,8 +1492,8 @@ const deleteParticipant = async (p: Participant) => {
         </fieldset>
 
         <div class="flex justify-end gap-3 border-t border-slate-200 pt-4">
-          <button :disabled="linkingAccount" @click="editModalOpen = false" class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Annuleren</button>
-          <button :disabled="linkingAccount" @click="saveParticipant" class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400">Opslaan</button>
+          <button :disabled="linkingAccount" @click="editModalOpen = false" class="btn text-sm">Annuleren</button>
+          <button :disabled="linkingAccount" @click="saveParticipant" class="btn text-sm">Opslaan</button>
         </div>
       </div>
     </div>
@@ -1458,8 +1503,8 @@ const deleteParticipant = async (p: Participant) => {
       <form @submit.prevent="addAddress" class="w-full max-w-md space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
         <div class="flex items-center justify-between border-b border-slate-200 pb-4">
           <div>
-            <h3 class="text-lg font-bold text-slate-900">Nieuw adres toevoegen</h3>
-            <p class="text-xs text-slate-500">Het adres wordt opgeslagen in het centrale adresboek.</p>
+            <h3 class="text-lg font-bold text-slate-900">{{ isAdmin ? 'Nieuw adres toevoegen' : 'Nieuwe persoon toevoegen' }}</h3>
+            <p class="text-xs text-slate-500">{{ isAdmin ? 'Het adres wordt opgeslagen in het centrale adresboek.' : 'De persoon wordt opgeslagen zodra je de deelnemer toevoegt.' }}</p>
           </div>
           <button type="button" @click="addAddressModalOpen = false" class="text-slate-400 hover:text-slate-700">
             <X class="h-5 w-5" />
@@ -1500,9 +1545,9 @@ const deleteParticipant = async (p: Participant) => {
         </div>
 
         <div class="flex justify-end gap-3 border-t border-slate-200 pt-4">
-          <button type="button" @click="addAddressModalOpen = false" class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Annuleren</button>
-          <button type="submit" :disabled="savingNewAddress" class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50">
-            {{ savingNewAddress ? 'Opslaan...' : 'Adres opslaan' }}
+          <button type="button" @click="addAddressModalOpen = false" class="btn text-sm">Annuleren</button>
+          <button type="submit" :disabled="savingNewAddress" class="btn text-sm">
+            {{ savingNewAddress ? 'Opslaan...' : isAdmin ? 'Adres opslaan' : 'Persoon gebruiken' }}
           </button>
         </div>
       </form>

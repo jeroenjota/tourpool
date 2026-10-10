@@ -12,6 +12,12 @@ export interface EnrollmentPool {
   tourID: number;
   Naam: string | null;
   Org: string | null;
+  orgStraat?: string | null;
+  orgHuisnummer?: string | null;
+  orgPostcode?: string | null;
+  orgPlaats?: string | null;
+  orgEmail?: string | null;
+  orgTel?: string | null;
   tourNaam: string;
   tourStart: string | null;
   registrationStart: string | null;

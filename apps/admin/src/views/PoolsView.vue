@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { apiFetch } from '../services/api';
+import { auth } from '@tourpool/client';
 import { RouterLink } from 'vue-router';
 import { Plus, Trash2, Edit2, X, UserCheck, Trophy, Award, Sliders, Eye, EyeOff } from '@lucide/vue';
 
@@ -9,9 +10,27 @@ interface Pool {
   tourID: number;
   Naam: string;
   Org?: string | null;
+  orgID?: number | null;
+  orgStraat?: string | null;
+  orgHuisnummer?: string | null;
+  orgPostcode?: string | null;
+  orgPlaats?: string | null;
+  orgEmail?: string | null;
+  orgTel?: string | null;
   StartInschr?: string | null;
   EindInschr?: string | null;
   visibleToUsers: boolean | number;
+}
+
+interface Organisation {
+  orgID?: number;
+  naam: string;
+  straat: string | null;
+  huisnummer: string | null;
+  postcode: string | null;
+  plaats: string | null;
+  email: string | null;
+  tel: string | null;
 }
 
 interface PoolOption {
@@ -36,6 +55,7 @@ interface Stage {
   etappeNr?: number | null;
 }
 
+const isAdmin = computed(() => auth.account?.role === 'admin');
 const pools = ref<Pool[]>([]);
 const tours = ref<{ tourID: number; naam: string }[]>([]);
 const loading = ref(true);
@@ -46,19 +66,61 @@ const changingVisibility = ref<Set<number>>(new Set());
 const participants = ref<Participant[]>([]);
 const poolOptions = ref<PoolOption[]>([]);
 const stages = ref<Stage[]>([]);
+const organisations = ref<Organisation[]>([]);
+const emptyOrganisation = (): Organisation => ({ naam: '', straat: '', huisnummer: '', postcode: '', plaats: '', email: '', tel: '' });
+// null = geen organisatie, 0 = nieuwe organisatie.
+const selectedOrgID = ref<number | null>(null);
+const orgForm = ref<Organisation>(emptyOrganisation());
+const orgFields = [
+  { key: 'straat', label: 'Straat', class: 'col-span-2 md:col-span-3' },
+  { key: 'huisnummer', label: 'Huisnr.', class: 'col-span-1' },
+  { key: 'postcode', label: 'Postcode', class: 'col-span-1' },
+  { key: 'plaats', label: 'Plaats', class: 'col-span-1 md:col-span-3' },
+  { key: 'tel', label: 'Telefoon', class: 'col-span-2' },
+  { key: 'email', label: 'E-mail', class: 'col-span-2' }
+] as const;
+
+const fetchOrganisations = async () => {
+  organisations.value = await apiFetch<Organisation[]>('/organisations');
+};
+
+const selectOrganisation = () => {
+  const org = organisations.value.find(item => item.orgID === selectedOrgID.value);
+  orgForm.value = org ? { ...org } : emptyOrganisation();
+};
+
+const formatOrgAddress = (p: Pool) => [
+  [p.orgStraat, p.orgHuisnummer].filter(Boolean).join(' '),
+  [p.orgPostcode, p.orgPlaats].filter(Boolean).join(' '),
+  p.orgTel,
+  p.orgEmail
+].filter(Boolean).join(' · ');
 
 const fetchPools = async () => {
   loading.value = true;
   try {
-    const [poolsData, participantData, optionData, stageData] = await Promise.all([
-      apiFetch<Pool[]>('/pools'),
-      apiFetch<Participant[]>('/participants'),
-      apiFetch<PoolOption[]>('/options'),
-      apiFetch<Stage[]>('/stages')
-    ]);
+    if (isAdmin.value) {
+      const [poolsData, participantData, optionData, stageData] = await Promise.all([
+        apiFetch<Pool[]>('/pools'),
+        apiFetch<Participant[]>('/participants'),
+        apiFetch<PoolOption[]>('/options'),
+        apiFetch<Stage[]>('/stages')
+      ]);
+      pools.value = poolsData;
+      participants.value = participantData;
+      poolOptions.value = optionData;
+      stages.value = stageData.filter(stage => stage.etappeNr != null);
+      return;
+    }
+    // Poolbeheerders mogen alleen gegevens per eigen pool opvragen.
+    const [poolsData, stageData] = await Promise.all([apiFetch<Pool[]>('/pools'), apiFetch<Stage[]>('/stages')]);
+    const perPool = await Promise.all(poolsData.map(pool => Promise.all([
+      apiFetch<Participant[]>(`/participants?poolID=${pool.poolID}`),
+      apiFetch<PoolOption[]>(`/options?poolID=${pool.poolID}`)
+    ])));
     pools.value = poolsData;
-    participants.value = participantData;
-    poolOptions.value = optionData;
+    participants.value = perPool.flatMap(([items]) => items);
+    poolOptions.value = perPool.flatMap(([, options]) => options);
     stages.value = stageData.filter(stage => stage.etappeNr != null);
   } catch (err) {
     console.error('Error fetching pools:', err);
@@ -134,8 +196,12 @@ const formatEnrollmentDate = (value: string) => {
 };
 
 onMounted(async () => {
+  if (!isAdmin.value) {
+    await fetchPools();
+    return;
+  }
   try {
-    tours.value = await apiFetch<typeof tours.value>('/tours');
+    [tours.value] = await Promise.all([apiFetch<typeof tours.value>('/tours'), fetchOrganisations()]);
   } catch (err) {
     console.error(err);
   }
@@ -144,6 +210,9 @@ onMounted(async () => {
 
 const openCreateModal = () => {
   editingPool.value = { tourID: tours.value[0]?.tourID || 1, Naam: '', Org: '', visibleToUsers: true };
+  const lastOrgID = pools.value.find(item => item.orgID)?.orgID ?? null;
+  selectedOrgID.value = organisations.value.some(org => org.orgID === lastOrgID) ? lastOrgID : (organisations.value.length ? null : 0);
+  selectOrganisation();
   modalOpen.value = true;
 };
 
@@ -154,6 +223,9 @@ const openEditModal = (pool: Pool) => {
     StartInschr: pool.StartInschr?.slice(0, 10) || '',
     EindInschr: pool.EindInschr?.slice(0, 10) || ''
   };
+  selectedOrgID.value = pool.orgID ?? (pool.Org ? 0 : null);
+  selectOrganisation();
+  if (!pool.orgID && pool.Org) orgForm.value.naam = pool.Org;
   modalOpen.value = true;
 };
 
@@ -165,12 +237,28 @@ const savePool = async () => {
     return;
   }
 
+  if (selectedOrgID.value !== null && !orgForm.value.naam.trim()) {
+    alert('Vul de naam van de organisatie in.');
+    return;
+  }
+
   savingPool.value = true;
   try {
+    // De organisatie wordt apart bewaard, zodat hij bij een volgende pool opnieuw te kiezen is.
+    let orgID: number | null = null;
+    if (selectedOrgID.value !== null) {
+      const body = JSON.stringify(orgForm.value);
+      const saved = selectedOrgID.value
+        ? await apiFetch<Organisation>(`/organisations/${selectedOrgID.value}`, { method: 'PUT', body })
+        : await apiFetch<Organisation>('/organisations', { method: 'POST', body });
+      orgID = saved.orgID ?? selectedOrgID.value;
+      await fetchOrganisations();
+    }
     const payload = {
       tourID: Number(editingPool.value.tourID),
       Naam: editingPool.value.Naam,
-      Org: editingPool.value.Org || null,
+      Org: orgID ? orgForm.value.naam.trim() : null,
+      orgID,
       StartInschr: editingPool.value.StartInschr || null,
       EindInschr: editingPool.value.EindInschr || null,
       visibleToUsers: Boolean(editingPool.value.visibleToUsers)
@@ -228,17 +316,22 @@ const toggleVisibility = async (item: Pool) => {
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h2 class="text-xl font-bold text-slate-900">Pools beheren</h2>
+        <h2 class="text-xl font-bold text-slate-900">{{ isAdmin ? 'Pools beheren' : 'Mijn pools' }}</h2>
         <p class="text-xs text-slate-500">Overzicht van poolcompetities en inschrijfperiodes</p>
       </div>
       <button 
+        v-if="isAdmin"
         @click="openCreateModal" 
-        class="shadow-xs flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400"
+        class="btn flex items-center gap-2 text-sm"
       >
         <Plus class="h-4 w-4" />
         <span>Nieuwe pool</span>
       </button>
     </div>
+
+    <p v-if="!loading && !pools.length" class="text-sm text-slate-700">
+      {{ isAdmin ? 'Er zijn nog geen pools.' : 'Er zijn nog geen pools aan jouw account gekoppeld. Vraag de beheerder om je toe te voegen.' }}
+    </p>
 
     <!-- Grid -->
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -251,6 +344,7 @@ const toggleVisibility = async (item: Pool) => {
           <span class="font-mono text-xs text-slate-400">Pool #{{ p.poolID }} (Tour #{{ p.tourID }})</span>
           <h3 class="text-lg font-bold text-slate-900">{{ p.Naam }}</h3>
           <button
+            v-if="isAdmin"
             type="button"
             :disabled="changingVisibility.has(p.poolID)"
             :aria-pressed="Boolean(p.visibleToUsers)"
@@ -261,7 +355,10 @@ const toggleVisibility = async (item: Pool) => {
             <component :is="p.visibleToUsers ? Eye : EyeOff" class="h-4 w-4" />
             {{ changingVisibility.has(p.poolID) ? 'Opslaan...' : p.visibleToUsers ? 'Zichtbaar voor gebruikers' : 'Onzichtbaar voor gebruikers' }}
           </button>
-          <p class="text-xs text-slate-500">Organisator: <span class="font-semibold text-slate-800">{{ p.Org || 'Onbekend' }}</span></p>
+          <p class="text-xs text-slate-500">
+            Organisator: <span class="font-semibold text-slate-800">{{ p.Org || 'Onbekend' }}</span>
+            <span v-if="formatOrgAddress(p)" class="block">Inleveradres: {{ formatOrgAddress(p) }}</span>
+          </p>
           <p class="text-xs text-slate-600">
             Inschrijving:
             <span class="font-semibold text-slate-800">
@@ -334,7 +431,7 @@ const toggleVisibility = async (item: Pool) => {
           </div>
         </div>
 
-        <div class="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-3">
+        <div v-if="isAdmin" class="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-3">
           <button 
             @click="openEditModal(p)" 
             class="rounded p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
@@ -385,14 +482,36 @@ const toggleVisibility = async (item: Pool) => {
               </select>
             </div>
           </div>
-          <div>
-            <label class="mb-1 block text-base font-semibold text-slate-700">Organisator</label>
-            <input 
-              v-model="editingPool!.Org" 
-              class="w-full rounded-lg border border-slate-500 bg-slate-50 px-3 py-2 text-base text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none" 
-              placeholder="bv. Jeroen"
-            />
-          </div>
+          <fieldset class="space-y-3 rounded-lg border border-slate-300 p-3">
+            <legend class="px-1 text-base font-semibold text-slate-700">Organisator en inleveradres</legend>
+            <select
+              v-model="selectedOrgID"
+              @change="selectOrganisation"
+              aria-label="Organisatie"
+              class="w-full rounded-lg border border-slate-500 bg-slate-50 px-3 py-2 text-base text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none"
+            >
+              <option :value="null">Geen organisatie</option>
+              <option v-for="org in organisations" :key="org.orgID" :value="org.orgID">{{ org.naam }}</option>
+              <option :value="0">+ Nieuwe organisatie</option>
+            </select>
+            <div v-if="selectedOrgID !== null" class="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <label class="col-span-2 text-sm font-semibold text-slate-700 md:col-span-4">
+                Naam *
+                <input v-model="orgForm.naam" class="mt-1 w-full rounded-lg border border-slate-500 bg-white px-2 py-1.5 text-base font-normal" placeholder="bv. Café de Laurierboom" />
+              </label>
+              <label v-for="field in orgFields" :key="field.key" class="text-sm font-semibold text-slate-700" :class="field.class">
+                {{ field.label }}
+                <input
+                  v-model="orgForm[field.key]"
+                  :type="field.key === 'email' ? 'email' : field.key === 'tel' ? 'tel' : 'text'"
+                  class="mt-1 w-full rounded-lg border border-slate-500 bg-white px-2 py-1.5 text-base font-normal"
+                />
+              </label>
+              <p v-if="selectedOrgID" class="col-span-2 text-xs text-slate-600 md:col-span-4">
+                Wijzigingen gelden voor alle pools van deze organisatie.
+              </p>
+            </div>
+          </fieldset>
 
           <div class="flex flex-col justify-around gap-2 border-t border-slate-200 pt-4 text-center md:flex-row">
             <label class="mb-3 block text-base font-semibold text-slate-700">
@@ -420,8 +539,8 @@ const toggleVisibility = async (item: Pool) => {
         </div>
 
         <div class="flex justify-end gap-3 border-t border-slate-200 pt-4">
-          <button @click="modalOpen = false" class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">Annuleren</button>
-          <button @click="savePool" :disabled="savingPool" class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50">{{ savingPool ? 'Opslaan...' : 'Opslaan' }}</button>
+          <button @click="modalOpen = false" class="btn text-sm">Annuleren</button>
+          <button @click="savePool" :disabled="savingPool" class="btn text-sm">{{ savingPool ? 'Opslaan...' : 'Opslaan' }}</button>
         </div>
       </div>
     </div>

@@ -1,7 +1,9 @@
 import { reactive } from 'vue';
 
+export type Role = 'admin' | 'poolbeheerder' | 'user';
+export const isStaff = (account: Account | null) => account?.role === 'admin' || account?.role === 'poolbeheerder';
 export interface Account {
-  accountID: number; adrID: number; username: string; email: string; role: 'admin' | 'user';
+  accountID: number; adrID: number; username: string; email: string; role: Role;
 }
 export interface Profile {
   username: string; email: string; vNaam: string; tNaam: string; aNaam: string; plaats: string; tel: string;
@@ -73,4 +75,13 @@ export async function downloadPdf(deelnID: number) {
   link.download = `tourpool-inschrijving-${deelnID}.pdf`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+export async function changeUsername(username: string) {
+  const result = await apiFetch<{ username: string }>('/me/username', {
+    method: 'PUT', body: JSON.stringify({ username })
+  });
+  if (auth.account) auth.account.username = result.username;
+}
+export async function changePassword(currentPassword: string, newPassword: string) {
+  await apiFetch('/auth/password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
 }

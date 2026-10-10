@@ -19,6 +19,7 @@ interface Participant {
   vNaam?: string | null;
   tNaam?: string | null;
   aNaam?: string | null;
+  Betaald?: number | boolean | null;
 }
 
 interface Stage {
@@ -147,7 +148,7 @@ const fetchStagePoints = async (stageNumber: number | null, version = requestVer
 
   loadingPoints.value = true;
   try {
-    const result = await apiFetch<ParticipantPoints[]>(`/participant-points?etappeNr=${stageNumber}`);
+    const result = await apiFetch<ParticipantPoints[]>(`/participant-points?poolID=${activePoolStore.activePoolID}&etappeNr=${stageNumber}`);
     if (version === requestVersion && pointsVersion === pointsRequestVersion) points.value = result;
   } catch (error) {
     if (version === requestVersion && pointsVersion === pointsRequestVersion) {
@@ -197,7 +198,8 @@ const loadActivePool = async (poolID: number) => {
         ])
     );
 
-    participants.value = participantData;
+    // Alleen betaalde ploegen tellen mee in de stand.
+    participants.value = participantData.filter(participant => !!participant.Betaald);
     stages.value = stageData;
     stageResults.value = resultData;
     if (!availableStages.value.some(stage => stage.etappeNr === selectedStageNumber.value)) {
@@ -361,7 +363,7 @@ const printPointsChart = async () => {
   preparingChart.value = true;
   errorMessage.value = '';
   try {
-    chartPoints.value = await apiFetch<ParticipantPoints[]>('/participant-points');
+    chartPoints.value = await apiFetch<ParticipantPoints[]>(`/participant-points?poolID=${activePool.value.poolID}`);
   } catch (error) {
     errorMessage.value = `Fout bij laden van de grafiekgegevens: ${error instanceof Error ? error.message : String(error)}`;
     return;
@@ -672,7 +674,7 @@ const printStageResult = async () => {
   errorMessage.value = '';
   try {
     const [pointsData, riderResults, options] = await Promise.all([
-      apiFetch<ParticipantPoints[]>('/participant-points'),
+      apiFetch<ParticipantPoints[]>(`/participant-points?poolID=${activePool.value.poolID}`),
       apiFetch<StageRiderResult[]>(`/stage-results?tourID=${activePool.value.tourID}&etappeNr=${selectedStageNumber.value}`),
       apiFetch<PoolOptionLimits>(`/options/${activePool.value.poolID}`).catch(() => null)
     ]);
@@ -758,7 +760,7 @@ onMounted(async () => {
           type="button"
           @click="printPointsChart"
           :disabled="loading || preparingChart || !selectedStageNumber || participants.length === 0"
-          class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          class="btn flex items-center gap-2 text-sm"
           title="Grafiek met gestapelde etappepunten per deelnemer als PDF afdrukken"
         >
           <BarChart3 class="h-4 w-4" />
@@ -768,7 +770,7 @@ onMounted(async () => {
           type="button"
           @click="printStageResult"
           :disabled="loading || preparingResult || !selectedStageNumber || participants.length === 0"
-          class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          class="btn flex items-center gap-2 text-sm"
           title="Etappeuitslag en algemeen klassement als PDF afdrukken"
         >
           <FileText class="h-4 w-4" />
@@ -778,7 +780,7 @@ onMounted(async () => {
           type="button"
           @click="recalculateAllStages"
           :disabled="loading || recalculating || !activePool"
-          class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          class="btn flex items-center gap-2 text-sm"
           title="Punten, totalen en prijzengeld van alle etappes opnieuw berekenen"
         >
           <Calculator class="h-4 w-4" :class="{ 'animate-pulse': recalculating }" />

@@ -10,6 +10,7 @@ const createPoolSchema = z.object({
   tourID: z.number().int(),
   Naam: z.string().max(255).nullable().optional(),
   Org: z.string().max(255).nullable().optional(),
+  orgID: z.number().int().positive().nullable().optional(),
   StartInschr: enrollmentDateSchema.nullable().optional(),
   EindInschr: enrollmentDateSchema.nullable().optional(),
   visibleToUsers: z.boolean().optional()
@@ -20,20 +21,40 @@ const updatePoolSchema = createPoolSchema.partial();
 const toMariaDbDateTime = (value: string | null | undefined) =>
   value ? `${value} 00:00:00` : null;
 
+// Bij een gekoppelde organisatie is Org altijd de naam van die organisatie.
+async function organisationName(orgID: number | null | undefined) {
+  if (!orgID) return null;
+  const rows = await pool.query('SELECT naam FROM tblOrganisaties WHERE orgID = ?', [orgID]) as Array<{ naam: string }>;
+  if (!rows[0]) throw new HttpError(400, 'Organisatie niet gevonden.');
+  return rows[0].naam;
+}
+
 const validatePeriod = (start: string | null | undefined, end: string | null | undefined) => {
   if (start && end && start > end) {
     throw new HttpError(400, 'De einddatum van de inschrijving mag niet voor de begindatum liggen.');
   }
 };
 
-poolsRouter.get('/', async (_request, response, next) => {
+poolsRouter.get('/', async (request, response, next) => {
   try {
+    const managed = request.managedPoolIDs;
+    if (managed && managed.length === 0) {
+      response.json([]);
+      return;
+    }
     const rows = await pool.query(`
       SELECT
         p.poolID,
         p.tourID,
         p.Naam,
         p.Org,
+        p.orgID,
+        org.straat AS orgStraat,
+        org.huisnummer AS orgHuisnummer,
+        org.postcode AS orgPostcode,
+        org.plaats AS orgPlaats,
+        org.email AS orgEmail,
+        org.tel AS orgTel,
         p.visibleToUsers,
         DATE_FORMAT(p.StartInschr, '%Y-%m-%d') AS StartInschr,
         DATE_FORMAT(p.EindInschr, '%Y-%m-%d') AS EindInschr,
@@ -41,8 +62,10 @@ poolsRouter.get('/', async (_request, response, next) => {
         t.StartDatum AS tourStartDatum
       FROM tblPools p
       LEFT JOIN tblTours t ON t.tourID = p.tourID
+      LEFT JOIN tblOrganisaties org ON org.orgID = p.orgID
+      ${managed ? `WHERE p.poolID IN (${managed.map(() => '?').join(', ')})` : ''}
       ORDER BY COALESCE(t.StartDatum, '9999-12-31') ASC, p.poolID DESC
-    `);
+    `, managed ?? []);
     response.json(rows);
   } catch (error) {
     next(error);
@@ -52,7 +75,7 @@ poolsRouter.get('/', async (_request, response, next) => {
 poolsRouter.get('/:poolID', async (request, response, next) => {
   try {
     const poolID = Number(request.params.poolID);
-    const rows = await pool.query(`SELECT poolID, tourID, Naam, Org, visibleToUsers,
+    const rows = await pool.query(`SELECT poolID, tourID, Naam, Org, orgID, visibleToUsers,
       DATE_FORMAT(StartInschr, '%Y-%m-%d') AS StartInschr,
       DATE_FORMAT(EindInschr, '%Y-%m-%d') AS EindInschr
       FROM tblPools WHERE poolID = ?`, [poolID]);
@@ -75,6 +98,7 @@ poolsRouter.post('/', async (request, response, next) => {
   try {
     const payload = createPoolSchema.parse(request.body);
     validatePeriod(payload.StartInschr, payload.EindInschr);
+    const orgName = await organisationName(payload.orgID);
     await connection.beginTransaction();
     // Get the last options for the most recently created pool
     const optionRows = await connection.query(`
@@ -107,8 +131,8 @@ poolsRouter.post('/', async (request, response, next) => {
     const lastOptions = optionRows[0];
     // Add new pool
     const result = await connection.query(
-      'INSERT INTO tblPools (tourID, Naam, Org, StartInschr, EindInschr, visibleToUsers) VALUES (?, ?, ?, ?, ?, ?)',
-      [payload.tourID, payload.Naam ?? null, payload.Org ?? null, toMariaDbDateTime(payload.StartInschr), toMariaDbDateTime(payload.EindInschr), payload.visibleToUsers ?? true]
+      'INSERT INTO tblPools (tourID, Naam, Org, orgID, StartInschr, EindInschr, visibleToUsers) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [payload.tourID, payload.Naam ?? null, orgName ?? payload.Org ?? null, payload.orgID ?? null, toMariaDbDateTime(payload.StartInschr), toMariaDbDateTime(payload.EindInschr), payload.visibleToUsers ?? true]
     );
     const poolID = Number((result as { insertId: number | bigint }).insertId);
     await connection.query(
@@ -157,6 +181,7 @@ poolsRouter.post('/', async (request, response, next) => {
 
     response.status(201).json({
       ...payload,
+      Org: orgName ?? payload.Org ?? null,
       visibleToUsers: payload.visibleToUsers ?? true,
       poolID
     });
@@ -173,11 +198,11 @@ poolsRouter.put('/:poolID', async (request, response, next) => {
     const poolID = Number(request.params.poolID);
     const payload = updatePoolSchema.parse(request.body);
 
-    const rows = await pool.query(`SELECT poolID, tourID, Naam, Org, visibleToUsers,
+    const rows = await pool.query(`SELECT poolID, tourID, Naam, Org, orgID, visibleToUsers,
       DATE_FORMAT(StartInschr, '%Y-%m-%d') AS StartInschr,
       DATE_FORMAT(EindInschr, '%Y-%m-%d') AS EindInschr
       FROM tblPools WHERE poolID = ?`, [poolID]) as Array<{
-        poolID: number; tourID: number; Naam: string | null; Org: string | null;
+        poolID: number; tourID: number; Naam: string | null; Org: string | null; orgID: number | null;
         StartInschr: string | null; EindInschr: string | null;
         visibleToUsers: boolean | number;
       }>;
@@ -192,15 +217,17 @@ poolsRouter.put('/:poolID', async (request, response, next) => {
       tourID: payload.tourID !== undefined ? payload.tourID : current.tourID,
       Naam: payload.Naam !== undefined ? payload.Naam : current.Naam,
       Org: payload.Org !== undefined ? payload.Org : current.Org,
+      orgID: payload.orgID !== undefined ? payload.orgID : current.orgID,
       StartInschr: payload.StartInschr !== undefined ? payload.StartInschr : current.StartInschr,
       EindInschr: payload.EindInschr !== undefined ? payload.EindInschr : current.EindInschr,
       visibleToUsers: payload.visibleToUsers ?? Boolean(current.visibleToUsers)
     };
     validatePeriod(updatedPool.StartInschr, updatedPool.EindInschr);
+    if (updatedPool.orgID) updatedPool.Org = await organisationName(updatedPool.orgID);
 
     await pool.query(
-      'UPDATE tblPools SET tourID = ?, Naam = ?, Org = ?, StartInschr = ?, EindInschr = ?, visibleToUsers = ? WHERE poolID = ?',
-      [updatedPool.tourID, updatedPool.Naam, updatedPool.Org, toMariaDbDateTime(updatedPool.StartInschr), toMariaDbDateTime(updatedPool.EindInschr), updatedPool.visibleToUsers, poolID]
+      'UPDATE tblPools SET tourID = ?, Naam = ?, Org = ?, orgID = ?, StartInschr = ?, EindInschr = ?, visibleToUsers = ? WHERE poolID = ?',
+      [updatedPool.tourID, updatedPool.Naam, updatedPool.Org, updatedPool.orgID, toMariaDbDateTime(updatedPool.StartInschr), toMariaDbDateTime(updatedPool.EindInschr), updatedPool.visibleToUsers, poolID]
     );
 
     response.json({ poolID, ...updatedPool });

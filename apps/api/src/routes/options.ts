@@ -32,9 +32,12 @@ const createOptionSchema = z.object({
 
 const updateOptionSchema = createOptionSchema.omit({ poolID: true }).partial();
 
-optionsRouter.get('/', async (_request, response, next) => {
+optionsRouter.get('/', async (request, response, next) => {
   try {
-    const rows = await pool.query('SELECT * FROM tblOpties ORDER BY poolID');
+    const { poolID } = request.query;
+    const rows = poolID !== undefined && poolID !== ''
+      ? await pool.query('SELECT * FROM tblOpties WHERE poolID = ? ORDER BY poolID', [Number(poolID)])
+      : await pool.query('SELECT * FROM tblOpties ORDER BY poolID');
     response.json(rows);
   } catch (error) {
     next(error);

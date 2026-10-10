@@ -16,10 +16,12 @@ import { optionsRouter } from './options.js';
 import { standardPointsRouter } from './standardPoints.js';
 import { pointAllocationsRouter } from './pointAllocations.js';
 import { authenticate, requireAdmin } from '../auth.js';
+import { poolRules, poolScope, requireStaff } from '../poolAccess.js';
 import { authRouter } from './auth.js';
-import { meRouter } from './me.js';
+import { meRouter, publicRouter } from './me.js';
 import { accountsRouter } from './accounts.js';
 import { adminRouter } from './admin.js';
+import { organisationsRouter } from './organisations.js';
 
 export const apiRouter = Router();
 
@@ -30,6 +32,7 @@ apiRouter.get('/', (_request, response) => {
     resources: [
       'tours',
       'pools',
+      'organisations',
       'addresses',
       'riders',
       'countries',
@@ -49,24 +52,27 @@ apiRouter.get('/', (_request, response) => {
 });
 
 apiRouter.use('/auth', authRouter);
+apiRouter.use('/public', publicRouter);
 apiRouter.use(authenticate);
 apiRouter.use('/me', meRouter);
-apiRouter.use(requireAdmin);
+apiRouter.use(requireStaff);
 apiRouter.use('/accounts', accountsRouter);
+apiRouter.use('/pools', poolScope(poolRules.pools), poolsRouter);
+apiRouter.use('/team-riders', poolScope(poolRules.readOnly), teamRidersRouter);
+apiRouter.use('/stages', poolScope(poolRules.readOnly), stagesRouter);
+apiRouter.use('/stage-results', poolScope(poolRules.stageResults), stageResultsRouter);
+apiRouter.use('/participants', poolScope(poolRules.participants), participantsRouter);
+apiRouter.use('/participant-riders', poolScope(poolRules.participantRiders), participantRidersRouter);
+apiRouter.use('/participant-points', poolScope(poolRules.participantPoints), participantPointsRouter);
+apiRouter.use('/options', poolScope(poolRules.options), optionsRouter);
+apiRouter.use('/standard-points', poolScope(poolRules.readOnly), standardPointsRouter);
+apiRouter.use('/point-allocations', poolScope(poolRules.pointAllocations), pointAllocationsRouter);
+apiRouter.use(requireAdmin);
 apiRouter.use('/admin', adminRouter);
+apiRouter.use('/organisations', organisationsRouter);
 apiRouter.use('/tours', toursRouter);
-apiRouter.use('/pools', poolsRouter);
 apiRouter.use('/addresses', addressesRouter);
 apiRouter.use('/riders', ridersRouter);
 apiRouter.use('/countries', countriesRouter);
 apiRouter.use('/teams', teamsRouter);
 apiRouter.use('/tour-teams', tourTeamsRouter);
-apiRouter.use('/team-riders', teamRidersRouter);
-apiRouter.use('/stages', stagesRouter);
-apiRouter.use('/stage-results', stageResultsRouter);
-apiRouter.use('/participants', participantsRouter);
-apiRouter.use('/participant-riders', participantRidersRouter);
-apiRouter.use('/participant-points', participantPointsRouter);
-apiRouter.use('/options', optionsRouter);
-apiRouter.use('/standard-points', standardPointsRouter);
-apiRouter.use('/point-allocations', pointAllocationsRouter);

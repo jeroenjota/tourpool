@@ -324,7 +324,7 @@ const deleteTour = async (id: number) => {
         </button>
         <button
           @click="openCreateTourModal"
-          class="shadow-xs flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400">
+          class="btn flex items-center gap-2 text-sm">
           <Plus class="h-4 w-4" />
           <span>Nieuwe Tour</span>
         </button>
@@ -402,12 +402,12 @@ const deleteTour = async (id: number) => {
       <div class="flex flex-wrap items-center gap-2">
         <button
           @click="teamsModalOpen = true"
-          class="rounded-lg border border-slate-400 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700">
+          class="btn text-sm">
           Deelnemende tourploegen
         </button>
         <button
           @click="stagesModalOpen = true"
-          class="rounded-lg border border-slate-400 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700">
+          class="btn text-sm">
           Touretappes
         </button>
         <button
@@ -593,12 +593,12 @@ const deleteTour = async (id: number) => {
         <div class="flex justify-end gap-3 border-t border-slate-200 pt-4">
           <button
             @click="tourModalOpen = false"
-            class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200">
+            class="btn text-sm">
             Annuleren
           </button>
           <button
             @click="saveTour"
-            class="shadow-xs rounded-lg bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400">
+            class="btn text-sm">
             Opslaan
           </button>
         </div>

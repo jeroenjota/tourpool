@@ -1,9 +1,12 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import PDFDocument from 'pdfkit';
 import { pool } from '../db.js';
-import { getAccount, HttpError, isDuplicate, profileSchema, usernameSchema } from '../auth.js';
+import { emailSchema, getAccount, HttpError, isDuplicate, profileSchema, usernameSchema } from '../auth.js';
+import { guestEntryLifetimeHours } from '../guestCleanup.js';
 import { assertEnrollmentOpen, enrollmentStatus, validateRiders, type EnrollmentPool } from '../enrollment.js';
 
 export const meRouter = Router();
@@ -11,11 +14,28 @@ const require = createRequire(import.meta.url);
 const garamondLatin = require.resolve('@fontsource/eb-garamond/files/eb-garamond-latin-400-normal.woff');
 const garamondLatinExt = require.resolve('@fontsource/eb-garamond/files/eb-garamond-latin-ext-400-normal.woff');
 const lato = require.resolve('lato-font/fonts/lato-normal/lato-normal.woff');
+// Works from both src/routes (dev) and dist/routes (build): assets live in apps/api/assets.
+const pdfAsset = (name: string) => fileURLToPath(new URL(`../../assets/${name}`, import.meta.url));
+const jotaLogo = pdfAsset('jota-logo.png');
+const cyclistImage = pdfAsset('tour_logo.png');
 const latinExtCharacter = /[\u0100-\u024f\u1e00-\u1eff\u2c60-\u2c7f\ua720-\ua7ff]/u;
 
-function writePdfText(doc: InstanceType<typeof PDFDocument>, text: string, heading = false, lineGap?: number) {
+type PdfTextOptions = {
+  heading?: boolean;
+  lineGap?: number;
+  align?: 'left' | 'center' | 'right' | 'justify';
+};
+function drawPdfLine(doc: InstanceType<typeof PDFDocument>, color = '#a16207') {
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  doc.moveDown(0.5);
+  doc.save().moveTo(left, doc.y).lineTo(right, doc.y).lineWidth(1).strokeColor(color).stroke().restore();
+  doc.moveDown(0.5);
+}
+function writePdfText(doc: InstanceType<typeof PDFDocument>, text: string, { heading = false, lineGap, align }: PdfTextOptions = {}) {
+  const textOptions = { ...(lineGap === undefined ? {} : { lineGap }), ...(align ? { align } : {}) };
   if (!heading) {
-    doc.font(lato).text(text, lineGap === undefined ? {} : { lineGap });
+    doc.font(lato).text(text, textOptions);
     return;
   }
   const parts: { text: string; extended: boolean }[] = [];
@@ -25,10 +45,27 @@ function writePdfText(doc: InstanceType<typeof PDFDocument>, text: string, headi
     if (lastPart?.extended === extended) lastPart.text += character;
     else parts.push({ text: character, extended });
   }
+  const partFont = (part: { extended: boolean }) => part.extended ? garamondLatinExt : garamondLatin;
+  const left = doc.page.margins.left;
+  const available = doc.page.width - left - doc.page.margins.right;
+  const totalWidth = parts.reduce((sum, part) => sum + doc.font(partFont(part)).widthOfString(part.text), 0);
+  // PDFKit misaligns centered text that is split over several fonts, so single-line headings are positioned manually.
+  if ((align === 'center' || align === 'right') && totalWidth <= available) {
+    const x = left + (align === 'center' ? (available - totalWidth) / 2 : available - totalWidth);
+    const y = doc.y;
+    let offset = 0;
+    for (const part of parts) {
+      doc.font(partFont(part)).text(part.text, x + offset, y, { lineBreak: false });
+      offset += doc.widthOfString(part.text);
+    }
+    doc.x = left;
+    doc.y = y + doc.currentLineHeight(true) + (lineGap ?? 0);
+    return;
+  }
   parts.forEach((part, index) => {
-    doc.font(part.extended ? garamondLatinExt : garamondLatin).text(part.text, {
+    doc.font(partFont(part)).text(part.text, {
       continued: index < parts.length - 1,
-      ...(lineGap === undefined ? {} : { lineGap })
+      ...textOptions
     });
   });
 }
@@ -42,12 +79,15 @@ const entrySchema = z.object({
 }).strict();
 const poolSelect = `
   SELECT p.poolID, p.tourID, p.Naam, p.Org, t.naam AS tourNaam,
+    org.straat AS orgStraat, org.huisnummer AS orgHuisnummer, org.postcode AS orgPostcode,
+    org.plaats AS orgPlaats, org.email AS orgEmail, org.tel AS orgTel,
     DATE_FORMAT(t.StartDatum, '%Y-%m-%dT%H:%i:%s') AS tourStart,
     DATE_FORMAT(p.StartInschr, '%Y-%m-%d') AS registrationStart,
     DATE_FORMAT(p.EindInschr, '%Y-%m-%d') AS registrationEnd,
     o.inleg, o.PloegRennerAantal, o.PloegReserveAantal
   FROM tblPools p JOIN tblTours t ON t.tourID = p.tourID
-  LEFT JOIN tblOpties o ON o.poolID = p.poolID`;
+  LEFT JOIN tblOpties o ON o.poolID = p.poolID
+  LEFT JOIN tblOrganisaties org ON org.orgID = p.orgID`;
 interface Profile {
   vNaam: string; tNaam: string | null; aNaam: string; email: string;
   plaats: string | null; tel: string | null;
@@ -129,14 +169,24 @@ meRouter.put('/profile', async (request, response, next) => {
   } finally { connection?.release(); }
 });
 
-meRouter.get('/pools', async (_request, response, next) => {
+meRouter.put('/username', async (request, response, next) => {
+  try {
+    const { username } = z.object({ username: usernameSchema }).strict().parse(request.body);
+    const account = getAccount(request);
+    await pool.query('UPDATE tblAccounts SET username = ? WHERE accountID = ?', [username, account.accountID]);
+    response.json({ username });
+  } catch (error) {
+    next(isDuplicate(error) ? new HttpError(409, 'Deze gebruikersnaam is al in gebruik.') : error);
+  }
+});
+
+const listPools: RequestHandler = async (_request, response, next) => {
   try {
     const rows = await pool.query(`${poolSelect} WHERE p.visibleToUsers = TRUE ORDER BY t.StartDatum DESC, p.poolID DESC`) as EnrollmentPool[];
     response.json(rows.map(p => ({ ...p, ...enrollmentStatus(p) })));
   } catch (error) { next(error); }
-});
-
-meRouter.get('/pools/:poolID/riders', async (request, response, next) => {
+};
+const listPoolRiders: RequestHandler = async (request, response, next) => {
   let connection;
   try {
     const poolID = idSchema.parse(request.params.poolID);
@@ -144,7 +194,9 @@ meRouter.get('/pools/:poolID/riders', async (request, response, next) => {
     const p = await loadPool(connection, poolID);
     response.json(await availableRiders(connection, p.tourID));
   } catch (error) { next(error); } finally { connection?.release(); }
-});
+};
+meRouter.get('/pools', listPools);
+meRouter.get('/pools/:poolID/riders', listPoolRiders);
 
 meRouter.get('/entries', async (request, response, next) => {
   try {
@@ -243,6 +295,30 @@ meRouter.get('/entries/:deelnID/pdf', async (request, response, next) => {
     connection.release();
     connection = undefined;
 
+    const buffer = await renderEntryPdf({ deelnID, p, entry, profile, email: getAccount(request).email, riders });
+    response.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="tourpool-inschrijving-${deelnID}.pdf"`
+    }).send(buffer);
+  } catch (error) {
+    if (connection) await connection.rollback();
+    next(error);
+  } finally { connection?.release(); }
+});
+
+interface EntryPdfData {
+  deelnID: number; p: EnrollmentPool; entry: Entry; profile: Profile; email: string | null; riders: Rider[];
+  guestDeadline?: Date;
+}
+function dropOffAddress(p: EnrollmentPool) {
+  const street = [p.orgStraat, p.orgHuisnummer].filter(Boolean).join(' ');
+  const town = [p.orgPostcode, p.orgPlaats].filter(Boolean).join(' ');
+  const contact = [p.orgTel && `tel. ${p.orgTel}`, p.orgEmail].filter(Boolean).join(', ');
+  if (!street && !town && !contact) return null;
+  return [p.Org, street, town, contact].filter(Boolean).join(', ');
+}
+
+async function renderEntryPdf({ deelnID, p, entry, profile, email, riders, guestDeadline }: EntryPdfData) {
     const doc = new PDFDocument({ size: 'A4', margin: 45, info: { Title: `Tourpool inschrijving ${deelnID}` } });
     const chunks: Buffer[] = [];
     const pdf = new Promise<Buffer>((resolve, reject) => {
@@ -250,42 +326,117 @@ meRouter.get('/entries/:deelnID/pdf', async (request, response, next) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
     });
-    doc.fontSize(20);
-    writePdfText(doc, 'Tourpool - Inschrijfformulier', true);
-    doc.moveDown().fontSize(12);
-    writePdfText(doc, `${p.Org || 'Organisatie'} - ${p.Naam || `Pool ${p.poolID}`}`);
-    writePdfText(doc, `${p.tourNaam} | Inschrijving #${deelnID}`);
+    const headerTop = doc.y;
+    const headerImage = { width: 90, height: 60 };
+    doc.image(jotaLogo, doc.page.margins.left, headerTop, { fit: [headerImage.width, headerImage.height], valign: 'center' });
+    doc.image(cyclistImage, doc.page.width - doc.page.margins.right - headerImage.width, headerTop, { fit: [headerImage.width, headerImage.height], align: 'right', valign: 'center' });
+    doc.x = doc.page.margins.left;
+    doc.y = headerTop;
+    doc.fontSize(28);
+    writePdfText(doc, 'Jota\'s Tourpool', { heading: true, align: 'center' });
+    doc.fontSize(20)
+    writePdfText(doc, `${p.tourNaam}`, { heading: true, align: 'center' });
+    drawPdfLine(doc);
+    doc.fontSize(24);
+    writePdfText(doc, 'Inschrijfformulier', { heading: true, align: 'center' });
+    doc.moveDown().fontSize(20);
+    writePdfText(doc, `${p.Org || 'Organisatie'} - ${p.Naam}`, { heading: true, align: 'center' });
     doc.moveDown();
-    writePdfText(doc, `Naam: ${[profile.vNaam, profile.tNaam, profile.aNaam].filter(Boolean).join(' ')}`);
-    writePdfText(doc, `Ploegnaam: ${entry.ploegnaam}`);
-    writePdfText(doc, `E-mail: ${getAccount(request).email}`);
-    if (profile.plaats) writePdfText(doc, `Woonplaats: ${profile.plaats}`);
-    if (profile.tel) writePdfText(doc, `Telefoon: ${profile.tel}`);
-    writePdfText(doc, `Inleg: EUR ${Number(p.inleg ?? 0).toFixed(2)} | Betaald: ${entry.Betaald ? 'Ja' : 'Nee'}`);
-    doc.moveDown().fontSize(14);
-    writePdfText(doc, 'Tourploeg (op volgorde)', true);
-    const mainCount = p.PloegRennerAantal! - p.PloegReserveAantal!;
-    for (const [index, r] of riders.entries()) {
-      if (index === mainCount) {
-        doc.moveDown(0.4).fontSize(12);
-        writePdfText(doc, 'Reserves');
-      }
-      doc.fontSize(10);
-      writePdfText(doc,
-        `${index + 1}. ${r.Rugnummer ?? '-'} - ${[r.vnaam, r.tnaam, r.anaam].filter(Boolean).join(' ')} (${r.ploegNaam || '-'})`,
-        false,
-        3
-      );
+    doc.fontSize(16)
+    writePdfText(doc, `Naam: ${[profile.vNaam, profile.tNaam, profile.aNaam].filter(Boolean).join(' ')} ${email ? ` email:${email}` : ''} ${profile.tel ?? ''}`,{heading: true, align: 'center'});
+    writePdfText(doc, `Inschrijfnummer: ${deelnID} | Inleg: EUR ${Number(p.inleg ?? 0).toFixed(2)} | Betaald: ${entry.Betaald ? 'OK' : 'Nog niet'}`,{align: 'center'});
+    if (guestDeadline) {
+      doc.moveDown(0.5).fillColor('#b91c1c').fontSize(12);
+      writePdfText(doc, 'LET OP: deze ploeg doet pas mee nadat de inleg is betaald.', { heading: true, align: 'center' });
+      writePdfText(doc, `Niet betaald voor ${guestDeadline.toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam', dateStyle: 'long', timeStyle: 'short' })}? Dan wordt de inschrijving automatisch verwijderd.`, { align: 'center' });
+      doc.fillColor('black');
     }
+    doc.moveDown();
+    drawPdfLine(doc);
+    doc.fontSize(24);
+    writePdfText(doc, `Mijn Tourploeg: ${entry.ploegnaam}`,{heading: true, align: 'center'});
+    doc.moveDown().fontSize(14);
+    const mainCount = p.PloegRennerAantal! - p.PloegReserveAantal!;
+    const columnGap = 20;
+    const left = doc.page.margins.left;
+    const columnWidth = (doc.page.width - left - doc.page.margins.right - columnGap) / 2;
+    const top = doc.y;
+    const writeColumn = (x: number, title: string, list: typeof riders, label: (index: number) => string) => {
+      doc.font(lato).fontSize(12).text(title, x, top, { width: columnWidth });
+      doc.moveDown(0.3).fontSize(10);
+      list.forEach((r, index) => {
+        doc.text(
+          `${label(index)} ${[r.vnaam, r.tnaam, r.anaam].filter(Boolean).join(' ')} (${r.Rugnummer ?? '-'}) - ${r.ploegNaam || '-'}`,
+          x,
+          doc.y,
+          { width: columnWidth, lineGap: 3 }
+        );
+      });
+      return doc.y;
+    };
+    const leftBottom = writeColumn(left, 'Renners', riders.slice(0, mainCount), index => `${index + 1}.`);
+    const rightBottom = writeColumn(left + columnWidth + columnGap, 'Reserves', riders.slice(mainCount), index => `R${index + 1}.`);
+    doc.x = left;
+    doc.y = Math.max(leftBottom, rightBottom);
+    
+    drawPdfLine(doc);
     doc.moveDown().fontSize(10);
-    writePdfText(doc, 'Lever dit formulier in bij de organisatie en betaal daar de inleg. Alleen de organisatie bevestigt de betaling.');
+    const dropOff = dropOffAddress(p);
+    writePdfText(doc, dropOff
+      ? `Lever dit formulier in en betaal de inleg bij: ${dropOff}. Alleen de organisatie bevestigt de betaling.`
+      : 'Lever dit formulier in bij de organisatie en betaal daar de inleg. Alleen de organisatie bevestigt de betaling.');
     writePdfText(doc, `Gegenereerd: ${new Date().toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam' })}`);
     doc.end();
-    const buffer = await pdf;
-    response.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="tourpool-inschrijving-${deelnID}.pdf"`
-    }).send(buffer);
+    return pdf;
+}
+
+// Inschrijven zonder account: de ploeg wordt als "niet betaald" opgeslagen bij een nieuw adres
+// en kan daarna alleen nog door de organisatie worden gewijzigd.
+export const publicRouter = Router();
+const guestEntryLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, limit: 20,
+  message: { message: 'Te veel inschrijvingen vanaf dit adres. Probeer het later opnieuw.' },
+  standardHeaders: 'draft-8', legacyHeaders: false
+});
+const guestEntrySchema = entrySchema.extend({
+  profile: profileSchema.extend({ email: z.union([z.literal(''), emailSchema]).default('') }).strict()
+}).strict();
+
+publicRouter.get('/pools', listPools);
+publicRouter.get('/pools/:poolID/riders', listPoolRiders);
+
+publicRouter.post('/entries', guestEntryLimit, async (request, response, next) => {
+  let connection;
+  try {
+    const { profile, ...payload } = guestEntrySchema.parse(request.body);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const p = await loadPool(connection, payload.poolID, true);
+    assertEnrollmentOpen(p);
+    const available = await availableRiders(connection, p.tourID);
+    validateRiders(p, payload.riders, available.map(r => r.rennerID), true);
+    const address = await connection.query(
+      'INSERT INTO tblAdressen (vNaam, tNaam, aNaam, plaats, tel, email) VALUES (?, ?, ?, ?, ?, ?)',
+      [profile.vNaam, profile.tNaam, profile.aNaam, profile.plaats, profile.tel, profile.email || null]
+    );
+    const result = await connection.query(
+      'INSERT INTO tblDeelnemers (poolID, adrID, roepnaam, Betaald, gast) VALUES (?, ?, ?, 0, 1)',
+      [payload.poolID, Number(address.insertId), payload.ploegnaam]
+    );
+    const deelnID = Number(result.insertId);
+    for (const [index, rennerID] of payload.riders.entries()) {
+      await connection.query('INSERT INTO tblDeelnemRenners (deelnID, rennerID, positie) VALUES (?, ?, ?)', [deelnID, rennerID, index + 1]);
+    }
+    assertEnrollmentOpen(p);
+    const riders = await entryRiders(connection, deelnID);
+    await connection.commit();
+    connection.release();
+    connection = undefined;
+
+    const entry: Entry = { deelnID, poolID: payload.poolID, ploegnaam: payload.ploegnaam, Betaald: 0 };
+    const guestDeadline = new Date(Date.now() + guestEntryLifetimeHours * 60 * 60 * 1000);
+    const buffer = await renderEntryPdf({ deelnID, p, entry, profile, email: profile.email || null, riders, guestDeadline });
+    response.status(201).json({ deelnID, deadline: guestDeadline.toISOString(), pdf: buffer.toString('base64') });
   } catch (error) {
     if (connection) await connection.rollback();
     next(error);

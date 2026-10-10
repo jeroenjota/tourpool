@@ -15,7 +15,10 @@ import StandingsView from '../views/StandingsView.vue';
 import PointAllocationsView from '../views/PointAllocationsView.vue';
 import LoginView from '../views/LoginView.vue';
 import EmailTestView from '../views/EmailTestView.vue';
-import { auth, loadSession } from '@tourpool/client';
+import AccountView from '../views/AccountView.vue';
+import AccountsView from '../views/AccountsView.vue';
+import OrganisationsView from '../views/OrganisationsView.vue';
+import { auth, isStaff, loadSession } from '@tourpool/client';
 
 const redirectToPoolPage = (page: string) => {
   const poolID = useActivePoolStore().activePoolID;
@@ -55,13 +58,17 @@ export const router = createRouter({
     {
       path: '/pools',
       name: 'pools',
-      component: PoolsView
+      component: PoolsView,
+      meta: { staff: true }
     },
+    { path: '/account', name: 'account', component: AccountView, meta: { staff: true } },
+    { path: '/accounts', name: 'accounts', component: AccountsView },
+    { path: '/organisations', name: 'organisations', component: OrganisationsView },
     {
       path: '/pools/:poolID(\\d+)/participants',
       name: 'participants',
       component: ParticipantsView,
-      meta: { poolPage: true }
+      meta: { poolPage: true, staff: true }
     },
     {
       path: '/participants',
@@ -71,7 +78,7 @@ export const router = createRouter({
       path: '/pools/:poolID(\\d+)/standings',
       name: 'standings',
       component: StandingsView,
-      meta: { poolPage: true }
+      meta: { poolPage: true, staff: true }
     },
     {
       path: '/standings',
@@ -91,7 +98,7 @@ export const router = createRouter({
       path: '/pools/:poolID(\\d+)/options',
       name: 'options',
       component: OptionsView,
-      meta: { poolPage: true }
+      meta: { poolPage: true, staff: true }
     },
     {
       path: '/options',
@@ -106,7 +113,7 @@ export const router = createRouter({
       path: '/pools/:poolID(\\d+)/point-allocations',
       name: 'point-allocations',
       component: PointAllocationsView,
-      meta: { poolPage: true }
+      meta: { poolPage: true, staff: true }
     },
     {
       path: '/point-allocations',
@@ -117,8 +124,10 @@ export const router = createRouter({
 
 router.beforeEach(async to => {
   if (!auth.checked) await loadSession();
-  if (to.name !== 'login' && auth.account?.role !== 'admin') return { name: 'login' };
-  if (to.name === 'login' && auth.account?.role === 'admin') return { name: 'dashboard' };
+  const home = auth.account?.role === 'admin' ? { name: 'dashboard' } : { name: 'pools' };
+  if (to.name !== 'login' && !isStaff(auth.account)) return { name: 'login' };
+  if (to.name === 'login' && isStaff(auth.account)) return home;
+  if (to.name !== 'login' && auth.account?.role !== 'admin' && !to.meta.staff) return home;
   const poolID = Number(to.params.poolID);
   if (to.meta.poolPage && Number.isInteger(poolID) && poolID > 0) {
     useActivePoolStore().setActivePool(poolID);

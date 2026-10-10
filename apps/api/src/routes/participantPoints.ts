@@ -24,18 +24,24 @@ const updateParticipantPointsSchema = createParticipantPointsSchema.omit({ deeln
 
 participantPointsRouter.get('/', async (request, response, next) => {
   try {
-    const { deelnemID, etappeNr } = request.query;
-    let query = 'SELECT deelnemID, etappeNr, ritPnt, geelPnt, groenPnt, bolPnt, witPnt, etapPnt, etapPlaats, etapGeld, ttlPnt, ttlPlaats, ttlGeld FROM tblDeelnemerPunten';
+    const { deelnemID, etappeNr, poolID } = request.query;
+    let query = 'SELECT dp.deelnemID, dp.etappeNr, dp.ritPnt, dp.geelPnt, dp.groenPnt, dp.bolPnt, dp.witPnt, dp.etapPnt, dp.etapPlaats, dp.etapGeld, dp.ttlPnt, dp.ttlPlaats, dp.ttlGeld FROM tblDeelnemerPunten dp';
     const params: unknown[] = [];
     const conditions: string[] = [];
 
+    if (poolID !== undefined && poolID !== '') {
+      query += ' JOIN tblDeelnemers d ON d.deelnID = dp.deelnemID';
+      conditions.push('d.poolID = ?');
+      params.push(Number(poolID));
+    }
+
     if (deelnemID !== undefined && deelnemID !== '') {
-      conditions.push('deelnemID = ?');
+      conditions.push('dp.deelnemID = ?');
       params.push(Number(deelnemID));
     }
 
     if (etappeNr !== undefined && etappeNr !== '') {
-      conditions.push('etappeNr = ?');
+      conditions.push('dp.etappeNr = ?');
       params.push(Number(etappeNr));
     }
 
@@ -43,7 +49,7 @@ participantPointsRouter.get('/', async (request, response, next) => {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    query += ' ORDER BY etappeNr, ttlPlaats, deelnemID';
+    query += ' ORDER BY dp.etappeNr, dp.ttlPlaats, dp.deelnemID';
 
     const rows = await pool.query(query, params);
     response.json(rows);

@@ -7,12 +7,13 @@ import { pool } from './db.js';
 const scryptAsync = promisify(scrypt);
 export const cookieName = 'tourpool_session';
 export const sessionLifetime = 12 * 60 * 60 * 1000;
+export type Role = 'admin' | 'poolbeheerder' | 'user';
 export interface Account {
   accountID: number;
   adrID: number;
   username: string;
   email: string;
-  role: 'admin' | 'user';
+  role: Role;
 }
 declare global {
   namespace Express {

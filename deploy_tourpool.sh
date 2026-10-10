@@ -13,6 +13,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEV_API_DIR="$ROOT_DIR/apps/api"
 DEV_ADMIN_DIR="$ROOT_DIR/apps/admin"
 DEV_USER_DIR="$ROOT_DIR/apps/user"
+DEV_LANDING_DIR="$ROOT_DIR/apps/landing"
 DEV_ENV_FILE="$DEV_API_DIR/.env"
 DEV_DB_MODE="docker" # docker | local
 DEV_CONTAINER="mariadb"
@@ -34,7 +35,6 @@ PROD_DB_USER="tourpool"
 
 PROD_NGINX_SNIPPET="/etc/nginx/snippets/tourpool.conf"
 PROD_NGINX_SITE="/etc/nginx/sites-enabled/jota.conf"
-PROD_HTPASSWD="/etc/nginx/.htpasswd-tourpool"
 
 DATE=$(date +"%Y%m%d_%H%M")
 TMP_DUMP="/tmp/tourpool_dev.sql.gz"
@@ -55,7 +55,10 @@ NC="\033[0m"
 log() { echo -e "${BLUE}[$(date '+%H:%M:%S')]${NC} $*" | tee -a "$LOG_FILE"; }
 ok() { echo -e "${GREEN}✔${NC} $*" | tee -a "$LOG_FILE"; }
 warn() { echo -e "${YELLOW}!${NC} $*" | tee -a "$LOG_FILE"; }
-fail() { echo -e "${RED}✖ $*${NC}" | tee -a "$LOG_FILE"; exit 1; }
+fail() {
+  echo -e "${RED}✖ $*${NC}" | tee -a "$LOG_FILE"
+  exit 1
+}
 
 env_value() {
   # env_value KEY FILE -> waarde zonder quotes
@@ -123,27 +126,11 @@ EOF
 setup_server() {
   log "Server inrichten (mappen, database, .env, nginx)..."
 
-  local htpasswd_line=""
-  read -rp "Admin tijdelijk afschermen met nginx basic auth (zolang er nog geen autorisatie is)? [J/n] " use_basic
-  if [[ ! "$use_basic" =~ ^[nN] ]]; then
-    command -v openssl > /dev/null || fail "openssl niet geïnstalleerd (nodig voor basic auth)"
-    read -rp "  Gebruikersnaam: " basic_user
-    read -rsp "  Wachtwoord (leeg = bestaande behouden): " basic_pw; echo
-    if [ -n "$basic_pw" ]; then
-      # base64: de hash bevat '$' en zou anders door de remote shell worden geëxpandeerd
-      htpasswd_line="$(printf '%s:%s' "$basic_user" "$(openssl passwd -apr1 "$basic_pw")" | base64 -w0)"
-    fi
-    use_basic="ja"
-  else
-    use_basic="nee"
-  fi
-
   ssh "$PROD_SSH" \
     PROD_USER="$PROD_USER" PROD_API_DIR="$PROD_API_DIR" PROD_WEB_DIR="$PROD_WEB_DIR" \
     PROD_ENV_FILE="$PROD_ENV_FILE" PROD_API_PORT="$PROD_API_PORT" PROD_BASE_PATH="$PROD_BASE_PATH" \
     PROD_DB="$PROD_DB" PROD_DB_USER="$PROD_DB_USER" PROD_BACKUP_DIR="$PROD_BACKUP_DIR" \
     PROD_NGINX_SNIPPET="$PROD_NGINX_SNIPPET" PROD_NGINX_SITE="$PROD_NGINX_SITE" \
-    PROD_HTPASSWD="$PROD_HTPASSWD" USE_BASIC="$use_basic" HTPASSWD_LINE="$htpasswd_line" \
     'bash -se' << 'EOF'
 set -euo pipefail
 
@@ -176,13 +163,15 @@ if [ ! -f "$PROD_ENV_FILE" ]; then
   umask 077
   cat > "$PROD_ENV_FILE" << ENV
 NODE_ENV=production
+AUTH_ORIGINS=https://jota.nl,https://www.jota.nl
+PUBLIC_API_URL=https://jota.nl${PROD_BASE_PATH}/api
+CONTACT_RECEIVER=info@jota.nl
 PORT=${PROD_API_PORT}
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_USER=${PROD_DB_USER}
 DB_PASSWORD=${DB_PASSWORD}
 DB_NAME=${PROD_DB}
-AUTH_ORIGINS=https://jota.nl
 TRUST_PROXY=1
 ENV
   if [ -f /home/jeroen/config/shared.env ]; then
@@ -196,31 +185,19 @@ fi
 chmod 600 "$PROD_ENV_FILE"
 
 # --- nginx ---
-AUTH_LINES=""
-if [ "$USE_BASIC" = "ja" ]; then
-  if [ -n "$HTPASSWD_LINE" ]; then
-    echo "$HTPASSWD_LINE" | base64 -d | sudo tee "$PROD_HTPASSWD" > /dev/null
-    echo | sudo tee -a "$PROD_HTPASSWD" > /dev/null
-    sudo chown root:www-data "$PROD_HTPASSWD"
-    sudo chmod 640 "$PROD_HTPASSWD"
-  fi
-  sudo grep -Eq '^[^:]+:\$apr1\$' "$PROD_HTPASSWD" 2>/dev/null || { echo "Basic auth gekozen maar $PROD_HTPASSWD ontbreekt of bevat geen geldige hash (geef een wachtwoord op)"; exit 1; }
-  AUTH_LINES="    auth_basic \"Tourpool beheer\";
-    auth_basic_user_file ${PROD_HTPASSWD};"
-fi
-
 WEB_PARENT="$(dirname "$PROD_WEB_DIR")"
 sudo tee "$PROD_NGINX_SNIPPET" > /dev/null << NGINX
 # Tourpool - gegenereerd door deploy_tourpool.sh
 location = ${PROD_BASE_PATH} { return 301 ${PROD_BASE_PATH}/; }
 
 location ^~ ${PROD_BASE_PATH}/ {
-${AUTH_LINES}
+    auth_basic off;
     root ${WEB_PARENT};
     try_files \$uri \$uri/ ${PROD_BASE_PATH}/index.html;
 }
 
 location ^~ ${PROD_BASE_PATH}/api/ {
+    auth_basic off;
     proxy_pass http://127.0.0.1:${PROD_API_PORT}/api/;
     proxy_http_version 1.1;
     proxy_set_header Host \$host;
@@ -230,8 +207,16 @@ location ^~ ${PROD_BASE_PATH}/api/ {
     proxy_redirect off;
 }
 
+location = ${PROD_BASE_PATH}/beheer { return 301 ${PROD_BASE_PATH}/beheer/; }
+location ^~ ${PROD_BASE_PATH}/beheer/ {
+    auth_basic off;
+    root ${WEB_PARENT};
+    try_files \$uri \$uri/ ${PROD_BASE_PATH}/beheer/index.html;
+}
+
 location = ${PROD_BASE_PATH}/deelnemen { return 301 ${PROD_BASE_PATH}/deelnemen/; }
 location ^~ ${PROD_BASE_PATH}/deelnemen/ {
+    auth_basic off;
     root ${WEB_PARENT};
     try_files \$uri \$uri/ ${PROD_BASE_PATH}/deelnemen/index.html;
 }
@@ -291,9 +276,9 @@ dump_dev_db() {
   # - collatie uca1400 (MariaDB 11) bestaat niet in 10.11 -> unicode_ci
   "${dump_cmd[@]}" --single-transaction --routines --triggers "$dev_db" \
     | sed -E \
-        -e '1{/enable the sandbox mode/d}' \
-        -e 's/DEFINER=`[^`]+`@`[^`]+`//g' \
-        -e 's/utf8mb4_uca1400_ai_ci/utf8mb4_unicode_ci/g' \
+      -e '1{/enable the sandbox mode/d}' \
+      -e 's/DEFINER=`[^`]+`@`[^`]+`//g' \
+      -e 's/utf8mb4_uca1400_ai_ci/utf8mb4_unicode_ci/g' \
     | gzip > "$TMP_DUMP"
 
   [ -s "$TMP_DUMP" ] || fail "Dump mislukt"
@@ -377,6 +362,7 @@ sync_api() {
     --exclude .env \
     "$DEV_API_DIR/dist" \
     "$DEV_API_DIR/migrations" \
+    "$DEV_API_DIR/assets" \
     "$DEV_API_DIR/package.json" \
     "$PROD_SSH:$PROD_API_DIR/"
 
@@ -434,11 +420,26 @@ build_admin() {
 
 sync_admin() {
   log "Admin uploaden..."
+  ssh "$PROD_SSH" "mkdir -p '$PROD_WEB_DIR/beheer'"
   rsync -rltz --delete --no-perms --no-owner --no-group \
-    --exclude deelnemen \
     "$DEV_ADMIN_DIR/dist/" \
-    "$PROD_SSH:$PROD_WEB_DIR/"
-  ok "Admin gedeployed: https://jota.nl${PROD_BASE_PATH}/"
+    "$PROD_SSH:$PROD_WEB_DIR/beheer/"
+  ok "Admin gedeployed: https://jota.nl${PROD_BASE_PATH}/beheer/"
+}
+
+build_landing() {
+  log "Landingspagina bouwen..."
+  (cd "$ROOT_DIR" && npm run build:landing)
+  [ -f "$DEV_LANDING_DIR/dist/index.html" ] || fail "Build landingspagina mislukt"
+}
+
+# De landingspagina staat in de root; beheer/ en deelnemen/ zijn aparte apps en blijven staan.
+sync_landing() {
+  log "Landingspagina uploaden..."
+  rsync -rltz --delete --no-perms --no-owner --no-group \
+    --exclude /beheer --exclude /deelnemen \
+    "$DEV_LANDING_DIR/dist/" "$PROD_SSH:$PROD_WEB_DIR/"
+  ok "Landingspagina gedeployed: https://jota.nl${PROD_BASE_PATH}/"
 }
 
 build_user() {
@@ -448,6 +449,7 @@ build_user() {
 }
 
 sync_user() {
+  # shellcheck disable=SC2029
   ssh "$PROD_SSH" "mkdir -p '$PROD_WEB_DIR/deelnemen'"
   rsync -rltz --delete --no-perms --no-owner --no-group \
     "$DEV_USER_DIR/dist/" "$PROD_SSH:$PROD_WEB_DIR/deelnemen/"
@@ -463,9 +465,10 @@ echo "1) Server inrichten (eenmalig: mappen, database, .env, nginx)"
 echo "2) Database (dev → prod, overschrijft prod!)"
 echo "3) API"
 echo "4) Admin"
-echo "5) API + Admin + Deelnemersapp"
-echo "6) Alles (Database + API + Admin + Deelnemersapp)"
+echo "5) API + Admin + Deelnemersapp + Landingspagina"
+echo "6) Alles (Database + API + Admin + Deelnemersapp + Landingspagina)"
 echo "7) Deelnemersapp"
+echo "8) Landingspagina"
 echo
 
 read -rp "Keuze: " choice
@@ -501,9 +504,11 @@ case "$choice" in
     build_api
     build_admin
     build_user
+    build_landing
     sync_api
     sync_admin
     sync_user
+    sync_landing
     ;;
   6)
     check_base_dependencies
@@ -513,16 +518,24 @@ case "$choice" in
     build_api
     build_admin
     build_user
+    build_landing
     sync_db
     sync_api
     sync_admin
     sync_user
+    sync_landing
     ;;
   7)
     check_base_dependencies
     preflight_prod
     build_user
     sync_user
+    ;;
+  8)
+    check_base_dependencies
+    preflight_prod
+    build_landing
+    sync_landing
     ;;
   *)
     fail "Ongeldige keuze"

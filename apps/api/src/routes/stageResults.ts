@@ -190,7 +190,8 @@ const calculateParticipantPoints = async (
       Number(row.Punten ?? 0)
     ]));
     const participants = await connection.query(
-      'SELECT deelnID FROM tblDeelnemers WHERE poolID = ?',
+      // Alleen betaalde ploegen doen mee in de punten en standen.
+      'SELECT deelnID FROM tblDeelnemers WHERE poolID = ? AND Betaald = 1',
       [poolID]
     ) as Array<{ deelnID: number }>;
     const participantRiders = await connection.query(`

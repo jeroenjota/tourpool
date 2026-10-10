@@ -23,7 +23,7 @@ const bulkUpdateSchema = z.object({
 
 participantRidersRouter.get('/', async (request, response, next) => {
   try {
-    const { deelnID, rennerID } = request.query;
+    const { deelnID, rennerID, poolID } = request.query;
     let query = `
       SELECT 
         dr.deelnID, 
@@ -50,6 +50,11 @@ participantRidersRouter.get('/', async (request, response, next) => {
     if (deelnID !== undefined && deelnID !== '') {
       conditions.push('dr.deelnID = ?');
       params.push(Number(deelnID));
+    }
+
+    if (poolID !== undefined && poolID !== '') {
+      conditions.push('d.poolID = ?');
+      params.push(Number(poolID));
     }
 
     if (rennerID !== undefined && rennerID !== '') {

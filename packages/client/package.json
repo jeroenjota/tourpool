@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./LoginForm.vue": "./src/LoginForm.vue",
-    "./ProfileFields.vue": "./src/ProfileFields.vue"
+    "./ProfileFields.vue": "./src/ProfileFields.vue",
+    "./AccountSettings.vue": "./src/AccountSettings.vue"
   },
   "dependencies": { "vue": "^3.5.42" }
 }

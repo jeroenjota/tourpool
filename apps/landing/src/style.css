@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+/* Standaardknop, gelijk aan admin en deelnemersapp. */
+@utility btn {
+  @apply cursor-pointer rounded-md border border-yellow-700 bg-yellow-300 px-2 py-1 text-red-900 transition;
+  &:hover:not(:disabled) {
+    @apply translate-x-0.5 translate-y-0.5 bg-yellow-100 text-green-900 hover:border-t-2 border-l-2;
+  }
+  &:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+}
+
+/* Lato 2.0 (volledige tekenset, o.a. č); eigen gewichtskoppeling omdat lato-font bold op 600 zet. */
+@font-face {
+  font-family: Lato;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('lato-font/fonts/lato-normal/lato-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: Lato;
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('lato-font/fonts/lato-normal-italic/lato-normal-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: Lato;
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('lato-font/fonts/lato-medium/lato-medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: Lato;
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('lato-font/fonts/lato-semibold/lato-semibold.woff2') format('woff2');
+}
+@font-face {
+  font-family: Lato;
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('lato-font/fonts/lato-bold/lato-bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: Lato;
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url('lato-font/fonts/lato-bold-italic/lato-bold-italic.woff2') format('woff2');
+}
+
+@theme {
+  --font-sans: Lato, Arial, sans-serif;
+  --font-heading: 'EB Garamond', Garamond, 'Times New Roman', serif;
+  --font-mono: Lato, Arial, sans-serif;
+}
+
+/* font-mono is also Lato; tabular digits keep columns aligned. */
+@utility font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+  }
+
+  h1, h2 {
+    font-family: var(--font-heading);
+  }
+}

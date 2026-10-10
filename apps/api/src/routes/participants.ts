@@ -1,9 +1,19 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../db.js';
-import { HttpError, isDuplicate, requireAdmin } from '../auth.js';
+import { HttpError, isDuplicate } from '../auth.js';
+import { recalculatePoolPoints } from './stageResults.js';
 
 export const participantsRouter = Router();
+
+const newAddressSchema = z.object({
+  vNaam: z.string().trim().max(24).nullable().optional(),
+  tNaam: z.string().trim().max(12).nullable().optional(),
+  aNaam: z.string().trim().min(1).max(24),
+  plaats: z.string().trim().max(24).nullable().optional(),
+  tel: z.string().trim().max(12).nullable().optional(),
+  email: z.string().trim().email().max(64).nullable().optional()
+}).strict();
 
 const createParticipantSchema = z.object({
   poolID: z.number().int(),
@@ -17,6 +27,12 @@ const createParticipantSchema = z.object({
 });
 
 const updateParticipantSchema = createParticipantSchema.partial();
+const newParticipantSchema = createParticipantSchema.extend({
+  adrID: z.number().int().optional(),
+  newAddress: newAddressSchema.optional()
+}).refine(payload => (payload.adrID === undefined) !== (payload.newAddress === undefined), {
+  path: ['adrID'], message: 'Kies een bestaande persoon of vul een nieuwe persoon in.'
+});
 
 const generatePloegnaam = async (connection: Awaited<ReturnType<typeof pool.getConnection>>, poolID: number, adrID: number) => {
   const addressRows = await connection.query(
@@ -75,7 +91,9 @@ participantsRouter.get('/', async (request, response, next) => {
         a.tel,
         a.email,
         d.roepnaam AS ploegnaam,
-        d.Betaald 
+        d.Betaald,
+        d.gast,
+        TIMESTAMPDIFF(SECOND, NOW(), d.aangemaakt + INTERVAL 48 HOUR) AS gastSecondenOver
       FROM tblDeelnemers d
       JOIN tblAdressen a ON d.adrID = a.adrID
       LEFT JOIN tblPools p ON d.poolID = p.poolID
@@ -122,7 +140,9 @@ participantsRouter.get('/:deelnID', async (request, response, next) => {
         a.tel,
         a.email,
         d.roepnaam AS ploegnaam,
-        d.Betaald 
+        d.Betaald,
+        d.gast,
+        TIMESTAMPDIFF(SECOND, NOW(), d.aangemaakt + INTERVAL 48 HOUR) AS gastSecondenOver
       FROM tblDeelnemers d
       JOIN tblAdressen a ON d.adrID = a.adrID
       LEFT JOIN tblPools p ON d.poolID = p.poolID
@@ -146,14 +166,33 @@ participantsRouter.post('/', async (request, response, next) => {
   const connection = await pool.getConnection();
 
   try {
-    const payload = createParticipantSchema.parse(request.body);
+    const { newAddress, ...payload } = newParticipantSchema.parse(request.body);
     const betaaldVal = payload.Betaald === undefined || payload.Betaald === null ? null : (payload.Betaald ? 1 : 0);
-    const ploegnaam = payload.ploegnaam?.trim() || await generatePloegnaam(connection, payload.poolID, payload.adrID);
 
     await connection.beginTransaction();
+    let adrID = payload.adrID;
+    if (newAddress) {
+      const address = await connection.query(
+        'INSERT INTO tblAdressen (vNaam, tNaam, aNaam, plaats, tel, email) VALUES (?, ?, ?, ?, ?, ?)',
+        [newAddress.vNaam || null, newAddress.tNaam || null, newAddress.aNaam, newAddress.plaats || null,
+          newAddress.tel || null, newAddress.email?.toLowerCase() || null]
+      );
+      adrID = Number((address as { insertId: number | bigint }).insertId);
+    } else if (request.managedPoolIDs) {
+      // Pool managers have no address book: only registered accounts or people already in their pools.
+      const managed = request.managedPoolIDs;
+      const allowed = await connection.query(
+        `SELECT 1 FROM tblAccounts WHERE adrID = ? AND emailVerified = TRUE AND role IN ('user', 'poolbeheerder')
+         UNION SELECT 1 FROM tblDeelnemers WHERE adrID = ? AND poolID IN (${managed.map(() => '?').join(', ') || 'NULL'})
+         LIMIT 1`,
+        [adrID, adrID, ...managed]
+      );
+      if (!allowed.length) throw new HttpError(403, 'Kies een geregistreerd account of voeg een nieuwe persoon toe.');
+    }
+    const ploegnaam = payload.ploegnaam?.trim() || await generatePloegnaam(connection, payload.poolID, adrID!);
     const result = await connection.query(
       'INSERT INTO tblDeelnemers (poolID, adrID, roepnaam, Betaald) VALUES (?, ?, ?, ?)',
-      [payload.poolID, payload.adrID, ploegnaam, betaaldVal]
+      [payload.poolID, adrID, ploegnaam, betaaldVal]
     );
 
     const deelnID = Number((result as { insertId: number | bigint }).insertId);
@@ -173,6 +212,7 @@ participantsRouter.post('/', async (request, response, next) => {
 
     response.status(201).json({
       ...payload,
+      adrID,
       ploegnaam,
       deelnID
     });
@@ -184,7 +224,7 @@ participantsRouter.post('/', async (request, response, next) => {
   }
 });
 
-participantsRouter.put('/:deelnID/account', requireAdmin, async (request, response, next) => {
+participantsRouter.put('/:deelnID/account', async (request, response, next) => {
   let connection;
   try {
     const deelnID = z.coerce.number().int().positive().parse(request.params.deelnID);
@@ -195,7 +235,7 @@ participantsRouter.put('/:deelnID/account', requireAdmin, async (request, respon
     connection = await pool.getConnection();
     await connection.beginTransaction();
     const accounts = await connection.query(
-      "SELECT adrID FROM tblAccounts WHERE accountID = ? AND role = 'user' FOR UPDATE",
+      "SELECT adrID FROM tblAccounts WHERE accountID = ? AND role IN ('user', 'poolbeheerder') FOR UPDATE",
       [payload.accountID]
     ) as Array<{ adrID: number }>;
     if (!accounts[0]) throw new HttpError(404, 'Gebruikersaccount niet gevonden.');
@@ -245,6 +285,23 @@ participantsRouter.put('/:deelnID', async (request, response, next) => {
       'UPDATE tblDeelnemers SET poolID = ?, adrID = ?, roepnaam = ?, Betaald = ? WHERE deelnID = ?',
       [updated.poolID, updated.adrID, updated.ploegnaam, updated.Betaald, deelnID]
     );
+
+    // Alleen betaalde ploegen tellen mee: punten en standen opnieuw berekenen bij een wijziging.
+    if (Boolean(updated.Betaald) !== Boolean(current.Betaald) || updated.poolID !== current.poolID) {
+      const poolIDs = [...new Set([Number(current.poolID), Number(updated.poolID)])];
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        for (const poolID of poolIDs) {
+          const pools = await connection.query('SELECT tourID FROM tblPools WHERE poolID = ?', [poolID]) as Array<{ tourID: number }>;
+          if (pools[0]) await recalculatePoolPoints(connection, poolID, pools[0].tourID);
+        }
+        await connection.commit();
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally { connection.release(); }
+    }
 
     response.json({ deelnID, ...updated });
   } catch (error) {

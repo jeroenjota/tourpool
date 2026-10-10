@@ -5,9 +5,10 @@ import { pool } from '../db.js';
 import { emailService } from '../email.js';
 import {
   authenticate, cookieName, cookieOptions, emailSchema, getAccount, hashPassword,
-  hashToken, HttpError, isDuplicate, newToken, passwordSchema, profileSchema,
+  hashToken, HttpError, isDuplicate, newToken, passwordSchema, profileSchema, type Role,
   sessionLifetime, usernameSchema, verifyPassword
 } from '../auth.js';
+import { startPasswordReset } from '../passwordReset.js';
 
 export const authRouter = Router();
 const limit = rateLimit({
@@ -190,7 +191,7 @@ authRouter.post('/login', limit, async (request, response, next) => {
     const rows = await pool.query(
       'SELECT accountID, adrID, username, email, emailVerified, role, passwordHash FROM tblAccounts WHERE username = ? OR email = ? LIMIT 2',
       [identity, identity]
-    ) as Array<{ accountID: number; adrID: number; username: string; email: string; emailVerified: boolean; role: 'admin' | 'user'; passwordHash: string }>;
+    ) as Array<{ accountID: number; adrID: number; username: string; email: string; emailVerified: boolean; role: Role; passwordHash: string }>;
     const account = rows[0];
     const valid = await verifyPassword(payload.password, rows.length === 1 ? account.passwordHash : await dummyHash);
     if (rows.length !== 1 || !valid) throw new HttpError(401, 'Gebruikersnaam/e-mailadres of wachtwoord is onjuist.');
@@ -218,6 +219,96 @@ authRouter.post('/login', limit, async (request, response, next) => {
 
 authRouter.get('/session', authenticate, (request, response) => {
   response.json({ account: getAccount(request), csrfToken: request.session!.csrfToken });
+});
+
+const forgotPasswordSchema = z.object({
+  identifier: z.string().trim().min(1).max(64).transform(value => value.toLowerCase())
+}).strict();
+const resetPasswordSchema = z.object({
+  token: z.string().regex(/^[a-f0-9]{64}$/),
+  password: passwordSchema
+}).strict();
+const forgotPasswordResponse = {
+  message: 'Als dit account bestaat, ontvang je binnen enkele minuten een e-mail met een link om een nieuw wachtwoord te kiezen.'
+};
+
+authRouter.post('/forgot-password', limit, async (request, response, next) => {
+  try {
+    const { identifier } = forgotPasswordSchema.parse(request.body);
+    const rows = await pool.query(
+      'SELECT accountID, email FROM tblAccounts WHERE username = ? OR email = ? LIMIT 2',
+      [identifier, identifier]
+    ) as Array<{ accountID: number; email: string }>;
+    if (rows.length === 1) {
+      // Not awaited, so the response time does not reveal whether the account exists.
+      startPasswordReset(rows[0].accountID, rows[0].email)
+        .catch(error => console.error('Could not send the password-reset email:', error));
+    }
+    response.status(202).json(forgotPasswordResponse);
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.post('/reset-password', limit, async (request, response, next) => {
+  let connection;
+  let transactionStarted = false;
+  try {
+    const payload = resetPasswordSchema.parse(request.body);
+    const passwordHash = await hashPassword(payload.password);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const rows = await connection.query(
+      'SELECT accountID FROM tblPasswordResets WHERE tokenHash = ? AND expiresAt > UTC_TIMESTAMP() FOR UPDATE',
+      [hashToken(payload.token)]
+    ) as Array<{ accountID: number }>;
+    if (!rows[0]) throw new HttpError(400, 'Deze resetlink is ongeldig of verlopen. Vraag een nieuwe link aan.');
+    const { accountID } = rows[0];
+    // The reset link proves access to the mailbox, so the address counts as verified.
+    await connection.query(
+      'UPDATE tblAccounts SET passwordHash = ?, emailVerified = TRUE WHERE accountID = ?', [passwordHash, accountID]
+    );
+    await connection.query('DELETE FROM tblPasswordResets WHERE accountID = ?', [accountID]);
+    await connection.query('DELETE FROM tblEmailVerifications WHERE accountID = ?', [accountID]);
+    await connection.query('DELETE FROM tblSessions WHERE accountID = ?', [accountID]);
+    await connection.commit();
+    transactionStarted = false;
+    response.json({ message: 'Je wachtwoord is gewijzigd. Je kunt nu inloggen met je nieuwe wachtwoord.' });
+  } catch (error) {
+    if (connection && transactionStarted) await connection.rollback();
+    next(error);
+  } finally {
+    connection?.release();
+  }
+});
+
+authRouter.post('/password', limit, authenticate, async (request, response, next) => {
+  try {
+    const account = getAccount(request);
+    const payload = z.object({
+      currentPassword: z.string().min(1).max(128),
+      newPassword: passwordSchema
+    }).strict().parse(request.body);
+    const rows = await pool.query(
+      'SELECT passwordHash FROM tblAccounts WHERE accountID = ?', [account.accountID]
+    ) as Array<{ passwordHash: string }>;
+    if (!rows[0] || !await verifyPassword(payload.currentPassword, rows[0].passwordHash)) {
+      throw new HttpError(400, 'Het huidige wachtwoord is onjuist.');
+    }
+    await pool.query(
+      'UPDATE tblAccounts SET passwordHash = ? WHERE accountID = ?',
+      [await hashPassword(payload.newPassword), account.accountID]
+    );
+    // Sign out other devices, keep the current session.
+    await pool.query(
+      'DELETE FROM tblSessions WHERE accountID = ? AND tokenHash <> ?', [account.accountID, request.session!.tokenHash]
+    );
+    await pool.query('DELETE FROM tblPasswordResets WHERE accountID = ?', [account.accountID]);
+    response.json({ message: 'Je wachtwoord is gewijzigd. Andere apparaten zijn uitgelogd.' });
+  } catch (error) {
+    next(error);
+  }
 });
 
 authRouter.post('/logout', authenticate, async (request, response, next) => {

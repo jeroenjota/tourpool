@@ -7,6 +7,7 @@ Monorepo met npm workspaces:
 | `apps/api` | `@tourpool/api` | REST-API (Node.js, Express, TypeScript, MariaDB), migraties en tests |
 | `apps/admin` | `@tourpool/admin` | Beheermodule (Vue 3, Vite, Tailwind) |
 | `apps/user` | `@tourpool/user` | Deelnemersapp met registratie, eigen tourploegen en PDF |
+| `apps/landing` | `@tourpool/landing` | Landingspagina op `/tourpool/` met links naar deelnemers en beheer |
 | `packages/client` | `@tourpool/client` | Gedeelde sessieclient en accountformulieren |
 
 Beide Vue-apps gebruiken Tailwind CSS 4 via de Vite-plugin. De deelnemersapp
@@ -71,6 +72,11 @@ Configureer voor e-mail `CONTACT_RECEIVER`, `SMTP_HOST`, `SMTP_PORT`,
 moet eindigen op `/api`; verificatielinks gebruiken dit adres. SMTP-poort 465
 gebruikt `SMTP_SECURE=true`, poort 587 doorgaans `false`. Bewaar SMTP-gegevens
 alleen in de serveromgeving en commit ze nooit naar Git.
+Op piweb gebruiken het beheerscherm (`/tourpool/beheer/`), `/tourpool/deelnemen/` en `/tourpool/api/`
+geen nginx Basic Auth meer. Inloggen verloopt via het Tourpool-account;
+de API controleert accounts, beheerdersrechten en CSRF. Stel
+`AUTH_ORIGINS=https://jota.nl,https://www.jota.nl` in om aanmelden en andere mutaties
+vanaf de publieke website met en zonder `www` toe te staan.
 
 Op piweb staan de gedeelde SMTP-instellingen, `DB_HOST` en `DB_PORT` in
 `/home/jeroen/config/shared.env`. Jota Tours, Golf, Tourpool en Laurierboom laden
@@ -83,6 +89,40 @@ Deze bestanden bevatten een comment met de locatie en de laadwijze.
 `CONTACT_RECEIVER`, `PUBLIC_API_URL`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` en
 accountinstellingen blijven per app.
 Al ingestelde procesvariabelen hebben voorrang op het centrale bestand.
+
+### Rollen, poolbeheerders en wachtwoorden
+
+Voer op bestaande databases `20261010_add_pool_managers_and_password_reset.sql`
+uit. Deze voegt de rol **poolbeheerder** toe, plus de tabellen
+`tblPoolManagers` (koppeling account-pool) en `tblPasswordResets`.
+
+Er zijn drie rollen:
+
+- **admin**: volledige toegang tot de adminmodule. Onder **Accounts & rechten**
+  kent de admin rollen toe, koppelt poolbeheerders aan een of meer pools en
+  stuurt desgewenst een resetlink voor het wachtwoord. Een admin kan zijn
+  eigen beheerdersrol niet intrekken.
+- **poolbeheerder**: logt in op de adminmodule en ziet alleen **Mijn pools**
+  en **Mijn account**. Per gekoppelde pool kan hij deelnemers en hun ploegen
+  beheren, punten toekennen, opties instellen en standen afdrukken. Hij heeft
+  geen toegang tot het adresboek: hij kiest een bevestigd account of voert een
+  nieuwe persoon in, die bij het toevoegen van de deelnemer wordt opgeslagen.
+  De API controleert bij elk verzoek of de pool bij de beheerder hoort.
+- **user**: gebruikt alleen de deelnemersapp.
+
+Rolwijzigingen gelden direct, omdat de API de rol bij elk verzoek opnieuw leest.
+Iedereen kan onder **Mijn account** (admin) of **Gegevens wijzigen**
+(deelnemersapp) de gebruikersnaam en het wachtwoord wijzigen; voor een nieuw
+wachtwoord is het huidige wachtwoord nodig en worden andere sessies uitgelogd.
+
+Via **Wachtwoord vergeten?** op het inlogscherm vraagt een gebruiker met
+gebruikersnaam of e-mailadres een resetlink aan. Het antwoord is altijd gelijk,
+zodat niet te zien is of een account bestaat. De link is een uur geldig, werkt
+eenmalig, bevestigt het e-mailadres en logt alle sessies van het account uit.
+De link opent de deelnemersapp. Stel optioneel `PUBLIC_APP_URL` in
+(bijvoorbeeld `https://jota.nl/tourpool/deelnemen/`); zonder deze instelling
+leidt de API het adres in productie af uit `PUBLIC_API_URL` (`/api` wordt
+`/deelnemen/`) en gebruikt lokaal `http://localhost:5174/`.
 De configuratiemap heeft rechten `700`, het gedeelde bestand `600`.
 Na een wijziging: `pm2 restart jota-api gts-api tourpool-api laurierboom-api`.
 De Dynamic DNS-melder leest de instellingen bij elke uitvoering opnieuw.
@@ -164,6 +204,20 @@ Authenticatie-endpoints: `POST /api/auth/register`, `POST /api/auth/login`,
 Deelnemers-endpoints: `GET/PUT /api/me/profile`, `GET /api/me/pools`,
 `GET /api/me/pools/:poolID/riders`, `GET/POST /api/me/entries`,
 `GET/PUT /api/me/entries/:deelnID`, `GET /api/me/entries/:deelnID/pdf`.
+Inschrijven zonder account (geen login nodig): `GET /api/public/pools`,
+`GET /api/public/pools/:poolID/riders` en `POST /api/public/entries`
+`{ poolID, ploegnaam, riders, profile: { vNaam, tNaam, aNaam, plaats, tel, email } }`
+(e-mail optioneel, ploeg moet compleet zijn, max. 20 per uur per IP). De ploeg wordt als
+niet betaald opgeslagen bij een nieuw adres; het antwoord bevat `deelnID` en de PDF (base64).
+Alleen betaalde ploegen tellen mee in punten en standen; bij het wijzigen van de betaalstatus
+worden de punten van de pool opnieuw berekend. Niet-betaalde gastploegen worden 48 uur na
+aanmaken automatisch verwijderd (de API controleert elk uur). Hiervoor is migratie
+`20261011_add_guest_entries.sql` nodig.
+Organisaties (`GET/POST /api/organisations`, `PUT/DELETE /api/organisations/:orgID`, alleen admin)
+bevatten naam en inleveradres (straat, huisnummer, postcode, plaats, e-mail, telefoon) en worden
+via `orgID` aan pools gekoppeld (beheer via de pagina Organisaties of in het poolvenster); `Org` van de pool volgt de organisatienaam. Het inleveradres
+staat in de deelnemersapp en op de PDF. Migratie `20261012_add_organisations.sql` zet bestaande
+organisatornamen om naar organisaties.
 Mutaties na het inloggen vereisen `X-CSRF-Token` uit de sessieresponse.
 Inloggen/registreren is begrensd op 20 pogingen per IP per 15 minuten
 (per API-proces). E-mailverificatie en wachtwoordherstel zijn nog niet aanwezig.
@@ -191,6 +245,7 @@ Start daarna in aparte terminals:
 npm run dev:api     # API op http://localhost:3000
 npm run dev:admin   # admin op http://localhost:5173 (proxy /api -> :3000)
 npm run dev:user    # deelnemers op http://localhost:5174 (proxy /api -> :3000)
+npm run dev:landing # landingspagina op http://localhost:5175
 ```
 
 Overige scripts vanuit de hoofdmap:
@@ -200,30 +255,33 @@ npm run build        # bouwt alle apps (apps/*/dist)
 npm run build:api
 npm run build:admin
 npm run build:user
-npm run check        # typecheck API, admin en deelnemers
+npm run build:landing
+npm run check        # typecheck API, admin, deelnemers en landingspagina
 npm test             # API-tests
 ```
 
 ## Deployen naar piweb
 
-`./deploy_tourpool.sh` deployt naar `https://jota.nl/tourpool/` (admin in `/var/www/tourpool`, API via pm2 als `tourpool-api` op poort 3002 in `~/apps/tourpool-api`).
+`./deploy_tourpool.sh` deployt naar `https://jota.nl/tourpool/` (landingspagina in `/var/www/tourpool`, admin in `/var/www/tourpool/beheer`, deelnemersapp in `/var/www/tourpool/deelnemen`, API via pm2 als `tourpool-api` op poort 3002 in `~/apps/tourpool-api`).
 
-1. Eenmalig **optie 1**: maakt mappen, database `tourpool` + gebruiker, de prod-`.env` (met gegenereerd wachtwoord) en `/etc/nginx/snippets/tourpool.conf` (optioneel met basic auth). Voeg daarna eenmalig `include /etc/nginx/snippets/tourpool.conf;` toe aan het 443-serverblok in `jota.conf` en herlaad nginx.
+1. Eenmalig **optie 1**: maakt mappen, database `tourpool` + gebruiker, de prod-`.env` (met gegenereerd wachtwoord) en `/etc/nginx/snippets/tourpool.conf` (zonder basic auth). Voeg daarna eenmalig `include /etc/nginx/snippets/tourpool.conf;` toe aan het 443-serverblok in `jota.conf` en herlaad nginx.
 2. **Optie 2** zet de dev-database over (eerst backup naar `~/apps/backups`). De dump wordt aangepast voor MariaDB 10.11 (collatie, DEFINER).
-3. **Optie 3/4/5/7** bouwt en deployt API, admin en/of deelnemersapp.
+3. **Optie 3/4/5/7/8** bouwt en deployt API, admin, deelnemersapp en/of landingspagina.
 
 Bij een bestaande productie-installatie: voer de accountmigratie uit, maak
-een admin aan en voeg `AUTH_ORIGINS=https://jota.nl` en `TRUST_PROXY=1`
+een admin aan en voeg `AUTH_ORIGINS=https://jota.nl,https://www.jota.nl` en `TRUST_PROXY=1`
 toe aan de API-`.env` voordat je de nieuwe API activeert.
 Optie 1 schrijft de aangepaste nginx-snippet; deze geeft
-`/tourpool/deelnemen/` een eigen SPA-fallback en laat de API zonder nginx
+`/tourpool/beheer/` en `/tourpool/deelnemen/` een eigen SPA-fallback en laat de API zonder nginx
 basic auth werken. Bestaande snippets moeten dus ook worden bijgewerkt.
-Eventuele basic auth kan als extra laag voor alleen de admin blijven staan.
+Ook de adminlocatie gebruikt `auth_basic off`; de beheer-API vereist een ingelogde admin.
 Gebruik voor een update **niet** optie 2/6: die overschrijft productiegegevens.
 Een volledige import van `tourpool.sql` verwijdert ook oude accounts/sessies;
 maak daarna opnieuw een admin aan. Gebruik de losse migratie voor bestaande data.
 
-Het basispad van de admin staat in `apps/admin/.env.production` (`VITE_BASE_PATH`, `VITE_API_URL`).
+Het basispad van de admin staat in `apps/admin/.env.production` (`VITE_BASE_PATH=/tourpool/beheer/`, `VITE_API_URL`).
+De landingspagina gebruikt `apps/landing/.env.production` (`VITE_ADMIN_URL`, `VITE_USER_URL`);
+afbeeldingen voor de landingspagina horen in `apps/landing/public/`.
 De deelnemersapp gebruikt `apps/user/.env.production` en staat in
 `/var/www/tourpool/deelnemen`.
 
@@ -265,12 +323,15 @@ Gebruik `apps/api/.env.example` als basis voor je eigen `apps/api/.env` als je d
 - `GET /api/stages` (filter: `?tour=`), `POST`, `PUT /api/stages/:tour/:etappeNr`, `DELETE`
 - `GET /api/stage-results` (filters: `?tourID=&etappeNr=&uitslagType=&rennerID=`), `POST`, `PUT /api/stage-results/:tourID/:etappeNr/:uitslagType/:plaats`, `DELETE`
 - `GET /api/participants` (filters: `?poolID=&adrID=`), `POST`, `PUT /api/participants/:deelnID`, `DELETE /api/participants/:deelnID`
-- `GET /api/participant-riders` (filters: `?deelnID=&rennerID=`), `POST`, `PUT /api/participant-riders/:deelnID/:rennerID`, `DELETE`
-- `GET /api/participant-points` (filters: `?deelnemID=&etappeNr=`), `POST`, `PUT /api/participant-points/:deelnemID/:etappeNr`, `DELETE`
-- `GET /api/options`, `POST`, `PUT /api/options/:poolID`, `DELETE /api/options/:poolID`
+- `GET /api/participant-riders` (filters: `?poolID=&deelnID=&rennerID=`), `POST`, `PUT /api/participant-riders/:deelnID/:rennerID`, `DELETE`
+- `GET /api/participant-points` (filters: `?poolID=&deelnemID=&etappeNr=`), `POST`, `PUT /api/participant-points/:deelnemID/:etappeNr`, `DELETE`
+- `GET /api/options` (filter: `?poolID=`), `POST`, `PUT /api/options/:poolID`, `DELETE /api/options/:poolID`
 - `GET /api/standard-points`, `POST`, `PUT /api/standard-points/:prestatieID`, `DELETE /api/standard-points/:prestatieID`
 - `GET /api/point-allocations` (filters: `?poolID=&prestatieID=`), `POST`, `PUT /api/point-allocations/:prestatieID/:poolID`, `DELETE`
 - `PUT /api/point-allocations/load/:poolID` vervangt alle poolprestaties door de standaardpunten binnen een transactie.
+- `POST /api/auth/forgot-password` `{ identifier }`, `POST /api/auth/reset-password` `{ token, password }`, `POST /api/auth/password` `{ currentPassword, newPassword }`
+- `PUT /api/me/username` `{ username }`
+- `GET /api/accounts` (koppelbare accounts), en alleen voor admins: `GET /api/accounts/manage`, `PUT /api/accounts/:accountID` `{ role, poolIDs }`, `POST /api/accounts/:accountID/password-reset`
 
 Bij het aanmaken van een pool worden de standaardprestaties en hun punten,
 uitslagtype, plaats en volgorde gekopieerd naar de pool. De poolinstellingen zijn daarna

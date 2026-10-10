@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
-import { auth, errorMessage, logout } from '@tourpool/client';
+import { auth, errorMessage, isStaff, logout } from '@tourpool/client';
 import { apiFetch } from './services/api';
 import { useActivePoolStore } from './stores/activePool';
 import { 
@@ -18,7 +18,10 @@ import {
   ArrowLeft,
   Menu,
   X,
-  Mail
+  Mail,
+  KeyRound,
+  UserCog,
+  Building2,
 } from '@lucide/vue';
 
 const route = useRoute();
@@ -26,7 +29,7 @@ const router = useRouter();
 const authError = ref('');
 router.onError(error => { authError.value = errorMessage(error); });
 watch(() => auth.account, account => {
-  if (auth.checked && account?.role !== 'admin' && route.name !== 'login') {
+  if (auth.checked && !isStaff(account) && route.name !== 'login') {
     void router.replace('/login').catch(error => { authError.value = errorMessage(error); });
   }
 });
@@ -78,7 +81,9 @@ watch(
   { immediate: true }
 );
 
-const navItems = [
+const isAdmin = computed(() => auth.account?.role === 'admin');
+const homePath = computed(() => isAdmin.value ? '/' : '/pools');
+const adminNavItems = [
   { name: 'Adresboek', path: '/addresses', icon: Contact },
   { name: 'Tours', path: '/tours', icon: Calendar },
   { name: 'Renners', path: '/riders', icon: Bike },
@@ -87,8 +92,16 @@ const navItems = [
   { name: 'Uitslagen', path: '/stages', icon: MapPin },
   { name: 'Standaard Punten', path: '/standard-points', icon: Award },
   { name: 'Pools', path: '/pools', icon: Trophy },
+  { name: 'Organisaties', path: '/organisations', icon: Building2 },
+  { name: 'Accounts & rechten', path: '/accounts', icon: UserCog },
   { name: 'E-mail testen', path: '/email-test', icon: Mail },
+  { name: 'Mijn account', path: '/account', icon: KeyRound },
 ];
+const managerNavItems = [
+  { name: 'Mijn pools', path: '/pools', icon: Trophy },
+  { name: 'Mijn account', path: '/account', icon: KeyRound },
+];
+const navItems = computed(() => isAdmin.value ? adminNavItems : managerNavItems);
 
 const poolNavItems = [
   { name: 'Deelnemers', page: 'participants', icon: UserCheck },
@@ -100,7 +113,7 @@ const poolNavItems = [
 
 <template>
   <div v-if="authError" role="alert" class="bg-red-100 p-4 text-red-800">{{ authError }}</div>
-  <RouterView v-if="auth.account?.role !== 'admin' || route.name === 'login'" />
+  <RouterView v-if="!isStaff(auth.account) || route.name === 'login'" />
   <div v-else class="flex h-screen overflow-hidden bg-slate-50 text-slate-800">
     <!-- Achtergrond achter het uitgeklapte menu op mobiel -->
     <div
@@ -124,13 +137,13 @@ const poolNavItems = [
       >
         <X class="h-5 w-5" />
       </button>
-      <RouterLink to="/" class="flex items-center space-x-3 border-b border-slate-200 p-5 transition-colors hover:bg-slate-50">
+      <RouterLink :to="homePath" class="flex items-center space-x-3 border-b border-slate-200 p-5 transition-colors hover:bg-slate-50">
         <div class="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-amber-600">
           <Bike class="h-6 w-6" />
         </div>
         <div>
           <h1 class="text-lg font-bold leading-none tracking-wide text-slate-900">Tourpool</h1>
-          <span class="text-xs font-semibold text-amber-600">Beheersysteem</span>
+          <span class="text-xs font-semibold text-amber-600">{{ isAdmin ? 'Beheersysteem' : 'Poolbeheer' }}</span>
         </div>
       </RouterLink>
 
@@ -153,7 +166,7 @@ const poolNavItems = [
       </nav>
 
       <div class="flex items-center justify-between border-t border-slate-200 bg-slate-50/50 p-4 text-xs text-slate-500">
-        <span class="truncate">{{ auth.account.email }}</span>
+        <span class="truncate">{{ auth.account?.username }}</span>
         <button type="button" class="ml-2 font-semibold text-red-700" @click="signOut">Uitloggen</button>
       </div>
     </aside>
@@ -172,7 +185,7 @@ const poolNavItems = [
         >
           <Menu class="h-5 w-5" />
         </button>
-        <RouterLink to="/" class="flex items-center gap-2 font-bold text-slate-900">
+        <RouterLink :to="homePath" class="flex items-center gap-2 font-bold text-slate-900">
           <Bike class="h-5 w-5 text-amber-600" />
           <span>Tourpool</span>
         </RouterLink>

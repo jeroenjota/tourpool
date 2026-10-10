@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140">
+  <g fill="none" stroke="#92400e" stroke-linecap="round" stroke-linejoin="round">
+    <!-- wheels -->
+    <circle cx="45" cy="105" r="30" stroke-width="6"/>
+    <circle cx="157" cy="105" r="30" stroke-width="6"/>
+    <circle cx="45" cy="105" r="3" fill="#92400e" stroke-width="2"/>
+    <circle cx="157" cy="105" r="3" fill="#92400e" stroke-width="2"/>
+    <!-- frame -->
+    <path d="M45 105 L95 105 L80 60 Z" stroke-width="5"/>
+    <path d="M80 60 L138 58 L95 105" stroke-width="5"/>
+    <path d="M138 58 L157 105" stroke-width="5"/>
+    <!-- saddle and handlebar -->
+    <path d="M70 55 L90 55" stroke-width="5"/>
+    <path d="M138 58 L150 54 Q158 54 156 64 L150 68" stroke-width="4"/>
+    <!-- crank -->
+    <path d="M95 105 L104 115 M95 105 L86 95" stroke-width="4"/>
+    <!-- rider: back leg, torso, arms, front leg -->
+    <path d="M82 48 L100 78 L86 95" stroke-width="10" stroke="#b45309"/>
+    <path d="M82 48 L127 33" stroke-width="15"/>
+    <path d="M125 35 L140 50 L151 56" stroke-width="8"/>
+    <path d="M82 48 L114 70 L104 115" stroke-width="11"/>
+  </g>
+  <!-- head with helmet -->
+  <circle cx="141" cy="24" r="10" fill="#92400e"/>
+  <path d="M128 22 Q135 8 152 14 L156 19 Z" fill="#facc15" stroke="#92400e" stroke-width="2" stroke-linejoin="round"/>
+</svg>

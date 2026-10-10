@@ -58,6 +58,12 @@ test('Accounts and enrollment work against actual MariaDB in an isolated tempora
     for (const sql of emailMigration.split(';').map(value => value.trim()).filter(Boolean)) {
       await connection.query(sql);
     }
+    const poolManagerMigration = await readFile(
+      new URL('../migrations/20261010_add_pool_managers_and_password_reset.sql', import.meta.url), 'utf8'
+    );
+    for (const sql of poolManagerMigration.split(';').map(value => value.trim()).filter(Boolean)) {
+      await connection.query(sql);
+    }
     const [legacyUsername] = await connection.query(
       'SELECT username FROM tblAccounts WHERE email = ?', ['legacy-admin@example.test']
     );
@@ -171,7 +177,7 @@ test('Accounts and enrollment work against actual MariaDB in an isolated tempora
     assert.equal(accountsResponse.status, 200);
     const accounts = await accountsResponse.json();
     assert.deepEqual(accounts.map(a => a.accountID).sort(), [user.account.accountID, other.account.accountID].sort());
-    assert.equal(accounts.find(a => a.accountID === user.account.accountID).username, 'testuser');
+    assert.equal(accounts.find(a => a.accountID === user.account.accountID).username, 'renamed-user');
     assert.ok(accounts.every(a => !('passwordHash' in a)));
     assert.equal((await request('/accounts', 'GET', undefined, user)).status, 403);
     const legacyAddress = await connection.query(
