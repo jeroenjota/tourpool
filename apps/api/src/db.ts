@@ -1,13 +1,16 @@
 import 'dotenv/config';
 import mariadb from 'mariadb';
-
 const {
-  DB_HOST = '127.0.0.1',
-  DB_PORT = '3306',
-  DB_USER = 'jeroen',
-  DB_PASSWORD = 'dev9046',
-  DB_NAME = 'tourpool'
+  DB_HOST,
+  DB_PORT,
+  DB_USER,
+  DB_PASSWORD,
+  DB_NAME
 } = process.env;
+
+if (!DB_HOST || !DB_PORT || !DB_USER || !DB_PASSWORD || !DB_NAME) {
+  throw new Error('Missing required database environment variables');
+}
 
 export const pool = mariadb.createPool({
   host: DB_HOST,

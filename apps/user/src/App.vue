@@ -445,7 +445,7 @@ async function pdf(entry: Entry) {
 </script>
 
 <template>
-  <main class="mx-auto max-w-full p-2 md:p-4">
+  <main class="mx-auto p-2 md:p-4">
     <p v-if="error" class="my-4 bg-red-100 p-4 text-red-800" role="alert">
       {{ error }}
     </p>
@@ -453,8 +453,8 @@ async function pdf(entry: Entry) {
     <template v-else-if="!auth.account && !guest">
       <LoginForm @signed-in="refresh" />
       <section
-        class="mx-auto my-4 max-w-sm rounded-xl border border-yellow-700 bg-yellow-100 p-3 md:max-w-xl md:p-5">
-        <h2 class="mb-2 text-xl font-bold">Meedoen zonder account?</h2>
+        class="max-w-140 md:max-w-140 mx-auto my-4 rounded-xl border border-yellow-700 bg-yellow-100 p-3 md:p-5">
+        <h2 class="mb-2 text-center text-2xl font-bold">Meedoen zonder account?  Dat kan!</h2>
         <p class="my-2">
           Vul je tourploeg in en druk het formulier 2 keer af; één voor jezelf en één om in te leveren bij de
           organisatie.<br />Zonder account kun je je ploeg achteraf niet meer
@@ -464,13 +464,13 @@ async function pdf(entry: Entry) {
           Je ploeg doet pas mee nadat de inleg is betaald.<br />Niet betaald binnen
           48 uur? Dan wordt de inschrijving verwijderd.
         </p>
-        <button class="btn max-[600px]:min-h-11 m-1" @click="startGuest">
+        <button class="btn max-[600px]:min-h-11 m-1 text-center" @click="startGuest">
           Inschrijven zonder account
         </button>
       </section>
     </template>
     <template v-else>
-      <div class="max-w-180 mx-auto rounded-2xl border border-yellow-700 bg-amber-800 px-4 md:max-w-6xl">
+      <div class="max-w-140 mx-auto rounded-2xl border border-yellow-700 bg-amber-800 px-4 md:max-w-6xl">
         <header
           v-if="guest || !auth.account"
           class="mx-auto flex flex-wrap items-center justify-between gap-2 align-middle md:flex-row">

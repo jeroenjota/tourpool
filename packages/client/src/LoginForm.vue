@@ -107,7 +107,7 @@ async function resendVerification() {
 </script>
 
 <template>
-  <form class="mx-auto my-12 max-w-md rounded-xl border border-yellow-700 bg-yellow-100 p-6 text-slate-800" @submit.prevent="submit">
+  <form class="max-w-140 mx-auto my-8 rounded-xl border border-yellow-700 bg-yellow-100 p-6 text-slate-800" @submit.prevent="submit">
     <h1 class="mb-4 text-2xl font-bold">{{ title }}</h1>
     <p v-if="error" class="text-red-700" role="alert">{{ error }}</p>
     <p v-if="message" class="text-green-800" role="status">{{ message }}</p>
@@ -132,16 +132,19 @@ async function resendVerification() {
       <label v-else class="my-3 block font-semibold">Gebruikersnaam of e-mailadres <input :class="inputClass" v-model="identifier" autocomplete="username" required maxlength="64" /></label>
       <label class="my-3 block font-semibold">Wachtwoord <input :class="inputClass" v-model="password" type="password" :autocomplete="registering ? 'new-password' : 'current-password'" :minlength="registering ? 12 : 1" maxlength="128" required /></label>
       <p v-if="registering">Gebruik minimaal 12 tekens.</p>
-      <button :class="buttonClass" type="submit">{{ busy ? 'Even geduld...' : registering ? 'Registreren' : 'Inloggen' }}</button>
-      <button v-if="!admin && !registering && identifier.includes('@')" :class="buttonClass" type="button" @click="resendVerification">
-        Nieuwe bevestigingsmail aanvragen
-      </button>
-      <button v-if="!admin" :class="buttonClass" type="button" @click="registering = !registering; error = ''; message = ''">
-        {{ registering ? 'Ik heb al een account' : 'Nieuw account aanmaken' }}
-      </button>
-      <button v-if="!registering" class="mt-3 block cursor-pointer text-sm text-slate-700 underline" type="button" @click="switchMode('forgot')">
-        Wachtwoord vergeten?
-      </button>
+      <div class="flex flex-row justify-between gap-2">
+  
+      <button :class="buttonClass + ' w-33'" type="submit">{{ busy ? 'Even geduld...' : registering ? 'Registreren' : 'Inloggen' }}</button>
+        <button v-if="!admin" :class="buttonClass + ' w-33'" type="button" @click="registering = !registering; error = ''; message = ''">
+          {{ registering ? 'Ik heb al een account' : 'Nog geen account?' }}
+        </button>
+        <button v-if="!admin && !registering && identifier.includes('@')" :class="buttonClass + ' w-33'" type="button" @click="resendVerification">
+          Nieuwe e-mailbevestiging
+        </button>
+</div>
+        <button v-if="!registering" class="mt-3 block cursor-pointer text-sm text-slate-700 underline" type="button" @click="switchMode('forgot')">
+          Wachtwoord vergeten?
+        </button>
     </fieldset>
   </form>
 </template>
