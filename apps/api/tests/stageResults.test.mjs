@@ -123,6 +123,7 @@ test('Saving stage results calculates category points and rolls back on failure'
               return [{ deelnID: 4 }, { deelnID: 5 }];
             }
             if (sql.includes('FROM tblDeelnemRenners dr')) {
+              assert.match(sql, /tr\.neemtDeel = 1/);
               assert.deepEqual(params, [3, 1]);
               if (scenario.nonStarter) return [];
               return scenario.tie

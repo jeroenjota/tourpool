@@ -17,6 +17,31 @@ const selectedLand = ref('');
 const loading = ref(true);
 const modalOpen = ref(false);
 const editingTeam = ref<Partial<Team> | null>(null);
+const syncing = ref(false);
+const syncMessage = ref('');
+const syncError = ref('');
+
+const syncUci = async () => {
+  if (!confirm('De 18 beste WorldTeams en 5 beste ProTeams en hun renners downloaden naar de algemene tabellen? Er worden geen Tourkoppelingen aangepast. Bestaande ploegnamen veranderen ook bij eerdere Tours.')) return;
+  syncing.value = true;
+  syncMessage.value = '';
+  syncError.value = '';
+  try {
+    const result = await apiFetch<{
+      year: string; rankingDate: string; added: number; updated: number; unchanged: number;
+      riders: { added: number; unchanged: number; skipped: string[] };
+    }>('/teams/sync-uci', { method: 'POST' });
+    await fetchTeams();
+    syncMessage.value = `UCI ${result.year}, ranking ${result.rankingDate}: 18 WorldTeams + 5 ProTeams. ${result.added} ploegen toegevoegd, ${result.updated} bijgewerkt, ${result.unchanged} ongewijzigd. Renners: ${result.riders.added} toegevoegd, ${result.riders.unchanged} al aanwezig. Tourkoppelingen niet gewijzigd.`;
+    if (result.riders.skipped.length) {
+      syncMessage.value += ` Overgeslagen, controleer handmatig (overeenkomst of land): ${result.riders.skipped.join(', ')}.`;
+    }
+  } catch (error) {
+    syncError.value = `UCI bijwerken mislukt: ${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    syncing.value = false;
+  }
+};
 
 const fetchTeams = async () => {
   loading.value = true;
@@ -35,8 +60,9 @@ const fetchTeams = async () => {
 
 onMounted(async () => {
   try {
-    countries.value = await apiFetch<any[]>('/countries');
+    countries.value = await apiFetch<Array<{ iso2: string; land: string }>>('/countries');
   } catch (err) {
+    syncError.value = `Importkeuzes laden mislukt: ${err instanceof Error ? err.message : String(err)}`;
     console.error(err);
   }
   await fetchTeams();
@@ -133,6 +159,9 @@ const formatTeamName = (team: Team) => {
 
       <!-- Knoppen rechts -->
       <div class="flex shrink-0 items-center gap-3">
+        <button @click="syncUci" :disabled="syncing" class="btn text-sm">
+          {{ syncing ? 'UCI ophalen...' : 'Actieve profploegen bijwerken' }}
+        </button>
         <button 
           @click="fetchTeams" 
           class="shadow-xs rounded-lg border border-slate-200 bg-white p-2.5 text-slate-600 transition hover:bg-slate-50"
@@ -150,6 +179,13 @@ const formatTeamName = (team: Team) => {
       </div>
     </div>
 
+    <p v-if="syncMessage" role="status" class="text-sm text-emerald-700">{{ syncMessage }}</p>
+    <p v-if="syncError" role="alert" class="text-sm text-rose-700">{{ syncError }}</p>
+    <p class="text-xs text-slate-500">
+      <a href="https://www.uci.org/riders/road-riders-teams/4uEfOErsvL4hkRJriqkdiw" target="_blank" rel="noopener noreferrer" class="underline">Officiële UCI-lijst</a>:
+      de 18 beste mannen WorldTeams en 5 beste ProTeams volgens de actuele UCI World Ranking.
+      Alleen de algemene ploegen- en rennertabellen worden bijgewerkt. Je stelt per Tour zelf de ploeg-rennerkoppelingen samen.
+    </p>
     <!-- Cards Grid (1 col mobile, 2 cols tablet, 4 cols desktop) -->
     <div v-if="loading && teams.length === 0" class="shadow-xs rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-400">
       Ploegen laden...

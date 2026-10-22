@@ -40,7 +40,7 @@ const loadTour = async () => {
   try {
     const [stages, tourRiders, pools, options, results] = await Promise.all([
       apiFetch<Array<{ etappeNr: number | null }>>(`/stages?tour=${tourID.value}`),
-      apiFetch<Rider[]>(`/team-riders?tourID=${tourID.value}`),
+      apiFetch<Rider[]>(`/team-riders?tourID=${tourID.value}&activeOnly=1`),
       apiFetch<Array<{ poolID: number; tourID: number }>>('/pools'),
       apiFetch<Limits[]>('/options'),
       apiFetch<Array<Result & { etappeNr: number }>>(`/stage-results?tourID=${tourID.value}`)

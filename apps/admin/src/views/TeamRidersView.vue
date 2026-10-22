@@ -32,6 +32,7 @@ interface TeamRiderItem {
   rennerID: number;
   Rugnummer: number;
   nietGestartEtappe?: number | null;
+  neemtDeel: number | boolean;
   anaam: string;
   vnaam?: string | null;
   tnaam?: string | null;
@@ -54,6 +55,25 @@ const allRiders = ref<Rider[]>([]);
 const tourTeams = ref<TourTeamItem[]>([]);
 const teamRiders = ref<TeamRiderItem[]>([]);
 const loading = ref(true);
+const savingParticipation = ref<string | null>(null);
+const participationError = ref('');
+
+const toggleParticipation = async (rider: TeamRiderItem, event: Event) => {
+  if (event.target instanceof HTMLInputElement) event.target.checked = !!rider.neemtDeel;
+  savingParticipation.value = `${rider.ploegID}-${rider.rennerID}`;
+  participationError.value = '';
+  try {
+    const updated = await apiFetch<{ neemtDeel: number }>(
+      `/team-riders/${rider.tourID}/${rider.ploegID}/${rider.rennerID}`,
+      { method: 'PUT', body: JSON.stringify({ neemtDeel: !rider.neemtDeel }) }
+    );
+    rider.neemtDeel = updated.neemtDeel;
+  } catch (error) {
+    participationError.value = `Deelname wijzigen mislukt: ${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    savingParticipation.value = null;
+  }
+};
 
 const searchQuery = ref('');
 const editingRiderKey = ref<string | null>(null);
@@ -294,6 +314,8 @@ const removeRiderFromTeam = async (r: TeamRiderItem) => {
 
 <template>
   <div class="space-y-6">
+    <p v-if="participationError" role="alert" class="text-sm text-rose-700">{{ participationError }}</p>
+    <p class="text-xs text-slate-500">Vink ‘Rijdt mee’ uit voor renners die niet aan deze Tour deelnemen. Zij zijn dan niet kiesbaar en scoren geen punten. Dit staat los van uitval tijdens een etappe.</p>
     <!-- Header -->
     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div class="shrink-0">
@@ -379,7 +401,7 @@ const removeRiderFromTeam = async (r: TeamRiderItem) => {
 
             <div class="flex shrink-0 items-center gap-2">
               <span class="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold text-slate-700">
-                {{ card.riders.length }} renners
+                {{ card.riders.filter(rider => rider.neemtDeel).length }}/{{ card.riders.length }} renners
               </span>
               <button 
                 @click="removeTeamFromTour(card, card.riders.length)"
@@ -404,6 +426,10 @@ const removeRiderFromTeam = async (r: TeamRiderItem) => {
             class="group/rider flex items-center justify-between rounded px-1 py-2 text-sm transition hover:bg-slate-50/80"
           >
             <div class="flex min-w-0 flex-1 items-center gap-2.5">
+              <label class="flex shrink-0 items-center gap-1 text-xs" title="Deelname aan deze Tour; geen uitval tijdens een etappe">
+                <input type="checkbox" :checked="!!r.neemtDeel" :disabled="savingParticipation !== null" @change="toggleParticipation(r, $event)" />
+                Rijdt mee
+              </label>
               <div v-if="editingRiderKey === getRiderKey(r)" class="flex shrink-0 items-center gap-1">
                 <input
                   v-model.number="editingRugnummer"
@@ -429,7 +455,7 @@ const removeRiderFromTeam = async (r: TeamRiderItem) => {
                 </button>
               </div>
               <span v-else class="w-8 shrink-0 rounded border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-center font-mono text-xs font-bold text-amber-700">
-                {{ r.Rugnummer }}
+                {{ r.Rugnummer || '—' }}
               </span>
               <span class="truncate text-xs font-medium text-slate-800" :title="formatRiderName(r)">
                 {{ formatRiderName(r) }}

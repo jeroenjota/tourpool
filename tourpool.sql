@@ -1433,6 +1433,7 @@ CREATE TABLE `tblPloegRenners` (
   `rennerID` int(11) NOT NULL,
   `Rugnummer` int(11) NOT NULL,
   `nietGestartEtappe` int(11) DEFAULT NULL,
+  `neemtDeel` tinyint(1) NOT NULL DEFAULT 1,
   PRIMARY KEY (`ploegID`,`rennerID`,`tourID`),
   KEY `tblPloegRenners_tblRenners_FK` (`rennerID`),
   KEY `tblPloegRenners_tblTours_FK` (`tourID`),
@@ -1449,7 +1450,7 @@ CREATE TABLE `tblPloegRenners` (
 LOCK TABLES `tblPloegRenners` WRITE;
 /*!40000 ALTER TABLE `tblPloegRenners` DISABLE KEYS */;
 set autocommit=0;
-INSERT INTO `tblPloegRenners` VALUES
+INSERT INTO `tblPloegRenners` (`tourID`, `ploegID`, `rennerID`, `Rugnummer`, `nietGestartEtappe`) VALUES
 (1,1,14,101,NULL),
 (2,1,14,101,NULL),
 (1,1,15,105,NULL),

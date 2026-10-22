@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../db.js';
+import { syncUciTeams } from '../uciTeams.js';
 
 export const teamsRouter = Router();
 
@@ -11,6 +12,14 @@ const createTeamSchema = z.object({
 });
 
 const updateTeamSchema = createTeamSchema.partial();
+
+teamsRouter.post('/sync-uci', async (request, response, next) => {
+  try {
+    response.json(await syncUciTeams());
+  } catch (error) {
+    next(error);
+  }
+});
 
 teamsRouter.get('/', async (request, response, next) => {
   try {

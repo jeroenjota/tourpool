@@ -158,7 +158,7 @@ const fetchData = async () => {
     const tourID = selectedTourID.value;
     const [stagesRes, ridersRes, poolsRes, optionsRes, resultsRes] = await Promise.all([
       apiFetch<Stage[]>(`/stages?tour=${tourID}`),
-      apiFetch<TourRider[]>(`/team-riders?tourID=${tourID}`),
+      apiFetch<TourRider[]>(`/team-riders?tourID=${tourID}&activeOnly=1`),
       apiFetch<Pool[]>("/pools"),
       apiFetch<PoolOption[]>("/options").catch(() => []),
       apiFetch<StageResultItem[]>(`/stage-results?tourID=${tourID}`),

@@ -269,6 +269,7 @@ const calculateParticipantPoints = async (
       INNER JOIN tblPloegRenners tr
         ON tr.tourID = p.tourID AND tr.rennerID = dr.rennerID
       WHERE d.poolID = ?
+        AND tr.neemtDeel = 1
         AND (tr.nietGestartEtappe IS NULL OR tr.nietGestartEtappe > ?)
       ORDER BY dr.deelnID, dr.positie, dr.rennerID
     `, [poolID, etappeNr]) as Array<{ deelnID: number; rennerID: number }>;

@@ -146,7 +146,7 @@ async function availableRiders(connection: Connection, tourID: number): Promise<
   return connection.query(
     `SELECT pr.rennerID, pr.Rugnummer, r.vnaam, r.tnaam, r.anaam, pl.naam AS ploegNaam
      FROM tblPloegRenners pr JOIN tblRenners r ON r.rennerID = pr.rennerID
-     JOIN tblPloegen pl ON pl.ploegID = pr.ploegID WHERE pr.tourID = ? ORDER BY pr.Rugnummer`,
+     JOIN tblPloegen pl ON pl.ploegID = pr.ploegID WHERE pr.tourID = ? AND pr.neemtDeel = 1 ORDER BY pr.Rugnummer`,
     [tourID]
   );
 }

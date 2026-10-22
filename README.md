@@ -467,6 +467,40 @@ van de rode lantaarn in de prijzenpotberekening. Onbetaalde deelnemers tellen
 niet mee en krijgen geen etappepunten. De prijsberekening wordt vernieuwd wanneer
 een betaalde deelnemer wordt toegevoegd, verwijderd of van betaalstatus verandert.
 
+Via **Ploegen > Actieve profploegen bijwerken** kunnen admins de 18 hoogst
+geklasseerde mannen WorldTeams en de 5 hoogst geklasseerde ProTeams ophalen,
+volgens de actuele UCI World Ranking binnen elke categorie (niet de
+meerjarige technische ranking). De knop gebruikt het laatst door de UCI
+gepubliceerde seizoen en vermeldt de rankingdatum. Alleen de algemene
+ploegen- en rennertabellen worden bijgewerkt, zonder Tourkeuze. Bestaande ploegen
+worden op UCI-code of exacte naam gekoppeld; oude ploegen worden niet verwijderd.
+Een gewijzigde code én naam leidt zonder herkenbare koppeling tot een nieuwe rij.
+Bij dubbelzinnige koppelingen wordt niets opgeslagen. Naamswijzigingen gelden
+ook voor eerdere Tours; bestaande ploeg-ID's en Tour-/rennerkoppelingen blijven
+behouden. Dezelfde knop haalt ook de renners inclusief neoprofrenners op, zonder
+stafleden, en voegt ontbrekende renners aan de algemene rennertabel toe.
+Er worden geen ploegen of renners automatisch aan een Tour gekoppeld.
+Bij **Ploegopstellingen** bepaal je per Tour zelf welke renner bij welke ploeg
+rijdt; dezelfde renner kan bij verschillende Tours bij een andere ploeg staan.
+Bestaande vinkjes, rugnummers, uitvalgegevens en Tourkoppelingen blijven bij
+downloaden volledig behouden. Er is geen functie om ploegen samen te voegen.
+Herkenning gebruikt achternaam (inclusief
+tussenvoegsels), eerste voornaam en land, ongeacht hoofdletters of accenten.
+Onduidelijke overeenkomsten en renners met een onbekend land in de landentabel
+worden overgeslagen en in de melding genoemd.
+De UCI-ploegenlijst bevat geen geboortedatum; nieuwe renners krijgen daarom
+geen geboortedatum. Als ophalen of opslaan mislukt wordt niets gewijzigd.
+
+Bij **Ploegopstellingen** vink je **Rijdt mee** uit voor renners die niet aan
+de gekozen Tour deelnemen. Dit is niet hetzelfde als uitvallen in een etappe:
+de niet-gestart-etappe blijft behouden. Uitgevinkte renners zijn niet kiesbaar
+voor inschrijvingen of uitslagen en scoren geen punten; bestaande poolpunten
+en prijzen worden bij het wijzigen van dit vinkje opnieuw berekend.
+Voer voor bestaande databases eerst
+`apps/api/migrations/20261022_tour_rider_participation.sql` uit. De nieuwe kolom
+`tblPloegRenners.neemtDeel` staat standaard op 1 en verandert bestaande selecties
+niet. De import verwijdert geen oude ploegen of renners uit de database.
+
 Via **Eindklassementen** (`/final-results`, voor admins) voer je na de laatste
 etappe het algemene, punten-, berg- en jongerenklassement in. Deze uitslagen
 gelden voor alle pools van de tour. De verwerking gebruikt per pool de aantallen

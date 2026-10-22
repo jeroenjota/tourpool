@@ -83,6 +83,7 @@ interface Stage {
 }
 
 interface TourRider {
+  neemtDeel?: number | boolean;
   tourID: number;
   ploegID: number;
   ploegNaam: string;
@@ -98,6 +99,7 @@ interface TourRider {
 }
 
 interface ParticipantRiderItem {
+  neemtDeel?: number | boolean;
   deelnID: number;
   rennerID: number;
   positie: number;
@@ -334,7 +336,8 @@ const printStageTitle = computed(() => {
 });
 
 const isRiderOutBeforePrintStage = (rider: ParticipantRiderItem) =>
-  rider.nietGestartEtappe != null && printStageNumber.value != null && rider.nietGestartEtappe <= printStageNumber.value;
+  rider.neemtDeel === 0 || rider.neemtDeel === false ||
+  (rider.nietGestartEtappe != null && printStageNumber.value != null && rider.nietGestartEtappe <= printStageNumber.value);
 
 const participantRidersForPrint = (deelnID: number) => {
   const sortedRiders = [...(participantRidersMap.value[deelnID] || [])].sort((a, b) => a.positie - b.positie);
@@ -452,7 +455,7 @@ const togglePaid = async (p: Participant) => {
 
 const filteredAvailableRidersForAdd = computed(() => {
   const chosenIds = new Set(addForm.value.selectedRiders.map(r => r.rennerID));
-  let list = tourRiders.value.filter(r => !chosenIds.has(r.rennerID));
+  let list = tourRiders.value.filter(r => r.neemtDeel !== 0 && r.neemtDeel !== false && !chosenIds.has(r.rennerID));
 
   if (riderSearchQuery.value.trim()) {
     const q = riderSearchQuery.value.toLowerCase().trim();
@@ -537,7 +540,9 @@ const getRiderDetails = (rennerID: number) => {
 };
 
 const isRiderOutAtSelectedStage = (rennerID: number) => {
-  const dropoutStage = getRiderDetails(rennerID)?.nietGestartEtappe;
+  const rider = getRiderDetails(rennerID);
+  if (rider?.neemtDeel === 0 || rider?.neemtDeel === false) return true;
+  const dropoutStage = rider?.nietGestartEtappe;
   return dropoutStage != null && selectedStageNumber.value != null && dropoutStage <= selectedStageNumber.value;
 };
 
@@ -709,7 +714,7 @@ const openManageRidersModal = (p: Participant) => {
 
 const filteredAvailableRidersForManage = computed(() => {
   const chosenIds = new Set(managingSelectedRiders.value.map(r => r.rennerID));
-  let list = tourRiders.value.filter(r => !chosenIds.has(r.rennerID));
+  let list = tourRiders.value.filter(r => r.neemtDeel !== 0 && r.neemtDeel !== false && !chosenIds.has(r.rennerID));
 
   if (riderSearchQuery.value.trim()) {
     const q = riderSearchQuery.value.toLowerCase().trim();
@@ -1313,7 +1318,7 @@ const openEntryPdf = async (p: Participant) => {
                         nr. {{ getRiderDetails(item.rennerID)?.Rugnummer }}
                       </span>
                       <span v-if="isRiderOutAtSelectedStage(item.rennerID)" class="font-semibold text-rose-600">
-                        niet gestart in {{ getRiderDetails(item.rennerID)?.nietGestartEtappe }}
+                        {{ getRiderDetails(item.rennerID)?.neemtDeel ? `niet gestart in ${getRiderDetails(item.rennerID)?.nietGestartEtappe}` : 'rijdt niet mee' }}
                       </span>
                     </div>
                     <button 
@@ -1447,7 +1452,7 @@ const openEntryPdf = async (p: Participant) => {
                     <span v-if="getRiderDetails(item.rennerID)?.Rugnummer" class="text-slate-500">
 {{ getRiderDetails(item.rennerID)?.Rugnummer }}
                     </span>
-                    <span v-if="isRiderOutAtSelectedStage(item.rennerID)" class="font-semibold text-rose-600">{{ getRiderDetails(item.rennerID)?.nietGestartEtappe }}
+                    <span v-if="isRiderOutAtSelectedStage(item.rennerID)" class="font-semibold text-rose-600">{{ getRiderDetails(item.rennerID)?.neemtDeel ? getRiderDetails(item.rennerID)?.nietGestartEtappe : 'rijdt niet mee' }}
                     </span>
                   </div>
                   <button 
@@ -1621,7 +1626,7 @@ const openEntryPdf = async (p: Participant) => {
             >
               <span class="pool-print-place">{{ rider.printPlace }}</span>
               <span>{{ printRiderName(rider) }}</span>
-              <span class="pool-print-code">{{ rider.printDropped ? `NG ${rider.nietGestartEtappe}` : rider.ploegCode || '—' }}</span>
+              <span class="pool-print-code">{{ rider.neemtDeel === 0 || rider.neemtDeel === false ? 'Geen start' : rider.printDropped ? `NG ${rider.nietGestartEtappe}` : rider.ploegCode || '—' }}</span>
             </div>
             <div v-if="participantRidersForPrint(participant.deelnID).length === 0" class="pool-print-empty">
               Geen renners geselecteerd
