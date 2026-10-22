@@ -77,8 +77,18 @@ const latestResultStage = computed(() =>
   )
 );
 
+const finalStageNumber = computed(() =>
+  Math.max(0, ...stages.value.map(stage => stage.etappeNr ?? 0)) + 1
+);
+const isFinalStanding = computed(() => selectedStageNumber.value === finalStageNumber.value);
+const overallTitle = computed(() => isFinalStanding.value
+  ? 'Definitieve poolstand'
+  : `Algemeen klassement na etappe ${selectedStageNumber.value}`);
+
 const availableStages = computed(() =>
-  stages.value
+  [...stages.value, ...(stageResults.value.some(result => result.etappeNr === finalStageNumber.value)
+    ? [{ tour: activePool.value?.tourID ?? '', etappeNr: finalStageNumber.value }]
+    : [])]
     .filter((stage): stage is Stage & { etappeNr: number } =>
       stage.etappeNr != null &&
       latestResultStage.value !== null &&
@@ -404,7 +414,12 @@ const allResultCategories: Array<{
 
 // Truikolommen alleen tonen als de pool punten voor dat klassement toekent.
 const resultCategories = computed(() =>
-  allResultCategories.filter(category =>
+  (isFinalStanding.value ? [
+    { key: 'rit' as const, label: 'Alg.', field: 'ritPnt' as const, allocationType: 'eindklas' },
+    { key: 'groen' as const, label: 'Punten', field: 'groenPnt' as const, allocationType: 'eindpunt' },
+    { key: 'bol' as const, label: 'Berg', field: 'bolPnt' as const, allocationType: 'eindberg' },
+    { key: 'wit' as const, label: 'Jongeren', field: 'witPnt' as const, allocationType: 'eindjon' }
+  ] : allResultCategories).filter(category =>
     category.allocationType === null || allocationTypes.value.has(category.allocationType)
   )
 );
@@ -426,6 +441,10 @@ interface PoolOptionLimits {
   AantalKlasGroen?: number | null;
   AantalKlasBol?: number | null;
   AantalKlasWit?: number | null;
+  AantalEindKlasGeel?: number | null;
+  AantalEindKlasGroen?: number | null;
+  AantalEindKlasBol?: number | null;
+  AantalEindKlasWit?: number | null;
 }
 
 const printMode = ref<'chart' | 'result' | null>(null);
@@ -446,18 +465,20 @@ const formatRiderName = (rider: StageRiderResult) => {
   return [rider.anaam?.trim(), firstNames].filter(Boolean).join(', ') || `Renner #${rider.rennerID}`;
 };
 
-const ridersFor = (type: string, limit: number) =>
+const ridersFor = (type: string, limit: number, allocationType = type === 'rit' ? 'rit' : `klas${type}`) =>
   stageRiderResults.value
     .filter(result => result.uitslagType.toLowerCase() === type && result.plaats <= limit)
     .sort((a, b) => a.plaats - b.plaats)
     .map(result => ({
       ...result,
       naam: formatRiderName(result),
-      punten: allocationPoints.value.get(`${type === 'rit' ? 'rit' : `klas${type}`}-${result.plaats}`) ?? null
+      punten: allocationPoints.value.get(`${allocationType}-${result.plaats}`) ?? null
     }));
 
 const stageTopRiders = computed(() =>
-  ridersFor('rit', Number(resultOptions.value?.AantalEtapPlaatsen ?? 0))
+  isFinalStanding.value
+    ? ridersFor('eindklas', Number(resultOptions.value?.AantalEindKlasGeel ?? 0), 'eindklas')
+    : ridersFor('rit', Number(resultOptions.value?.AantalEtapPlaatsen ?? 0))
 );
 
 const jerseyStandings = computed(() =>
@@ -465,10 +486,19 @@ const jerseyStandings = computed(() =>
     .map(category => {
       const key = category.key as Exclude<CategoryKey, 'rit'>;
       const info = jerseyInfo[key];
+      const finalInfo = {
+        geel: { label: 'Algemeen klassement', type: 'eindklas', limit: 'AantalEindKlasGeel' },
+        groen: { label: 'Puntenklassement', type: 'eindpunt', limit: 'AantalEindKlasGroen' },
+        bol: { label: 'Bergklassement', type: 'eindberg', limit: 'AantalEindKlasBol' },
+        wit: { label: 'Jongerenklassement', type: 'eindjon', limit: 'AantalEindKlasWit' }
+      } as const;
+      const final = finalInfo[key];
       return {
         key,
-        label: info.label,
-        riders: ridersFor(key, Number(resultOptions.value?.[info.limitField] ?? 0))
+        label: isFinalStanding.value ? final.label : info.label,
+        riders: isFinalStanding.value
+          ? ridersFor(final.type, Number(resultOptions.value?.[final.limit] ?? 0), final.type)
+          : ridersFor(key, Number(resultOptions.value?.[info.limitField] ?? 0))
       };
     })
     .filter(jersey => jersey.riders.length > 0)
@@ -641,6 +671,7 @@ const separateOverallPages = computed(() => (overallFitsUnderStage.value ? [] : 
 const resultPageCount = computed(() => stageResultPages.value.length + separateOverallPages.value.length);
 
 const selectedStageTitle = computed(() => {
+  if (isFinalStanding.value) return `Eindstand (etappe ${selectedStageNumber.value})`;
   const stage = stages.value.find(item => item.etappeNr === selectedStageNumber.value);
   const details = [
     stage?.datum
@@ -676,7 +707,7 @@ const printStageResult = async () => {
     const [pointsData, riderResults, options] = await Promise.all([
       apiFetch<ParticipantPoints[]>(`/participant-points?poolID=${activePool.value.poolID}`),
       apiFetch<StageRiderResult[]>(`/stage-results?tourID=${activePool.value.tourID}&etappeNr=${selectedStageNumber.value}`),
-      apiFetch<PoolOptionLimits>(`/options/${activePool.value.poolID}`).catch(() => null)
+      apiFetch<PoolOptionLimits>(`/options/${activePool.value.poolID}`)
     ]);
     resultPoints.value = pointsData;
     stageRiderResults.value = riderResults;
@@ -741,7 +772,7 @@ onMounted(async () => {
         <h2 class="text-xl font-bold text-slate-900">Poolstand</h2>
         <p class="text-xs text-slate-600">
           {{ activePool?.Naam || 'Selecteer een actieve pool' }}
-          <span v-if="selectedStageNumber">· Stand na etappe {{ selectedStageNumber }}</span>
+          <span v-if="selectedStageNumber">· {{ isFinalStanding ? 'Definitieve eindstand' : `Stand na etappe ${selectedStageNumber}` }}</span>
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -753,7 +784,7 @@ onMounted(async () => {
           class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:outline-none disabled:opacity-50"
         >
           <option v-for="stage in availableStages" :key="stage.etappeNr" :value="stage.etappeNr">
-            Etappe {{ stage.etappeNr }}
+            {{ stage.etappeNr === finalStageNumber ? `Eindstand (${stage.etappeNr})` : `Etappe ${stage.etappeNr}` }}
           </option>
         </select>
         <button
@@ -820,18 +851,18 @@ onMounted(async () => {
     </div>
     <div v-else class="shadow-xs overflow-hidden rounded-xl border border-slate-200 bg-white">
       <div class="overflow-x-auto">
-        <table class="w-full min-w-[1120px] border-collapse text-left text-sm">
+        <table class="min-w-280 w-full border-collapse text-left text-sm">
           <thead class="bg-slate-100 text-xs uppercase tracking-wide text-slate-600">
             <tr>
               <th scope="col" class="px-4 py-3">Plaats</th>
               <th scope="col" class="px-4 py-3">Ploegnaam</th>
-              <th scope="col" class="px-4 py-3 text-right">RitPnt</th>
+              <th scope="col" class="px-4 py-3 text-right">{{ isFinalStanding ? 'Algemeen' : 'RitPnt' }}</th>
               <th v-for="category in jerseyCategories" :key="category.key" scope="col" class="px-4 py-3 text-right">
-                {{ category.field }}
+                {{ isFinalStanding ? category.label : category.field }}
               </th>
-              <th scope="col" class="px-4 py-3 text-right">EtapPnt (plaats)</th>
+              <th scope="col" class="px-4 py-3 text-right">{{ isFinalStanding ? 'Eindpunten (plaats)' : 'EtapPnt (plaats)' }}</th>
               <th scope="col" class="px-4 py-3 text-right">Totaal punten</th>
-              <th scope="col" class="px-4 py-3 text-right">Etappe geld</th>
+              <th scope="col" class="px-4 py-3 text-right">{{ isFinalStanding ? 'Eindprijs' : 'Etappe geld' }}</th>
               <th scope="col" class="px-4 py-3 text-right">Totaal geld</th>
             </tr>
           </thead>
@@ -871,11 +902,11 @@ onMounted(async () => {
         <strong>
           <template v-if="activePool.Org?.trim()">{{ activePool.Org.trim() }}, </template>{{ activePool.Naam || `Pool #${activePool.poolID}` }}
         </strong>
-        <span>Etappepunten per deelnemer t/m etappe {{ selectedStageNumber }}</span>
+        <span>{{ isFinalStanding ? 'Totaalpunten inclusief eindklassementen' : `Etappepunten per deelnemer t/m etappe ${selectedStageNumber}` }}</span>
       </header>
       <div class="points-chart-legend" :class="{ 'points-chart-blank': pageIndex > 0 }">
         <span v-for="stage in chartStages" :key="stage.etappeNr">
-          <i :style="{ backgroundColor: stage.color }"></i>Etappe {{ stage.etappeNr }}
+          <i :style="{ backgroundColor: stage.color }"></i>{{ stage.etappeNr === finalStageNumber ? 'Eindstand' : `Etappe ${stage.etappeNr}` }}
         </span>
       </div>
       <svg
@@ -958,7 +989,7 @@ onMounted(async () => {
 
         <div v-if="page.showTop" class="result-top">
           <section>
-            <h3>Etappe-uitslag</h3>
+            <h3>{{ isFinalStanding ? 'Algemeen eindklassement' : 'Etappe-uitslag' }}</h3>
             <table class="result-riders">
               <tbody>
                 <tr v-for="rider in stageTopRiders" :key="rider.plaats">
@@ -975,7 +1006,7 @@ onMounted(async () => {
             </table>
           </section>
           <section>
-            <h3>Stand truien</h3>
+            <h3>{{ isFinalStanding ? 'Overige eindklassementen' : 'Stand truien' }}</h3>
             <table class="result-riders">
               <tbody>
                 <template v-for="jersey in jerseyStandings" :key="jersey.key">
@@ -1011,7 +1042,7 @@ onMounted(async () => {
                 <th class="result-place">Pl.</th>
                 <th class="result-name">Deelnemer</th>
                 <th v-for="category in resultCategories" :key="category.key">{{ category.label }}</th>
-                <th>Etap</th>
+                <th>{{ isFinalStanding ? 'Eind' : 'Etap' }}</th>
                 <th>€</th>
               </tr>
             </thead>
@@ -1028,7 +1059,7 @@ onMounted(async () => {
         </div>
 
         <template v-if="overallFitsUnderStage && pageIndex === stageResultPages.length - 1">
-          <h3 class="result-section-title">Algemeen klassement na etappe {{ selectedStageNumber }}</h3>
+          <h3 class="result-section-title">{{ overallTitle }}</h3>
           <div class="result-columns">
             <table v-for="(columnRows, columnIndex) in inlineOverallColumns" :key="columnIndex" class="result-table result-table-compact result-table-overall">
               <thead>
@@ -1066,7 +1097,7 @@ onMounted(async () => {
           <strong>
             <template v-if="activePool.Org?.trim()">{{ activePool.Org.trim() }}, </template>{{ activePool.Naam || `Pool #${activePool.poolID}` }}
           </strong>
-          <span>Algemeen klassement na etappe {{ selectedStageNumber }}</span>
+          <span>{{ overallTitle }}</span>
           <small>{{ stageResultPages.length + pageIndex + 1 }}/{{ resultPageCount }}</small>
         </header>
         <div class="result-columns">

@@ -21,6 +21,13 @@ test('Saving stage results calculates category points and rolls back on failure'
     for (const scenario of [
       { name: 'Individual stage', includeRit: true, fail: false },
       { name: 'Tied winners retain full prize shares', includeRit: true, fail: false, tie: true },
+      { name: 'Paid participant tiers scale all stage prizes', includeRit: true, fail: false, paidParticipants: 20, prizeFactor: 0.8 },
+      { name: '16 paid participants remain in the 80% tier', includeRit: true, fail: false, paidParticipants: 16, prizeFactor: 0.8 },
+      { name: 'Fewer than 16 paid participants use the 60% tier', includeRit: true, fail: false, paidParticipants: 15, prizeFactor: 0.6 },
+      { name: '11 paid participants remain in the 60% tier', includeRit: true, fail: false, paidParticipants: 11, prizeFactor: 0.6 },
+      { name: 'Fewer than 11 paid participants use the 40% tier', includeRit: true, fail: false, paidParticipants: 10, prizeFactor: 0.4 },
+      { name: '6 paid participants remain in the 40% tier', includeRit: true, fail: false, paidParticipants: 6, prizeFactor: 0.4 },
+      { name: 'Fewer than 6 paid participants receive no stage prizes', includeRit: true, fail: false, paidParticipants: 5, prizeFactor: 0 },
       {
         name: 'Fractional prize shares are stored without cent rounding',
         includeRit: true,
@@ -46,6 +53,7 @@ test('Saving stage results calculates category points and rolls back on failure'
         const events = [];
         const pointInserts = [];
         const savedResults = [];
+        const deleteQueries = [];
         const totalUpdates = [];
         const prizeUpdates = [];
         const nonStarterUpdates = [];
@@ -57,9 +65,13 @@ test('Saving stage results calculates category points and rolls back on failure'
           query: async (sql, params = []) => {
             assert.equal((sql.match(/\?/g) ?? []).length, params.length);
             if (sql.includes('FROM tblPools p')) {
+              if (sql.includes('AS paidParticipantCount')) {
+                assert.match(sql, /d\.Betaald = 1/);
+              }
               assert.deepEqual(params, [2]);
               return [{
                 poolID: 3,
+                paidParticipantCount: scenario.paidParticipants ?? 21,
                 PloegRennerAantal: 15,
                 PloegReserveAantal: 5,
                 AantalEtapPlaatsen: 7,
@@ -73,15 +85,16 @@ test('Saving stage results calculates category points and rolls back on failure'
               }];
             }
             if (sql.includes('SELECT uitslagType, plaats, rennerID')) return results;
-            if (sql.includes('FROM tblStandaardPunten sp')) {
+            if (sql.includes('FROM tblPuntenToekenning pa')) {
               assert.deepEqual(params, [3]);
               assert.match(sql, /sp\.uitslagtype/);
               assert.match(sql, /sp\.plaats/);
               assert.match(sql, /COALESCE\(pa\.uitslagtype, sp\.uitslagtype\)/);
               assert.match(sql, /COALESCE\(pa\.plaats, sp\.plaats\)/);
               assert.match(sql, /COALESCE\(pa\.Punten, 0\)/);
-              assert.match(sql, /INNER JOIN tblPuntenToekenning pa/);
-              assert.match(sql, /COALESCE\(pa\.uitslagtype, sp\.uitslagtype\)\s+IN \('rit', 'klasGeel', 'klasGroen', 'klasBol', 'klasWit'\)/);
+              assert.match(sql, /LEFT JOIN tblStandaardPunten sp/);
+              assert.match(sql, /WHERE pa\.poolID = \?/);
+              assert.match(sql, /'eindKlas', 'eindPunt', 'eindBerg', 'eindJon'/);
               assert.doesNotMatch(sql, /Omschrijving LIKE/);
               return [
                 { uitslagtype: 'rit', plaats: 1, Punten: 10 },
@@ -95,7 +108,7 @@ test('Saving stage results calculates category points and rolls back on failure'
               return [{ deelnID: 4 }, { deelnID: 5 }];
             }
             if (sql.includes('FROM tblDeelnemRenners dr')) {
-              assert.deepEqual(params, [3, 10, 1]);
+              assert.deepEqual(params, [3, 1]);
               if (scenario.nonStarter) return [];
               return scenario.tie
                 ? [{ deelnID: 4, rennerID: 10 }, { deelnID: 5, rennerID: 10 }]
@@ -137,6 +150,10 @@ test('Saving stage results calculates category points and rolls back on failure'
               prizeUpdates.push(params);
               return {};
             }
+            if (sql.includes('DELETE FROM tblEtappeUitslag')) {
+              deleteQueries.push(sql);
+              return {};
+            }
             if (sql.includes('DELETE')) return {};
             throw new Error(`Unexpected query: ${sql}`);
           },
@@ -163,6 +180,7 @@ test('Saving stage results calculates category points and rolls back on failure'
           assert.deepEqual(savedResults, results.map((result) => [
             2, 1, result.uitslagType, result.plaats, result.rennerID,
           ]));
+          assert.match(deleteQueries[0], /uitslagType <> 'eindKlas'/);
           const participantPoints = scenario.nonStarter ? 0 : scenario.poolOverride ? 31 : scenario.includeRit ? 27 : 17;
           const riderPoints = !scenario.nonStarter;
           assert.deepEqual(pointInserts, [
@@ -185,12 +203,12 @@ test('Saving stage results calculates category points and rolls back on failure'
               ]
             : scenario.tie
             ? [
-                [1, scenario.expectedTieMoney ?? 1.78, participantPoints, 1, scenario.expectedTieMoney ?? 1.78, 4, 1],
-                [1, scenario.expectedTieMoney ?? 1.78, participantPoints, 1, scenario.expectedTieMoney ?? 1.78, 5, 1],
+                [1, (scenario.expectedTieMoney ?? 1.78) * (scenario.prizeFactor ?? 1), participantPoints, 1, (scenario.expectedTieMoney ?? 1.78) * (scenario.prizeFactor ?? 1), 4, 1],
+                [1, (scenario.expectedTieMoney ?? 1.78) * (scenario.prizeFactor ?? 1), participantPoints, 1, (scenario.expectedTieMoney ?? 1.78) * (scenario.prizeFactor ?? 1), 5, 1],
               ]
             : [
-                [1, 3.06, participantPoints, 1, 3.06, 4, 1],
-                [2, 0.50, 0, 2, 0.50, 5, 1],
+                [1, 3.06 * (scenario.prizeFactor ?? 1), participantPoints, 1, 3.06 * (scenario.prizeFactor ?? 1), 4, 1],
+                [2, 0.50 * (scenario.prizeFactor ?? 1), 0, 2, 0.50 * (scenario.prizeFactor ?? 1), 5, 1],
               ];
           assert.equal(prizeUpdates.length, expectedPrizeUpdates.length);
           prizeUpdates.forEach((actual, index) => {
@@ -247,6 +265,7 @@ test('Changing an individual stage result recalculates participant points', asyn
             if (sql.includes('FROM tblPools p')) {
               return [{
                 poolID: 3,
+                paidParticipantCount: 21,
                 PloegRennerAantal: 15,
                 PloegReserveAantal: 5,
                 AantalEtapPlaatsen: 7,
@@ -264,7 +283,7 @@ test('Changing an individual stage result recalculates participant points', asyn
                 ? []
                 : [{ uitslagType: 'rit', plaats: 1, rennerID: 10 }];
             }
-            if (sql.includes('FROM tblStandaardPunten sp')) {
+            if (sql.includes('FROM tblPuntenToekenning pa')) {
               return [{ uitslagtype: 'rit', plaats: 1, Punten: 10 }];
             }
             if (sql.includes('SELECT deelnID FROM tblDeelnemers')) return [{ deelnID: 4 }];
@@ -341,6 +360,7 @@ test('TTL points add the current stage points to the previous total', async (t) 
       if (sql.includes('FROM tblPools p')) {
         return [{
           poolID: 3,
+          paidParticipantCount: 21,
           PloegRennerAantal: 15,
           PloegReserveAantal: 5,
           AantalEtapPlaatsen: 7,
@@ -356,7 +376,7 @@ test('TTL points add the current stage points to the previous total', async (t) 
       if (sql.includes('SELECT uitslagType, plaats, rennerID')) {
         return [{ uitslagType: 'rit', plaats: 1, rennerID: 10 }];
       }
-      if (sql.includes('FROM tblStandaardPunten sp')) {
+      if (sql.includes('FROM tblPuntenToekenning pa')) {
         return [{ uitslagtype: 'rit', plaats: 1, Punten: 7 }];
       }
       if (sql.includes('SELECT deelnID FROM tblDeelnemers')) return [{ deelnID: 4 }];

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../db.js';
+import { HttpError } from '../auth.js';
 
 export const stageResultsRouter = Router();
 
@@ -22,6 +23,14 @@ const splitPrize = (amount: number | string | null, winners: number[]) => {
     shares.set(deelnemID, share);
   });
   return shares;
+};
+
+const stagePrizeMultiplier = (paidParticipantCount: number) => {
+  if (paidParticipantCount >= 21) return 1;
+  if (paidParticipantCount >= 16) return 0.8;
+  if (paidParticipantCount >= 11) return 0.6;
+  if (paidParticipantCount >= 6) return 0.4;
+  return 0;
 };
 
 const rankByScore = (participants: Array<{ deelnemID: number; score: number }>) => {
@@ -46,7 +55,7 @@ const recalculateParticipantTotals = async (connection: DatabaseConnection, tour
     FROM tblDeelnemerPunten dp
     INNER JOIN tblDeelnemers d ON d.deelnID = dp.deelnemID
     INNER JOIN tblPools p ON p.poolID = d.poolID
-    WHERE p.tourID = ?
+    WHERE p.tourID = ? AND d.Betaald = 1
     ${poolID === undefined ? '' : 'AND p.poolID = ?'}
     ORDER BY p.poolID, dp.deelnemID, dp.etappeNr
   `, poolID === undefined ? [tourID] : [tourID, poolID]) as Array<Omit<ParticipantStagePoints, 'ttlPnt'>>;
@@ -64,7 +73,12 @@ const recalculateParticipantTotals = async (connection: DatabaseConnection, tour
 
 const recalculateStagePrizes = async (connection: DatabaseConnection, tourID: number, poolID?: number) => {
   const poolRows = await connection.query(`
-    SELECT p.poolID, o.geldEtappeHoog, o.geldEtappeTotaal, o.geldEtappeLaagTTL
+    SELECT p.poolID, o.geldEtappeHoog, o.geldEtappeTotaal, o.geldEtappeLaagTTL,
+      o.inleg, o.PrijsNr1Percentage, o.PrijsNr2Percentage, o.PrijsNr3Percentage,
+      o.PrijsNr4Percentage, o.PrijsNrLaatstBedrag,
+      (SELECT MAX(e.etappeNr) FROM tblEtappes e WHERE e.tour = p.tourID) AS lastStage,
+      (SELECT COUNT(*) FROM tblEtappes e WHERE e.tour = p.tourID AND e.etappeNr IS NOT NULL) AS stageCount,
+      (SELECT COUNT(*) FROM tblDeelnemers d WHERE d.poolID = p.poolID AND d.Betaald = 1) AS paidParticipantCount
     FROM tblPools p
     LEFT JOIN tblOpties o ON o.poolID = p.poolID
     WHERE p.tourID = ?
@@ -74,14 +88,24 @@ const recalculateStagePrizes = async (connection: DatabaseConnection, tourID: nu
     geldEtappeHoog: number | string | null;
     geldEtappeTotaal: number | string | null;
     geldEtappeLaagTTL: number | string | null;
+    paidParticipantCount: number | string;
+    lastStage: number | null;
+    stageCount: number;
+    inleg: number | string | null;
+    PrijsNr1Percentage: number | string | null;
+    PrijsNr2Percentage: number | string | null;
+    PrijsNr3Percentage: number | string | null;
+    PrijsNr4Percentage: number | string | null;
+    PrijsNrLaatstBedrag: number | string | null;
   }>;
 
   for (const poolRow of poolRows) {
+    const prizeMultiplier = stagePrizeMultiplier(Number(poolRow.paidParticipantCount));
     const rows = await connection.query(`
       SELECT dp.deelnemID, dp.etappeNr, dp.etapPnt, dp.ttlPnt
       FROM tblDeelnemerPunten dp
       INNER JOIN tblDeelnemers d ON d.deelnID = dp.deelnemID
-      WHERE d.poolID = ?
+      WHERE d.poolID = ? AND d.Betaald = 1
       ORDER BY dp.etappeNr
     `, [poolRow.poolID]) as ParticipantStagePoints[];
     const stages = new Map<number, ParticipantStagePoints[]>();
@@ -110,11 +134,39 @@ const recalculateStagePrizes = async (connection: DatabaseConnection, tourID: nu
       const lowestTotalWinners = highestTotalScore > 0
         ? totalScores.filter(row => row.score === lowestTotalScore).map(row => row.deelnemID)
         : [];
-      const prizeShares = [
-        splitPrize(poolRow.geldEtappeHoog, dailyWinners),
-        splitPrize(poolRow.geldEtappeTotaal, highestTotalWinners),
-        splitPrize(poolRow.geldEtappeLaagTTL, lowestTotalWinners)
+      let prizeShares = [
+        splitPrize(Number(poolRow.geldEtappeHoog ?? 0) * prizeMultiplier, dailyWinners),
+        splitPrize(Number(poolRow.geldEtappeTotaal ?? 0) * prizeMultiplier, highestTotalWinners),
+        splitPrize(Number(poolRow.geldEtappeLaagTTL ?? 0) * prizeMultiplier, lowestTotalWinners)
       ];
+      if (poolRow.lastStage != null && etappeNr === Number(poolRow.lastStage) + 1) {
+        const cents = (amount: number | string | null) => Math.round(Number(amount ?? 0) * 100);
+        const dailyPrizeCents = Math.round((
+          cents(poolRow.geldEtappeHoog) + cents(poolRow.geldEtappeTotaal) + cents(poolRow.geldEtappeLaagTTL)
+        ) * prizeMultiplier);
+        const lanternCents = Math.round(cents(poolRow.PrijsNrLaatstBedrag) * prizeMultiplier);
+        const distributableCents = Math.max(
+          Number(poolRow.paidParticipantCount) * cents(poolRow.inleg) -
+          Number(poolRow.stageCount) * dailyPrizeCents - lanternCents, 0
+        );
+        const percentages = [
+          poolRow.PrijsNr1Percentage, poolRow.PrijsNr2Percentage,
+          poolRow.PrijsNr3Percentage, poolRow.PrijsNr4Percentage
+        ].map(value => {
+          const percentage = Number(value ?? 0);
+          return percentage > 1 ? percentage / 100 : percentage;
+        });
+        // Bij gedeelde plaatsen worden de prijzen van de bezette plaatsen samengevoegd.
+        const finalShares = new Map<number, number>();
+        for (const score of highestTotalScore > 0 ? new Set(totalScores.map(row => row.score)) : []) {
+          const winners = totalScores.filter(row => row.score === score);
+          const firstPlace = totalScores.filter(row => row.score > score).length;
+          const amountCents = percentages.slice(firstPlace, firstPlace + winners.length)
+            .reduce((sum, percentage) => sum + Math.round(distributableCents * percentage), 0);
+          for (const winner of winners) finalShares.set(winner.deelnemID, amountCents / 100 / winners.length);
+        }
+        prizeShares = [finalShares, splitPrize(lanternCents / 100, lowestTotalWinners)];
+      }
       const dailyRanks = rankByScore(dailyScores);
       const totalRanks = rankByScore(totalScores);
 
@@ -150,7 +202,9 @@ const calculateParticipantPoints = async (
   const poolRows = await connection.query(`
     SELECT p.poolID, o.PloegRennerAantal, o.PloegReserveAantal, o.AantalEtapPlaatsen,
       o.AantalKlasGeel, o.AantalKlasGroen, o.AantalKlasBol, o.AantalKlasWit,
-      o.geldEtappeHoog, o.geldEtappeTotaal, o.geldEtappeLaagTTL
+      o.AantalEindKlasGeel, o.AantalEindKlasGroen, o.AantalEindKlasBol, o.AantalEindKlasWit,
+      o.geldEtappeHoog, o.geldEtappeTotaal, o.geldEtappeLaagTTL,
+      (SELECT MAX(e.etappeNr) FROM tblEtappes e WHERE e.tour = p.tourID) AS lastStage
     FROM tblPools p
     LEFT JOIN tblOpties o ON o.poolID = p.poolID
     WHERE p.tourID = ?
@@ -163,11 +217,18 @@ const calculateParticipantPoints = async (
 
   for (const poolRow of poolRows) {
     const poolID = Number(poolRow.poolID);
+    const isFinal = poolRow.lastStage != null && etappeNr === Number(poolRow.lastStage) + 1;
     const activeRiderCount = Math.max(
       Number(poolRow.PloegRennerAantal ?? 0) - Number(poolRow.PloegReserveAantal ?? 0),
       0
     );
-    const categoryLimits = {
+    const categoryLimits = isFinal ? {
+      rit: Number(poolRow.AantalEindKlasGeel ?? 0),
+      geel: 0,
+      groen: Number(poolRow.AantalEindKlasGroen ?? 0),
+      bol: Number(poolRow.AantalEindKlasBol ?? 0),
+      wit: Number(poolRow.AantalEindKlasWit ?? 0)
+    } : {
       rit: Number(poolRow.AantalEtapPlaatsen ?? 0),
       geel: Number(poolRow.AantalKlasGeel ?? 0),
       groen: Number(poolRow.AantalKlasGroen ?? 0),
@@ -179,11 +240,11 @@ const calculateParticipantPoints = async (
         COALESCE(pa.uitslagtype, sp.uitslagtype) AS uitslagtype,
         COALESCE(pa.plaats, sp.plaats) AS plaats,
         COALESCE(pa.Punten, 0) AS Punten
-      FROM tblStandaardPunten sp
-      INNER JOIN tblPuntenToekenning pa
-        ON pa.prestatieID = sp.prestatieID AND pa.poolID = ?
-      WHERE COALESCE(pa.uitslagtype, sp.uitslagtype)
-        IN ('rit', 'klasGeel', 'klasGroen', 'klasBol', 'klasWit')
+      FROM tblPuntenToekenning pa
+      LEFT JOIN tblStandaardPunten sp ON sp.prestatieID = pa.prestatieID
+      WHERE pa.poolID = ?
+      AND COALESCE(pa.uitslagtype, sp.uitslagtype)
+        IN ('rit', 'klasGeel', 'klasGroen', 'klasBol', 'klasWit', 'eindKlas', 'eindPunt', 'eindBerg', 'eindJon')
     `, [poolID]) as Array<{ uitslagtype: string; plaats: number; Punten: number | null }>;
     const points = new Map(pointRows.map(row => [
       `${row.uitslagtype.toLowerCase()}:${row.plaats}`,
@@ -223,10 +284,16 @@ const calculateParticipantPoints = async (
       [poolID, etappeNr]
     );
 
+    if (isFinal && !resultRows.some(row =>
+      ['eindklas', 'eindpunt', 'eindberg', 'eindjon'].includes(row.uitslagType.toLowerCase())
+    )) continue;
+
     for (const participant of participants) {
       const riderSet = ridersByParticipant.get(participant.deelnID) ?? new Set<number>();
       const categoryPoints = { rit: 0, geel: 0, groen: 0, bol: 0, wit: 0 };
-      const pointCategories = {
+      const pointCategories = isFinal ? {
+        rit: 'eindklas', geel: '', groen: 'eindpunt', bol: 'eindberg', wit: 'eindjon'
+      } : {
         rit: 'rit',
         geel: 'klasgeel',
         groen: 'klasgroen',
@@ -235,7 +302,8 @@ const calculateParticipantPoints = async (
       };
       for (const category of Object.keys(categoryLimits) as Array<keyof typeof categoryLimits>) {
         for (const result of resultRows) {
-          if (result.uitslagType.toLowerCase() !== category || result.plaats > categoryLimits[category]) continue;
+          const resultType = isFinal ? pointCategories[category] : category;
+          if (result.uitslagType.toLowerCase() !== resultType || result.plaats > categoryLimits[category]) continue;
           if (riderSet.has(result.rennerID)) {
             categoryPoints[category] += points.get(`${pointCategories[category]}:${result.plaats}`) ?? 0;
           }
@@ -355,16 +423,51 @@ stageResultsRouter.get('/', async (request, response, next) => {
   }
 });
 
-stageResultsRouter.put('/batch', async (request, response, next) => {
+stageResultsRouter.put(['/batch', '/final/:tourID'], async (request, response, next) => {
   const connection = await pool.getConnection();
 
   try {
     const payload = bulkSaveSchema.parse(request.body);
     await connection.beginTransaction();
 
-    // Verwijder alle bestaande uitslagen van deze etappe voor deze tour
+    if (request.params.tourID !== undefined) {
+      const stages = await connection.query(
+        'SELECT MAX(etappeNr) AS lastStage FROM tblEtappes WHERE tour = ?',
+        [String(request.params.tourID)]
+      ) as Array<{ lastStage: number | null }>;
+      if (Number(request.params.tourID) !== payload.tourID || stages[0]?.lastStage == null ||
+          payload.etappeNr !== Number(stages[0].lastStage) + 1) {
+        throw new HttpError(400, 'De eindstand hoort bij de laatste etappe + 1 van deze tour.');
+      }
+      const keys = new Set<string>();
+      const riders = new Set<string>();
+      for (const item of payload.results) {
+        if (!['eindKlas', 'eindPunt', 'eindBerg', 'eindJon'].includes(item.uitslagType) ||
+            item.plaats < 1 || item.plaats > 10 || item.rennerID <= 0) {
+          throw new HttpError(400, 'Ongeldig eindklassement of ongeldige plaats.');
+        }
+        const key = `${item.uitslagType}:${item.plaats}`;
+        const rider = `${item.uitslagType}:${item.rennerID}`;
+        if (keys.has(key) || riders.has(rider)) throw new HttpError(400, 'Een plaats of renner staat dubbel in hetzelfde klassement.');
+        keys.add(key);
+        riders.add(rider);
+      }
+      for (const type of ['eindKlas', 'eindPunt', 'eindBerg', 'eindJon']) {
+        const places = payload.results.filter(item => item.uitslagType === type)
+          .map(item => item.plaats).sort((a, b) => a - b);
+        if (places.some((place, index) => place !== index + 1)) {
+          throw new HttpError(400, 'Voer de plaatsen van elk eindklassement aaneensluitend vanaf plaats 1 in.');
+        }
+      }
+    }
+
+    const includesFinalClassification = request.params.tourID !== undefined || payload.results.some(
+      item => item.uitslagType === 'eindKlas'
+    );
     await connection.query(
-      'DELETE FROM tblEtappeUitslag WHERE tourID = ? AND etappeNr = ?',
+      `DELETE FROM tblEtappeUitslag
+       WHERE tourID = ? AND etappeNr = ?
+       ${includesFinalClassification ? '' : "AND uitslagType <> 'eindKlas'"}`,
       [payload.tourID, payload.etappeNr]
     );
 
@@ -378,7 +481,8 @@ stageResultsRouter.put('/batch', async (request, response, next) => {
       }
     }
 
-    const nonStarterRiderIDs = [...new Set(payload.nietGestartRenners ?? [])];
+    const nonStarterRiderIDs = request.params.tourID === undefined
+      ? [...new Set(payload.nietGestartRenners ?? [])] : [];
     if (nonStarterRiderIDs.length > 0) {
       const placeholders = nonStarterRiderIDs.map(() => '?').join(', ');
       const eligibleRiders = await connection.query(
@@ -399,10 +503,12 @@ stageResultsRouter.put('/batch', async (request, response, next) => {
       }
     }
 
-    await connection.query(
-      'UPDATE tblPloegRenners SET nietGestartEtappe = NULL WHERE tourID = ? AND nietGestartEtappe = ?',
-      [payload.tourID, payload.etappeNr]
-    );
+    if (request.params.tourID === undefined) {
+      await connection.query(
+        'UPDATE tblPloegRenners SET nietGestartEtappe = NULL WHERE tourID = ? AND nietGestartEtappe = ?',
+        [payload.tourID, payload.etappeNr]
+      );
+    }
     for (const rennerID of nonStarterRiderIDs) {
       await connection.query(
         `UPDATE tblPloegRenners

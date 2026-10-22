@@ -5,6 +5,7 @@ import RidersView from '../views/RidersView.vue';
 import TeamsView from '../views/TeamsView.vue';
 import TeamRidersView from '../views/TeamRidersView.vue';
 import StagesView from '../views/StagesView.vue';
+import FinalResultsView from '../views/FinalResultsView.vue';
 import PoolsView from '../views/PoolsView.vue';
 import ToursView from '../views/ToursView.vue';
 import ParticipantsView from '../views/ParticipantsView.vue';
@@ -28,6 +29,7 @@ const redirectToPoolPage = (page: string) => {
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/final-results', name: 'final-results', component: FinalResultsView },
     { path: '/login', name: 'login', component: LoginView },
     { path: '/email-test', name: 'email-test', component: EmailTestView },
     {

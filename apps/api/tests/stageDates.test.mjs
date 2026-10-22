@@ -13,6 +13,7 @@ test('Stage and rest-day reads and edits keep calendar dates without timezone co
   pool.query = async (sql, params = []) => {
     if (sql.startsWith('SELECT')) {
       assert.ok(sql.includes("DATE_FORMAT(datum, '%Y-%m-%d') AS datum"));
+      assert.ok(!sql.includes('voorlopig'));
       return [{ tour: '1', etappeNr: sql.includes('IS NULL') ? null : 1, datum: date, Start: 'Start', Finish: 'Finish', kms: 180, type: 'vlak' }];
     }
     writes.push(params);
@@ -34,11 +35,15 @@ test('Stage and rest-day reads and edits keep calendar dates without timezone co
       assert.equal((await (await request('?tour=1')).json())[0].datum, date);
       const stage = await (await request('/1/1')).json();
       assert.equal(stage.datum, date);
+      assert.ok(!('voorlopig' in stage));
       for (const path of ['/1/1', `/rest-day/1/${date}`]) {
         assert.equal((await request(path, 'PUT', { datum: stage.datum, Start: 'Andere start' })).status, 200);
         const partial = await request(path, 'PUT', { Finish: 'Andere finish' });
         assert.equal(partial.status, 200);
-        assert.equal((await partial.json()).datum, date);
+        const updated = await partial.json();
+        assert.equal(updated.datum, date);
+        assert.ok(!('voorlopig' in updated));
+        assert.equal(writes.at(-1).length, 7);
       }
     }
     assert.equal(writes.length, 16);

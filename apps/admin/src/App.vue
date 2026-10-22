@@ -90,6 +90,7 @@ const adminNavItems = [
   { name: 'Ploegen', path: '/teams', icon: Shield },
   { name: 'Ploegopstellingen', path: '/team-riders', icon: Users },
   { name: 'Uitslagen', path: '/stages', icon: MapPin },
+  { name: 'Eindklassementen', path: '/final-results', icon: Trophy },
   { name: 'Standaard Punten', path: '/standard-points', icon: Award },
   { name: 'Pools', path: '/pools', icon: Trophy },
   { name: 'Organisaties', path: '/organisations', icon: Building2 },

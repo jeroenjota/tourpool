@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onMounted,
+  onBeforeUnmount,
+  ref,
+  watch,
+} from "vue";
 import {
   apiFetch,
   auth,
@@ -13,6 +20,8 @@ import {
 import LoginForm from "@tourpool/client/LoginForm.vue";
 import ProfileFields from "@tourpool/client/ProfileFields.vue";
 import AccountSettings from "@tourpool/client/AccountSettings.vue";
+import {Edit2, Plus, BanknoteCheck, Printer, BanknoteArrowUp  } from '@lucide/vue'; 
+// import { Plus, Trash2, Edit2, X, UserCheck, Trophy, Award, Sliders, Eye, EyeOff, FileText, RefreshCw  } from '@lucide/vue';
 
 interface Pool {
   poolID: number;
@@ -25,6 +34,7 @@ interface Pool {
   orgEmail: string | null;
   orgTel: string | null;
   tourNaam: string;
+  tourJaar: number | null;
   editable: boolean;
   closesAt: string | null;
   reason: string;
@@ -38,6 +48,9 @@ interface Entry {
   deelnID: number;
   poolID: number;
   poolNaam: string;
+  orgNaam: string | null;
+  tourNaam: string;
+  tourJaar: number | null;
   ploegnaam: string;
   Betaald: boolean | number | null;
 }
@@ -49,11 +62,67 @@ interface Rider {
   anaam: string;
   ploegNaam: string;
 }
+interface PointAllocation {
+  prestatieID: number;
+  Omschrijving: string | null;
+  Punten: number | null;
+  uitslagtype: string | null;
+  plaats: number | null;
+  volgorde: number | null;
+}
+const pointsDialog = ref<HTMLDialogElement | null>(null);
+const pointsPool = ref<Pool | null>(null);
+const points = ref<PointAllocation[]>([]);
+const pointsLoading = ref(false);
+const pointsError = ref("");
+async function showPoints(p: Pool) {
+  pointsPool.value = p;
+  points.value = [];
+  pointsError.value = "";
+  pointsLoading.value = true;
+  pointsDialog.value?.showModal();
+  try {
+    points.value = await apiFetch<PointAllocation[]>(
+      `${apiPrefix.value}/pools/${p.poolID}/point-allocations`,
+    );
+  } catch (err) {
+    pointsError.value = errorMessage(err);
+  } finally {
+    pointsLoading.value = false;
+  }
+}
 const pools = ref<Pool[]>([]);
 const entries = ref<Entry[]>([]);
 const selectedEntryID = ref<number | null>(null);
+const selectedTourYear = ref("");
 const selectedEntry = computed(() =>
   entries.value.find((entry) => entry.deelnID === selectedEntryID.value),
+);
+const tourYears = computed(() => {
+  const years = new Map<string, { value: string; label: string; year: number }>();
+  for (const entry of entries.value) {
+    const value =
+      entry.tourJaar === null
+        ? `tour:${entry.tourNaam}`
+        : `year:${entry.tourJaar}`;
+    years.set(value, {
+      value,
+      label: String(entry.tourJaar ?? entry.tourNaam),
+      year: entry.tourJaar ?? Number.NEGATIVE_INFINITY,
+    });
+  }
+  return [...years.values()].sort(
+    (a, b) => b.year - a.year || a.label.localeCompare(b.label, "nl"),
+  );
+});
+const visibleEntries = computed(() =>
+  entries.value.filter((entry) => {
+    const value =
+      entry.tourJaar === null
+        ? `tour:${entry.tourNaam}`
+        : `year:${entry.tourJaar}`;
+    return value === selectedTourYear.value;
+  }),
 );
 const profile = ref<Profile>(emptyProfile());
 const loading = ref(true);
@@ -75,8 +144,16 @@ const search = ref("");
 // Gastmodus: inschrijven zonder account. Alleen de PDF's van deze sessie blijven beschikbaar.
 const guest = ref(false);
 const guestProfile = ref<Profile>(emptyProfile());
+const suggestedPloegnaam = ref("");
 const guestEntries = ref<
-  { deelnID: number; ploegnaam: string; poolNaam: string; dropOff: string; deadline: string; pdf: Blob }[]
+  {
+    deelnID: number;
+    ploegnaam: string;
+    poolNaam: string;
+    dropOff: string;
+    deadline: string;
+    pdf: Blob;
+  }[]
 >([]);
 const apiPrefix = computed(() => (guest.value ? "/public" : "/me"));
 const now = ref(Date.now());
@@ -88,6 +165,12 @@ const activePool = computed(() =>
   pools.value.find((p) => p.poolID === selectedPoolID.value),
 );
 // Inleveradres van de organisatie; leeg als er geen adres is ingevuld.
+const orgAdr = (p: Pool) => {
+  const p1 = [p.orgStraat, p.orgHuisnummer].filter(Boolean).join(" ");
+  const p2 = [p.orgPostcode, p.orgPlaats].filter(Boolean).join(" ");
+  const parts = [p1, p2].filter(Boolean).join(" ");
+  return parts.length ? parts : "";
+};
 const dropOff = (p: Pool) => {
   const parts = [
     [p.orgStraat, p.orgHuisnummer].filter(Boolean).join(" "),
@@ -99,6 +182,10 @@ const dropOff = (p: Pool) => {
 };
 const isOpen = (p: Pool) =>
   p.editable && !!p.closesAt && now.value < Date.parse(p.closesAt);
+const canEditEntry = (entry: Entry) => {
+  const entryPool = pools.value.find((p) => p.poolID === entry.poolID);
+  return !!entryPool && isOpen(entryPool);
+};
 const editable = computed(() => !!activePool.value && isOpen(activePool.value));
 const mainCount = computed(() =>
   activePool.value
@@ -117,13 +204,15 @@ const selectedRiders = computed(() =>
     .filter((r): r is Rider => !!r),
 );
 const available = computed(() =>
-  riders.value.filter(
-    (r) =>
-      !selected.value.includes(r.rennerID) &&
-      `${r.Rugnummer} ${riderName(r)} ${r.ploegNaam}`
-        .toLowerCase()
-        .includes(search.value.toLowerCase()),
-  ).sort((a, b) => Number(a.Rugnummer) - Number(b.Rugnummer)),
+  riders.value
+    .filter(
+      (r) =>
+        !selected.value.includes(r.rennerID) &&
+        `${r.Rugnummer} ${riderName(r)} ${r.ploegNaam}`
+          .toLowerCase()
+          .includes(search.value.toLowerCase()),
+    )
+    .sort((a, b) => Number(a.Rugnummer) - Number(b.Rugnummer)),
 );
 const dutchTime = (date: string) =>
   new Date(date).toLocaleString("nl-NL", { timeZone: "Europe/Amsterdam" });
@@ -136,6 +225,7 @@ watch(
     pools.value = [];
     profile.value = emptyProfile();
     selectedEntryID.value = null;
+    selectedTourYear.value = "";
     editing.value = false;
     editingProfile.value = false;
     selected.value = [];
@@ -161,9 +251,13 @@ async function refresh() {
       apiFetch<Profile>("/me/profile"),
     ]);
     pools.value = p;
+
     entries.value = e;
     if (!e.some((entry) => entry.deelnID === selectedEntryID.value)) {
       selectedEntryID.value = e[0]?.deelnID ?? null;
+    }
+    if (!tourYears.value.some((year) => year.value === selectedTourYear.value)) {
+      selectedTourYear.value = tourYears.value[0]?.value ?? "";
     }
     profile.value = {
       username: details.username || auth.account?.username || "",
@@ -184,7 +278,11 @@ onMounted(async () => {
   try {
     await loadSession();
     // A reset link must show the reset form, even if another account is still signed in.
-    if (auth.account && new URLSearchParams(window.location.search).has("reset")) await logout();
+    if (
+      auth.account &&
+      new URLSearchParams(window.location.search).has("reset")
+    )
+      await logout();
     if (auth.account) await refresh();
   } catch (err) {
     error.value = errorMessage(err);
@@ -243,7 +341,11 @@ async function submitGuestTeam() {
       `Kies ${p.PloegRennerAantal} renners, inclusief ${p.PloegReserveAantal} reserves.`,
     );
   const { username: _username, ...guestFields } = guestProfile.value;
-  const result = await apiFetch<{ deelnID: number; deadline: string; pdf: string }>("/public/entries", {
+  const result = await apiFetch<{
+    deelnID: number;
+    deadline: string;
+    pdf: string;
+  }>("/public/entries", {
     method: "POST",
     body: JSON.stringify({
       poolID: p.poolID,
@@ -252,9 +354,12 @@ async function submitGuestTeam() {
       profile: guestFields,
     }),
   });
-  const pdf = new Blob([Uint8Array.from(atob(result.pdf), (c) => c.charCodeAt(0))], {
-    type: "application/pdf",
-  });
+  const pdf = new Blob(
+    [Uint8Array.from(atob(result.pdf), (c) => c.charCodeAt(0))],
+    {
+      type: "application/pdf",
+    },
+  );
   guestEntries.value.unshift({
     deelnID: result.deelnID,
     ploegnaam: ploegnaam.value,
@@ -265,7 +370,11 @@ async function submitGuestTeam() {
   });
   saveBlob(pdf, result.deelnID);
   editing.value = false;
-  message.value = `Inschrijfnummer ${result.deelnID} is aangemaakt en de PDF is gedownload. Let op: je ploeg is nog NIET actief. Hij doet pas mee nadat je het formulier hebt ingeleverd en de inleg hebt betaald. Niet betaald voor ${dutchTime(result.deadline)}? Dan wordt de inschrijving automatisch verwijderd.`;
+  message.value = `Inschrijfnummer ${
+    result.deelnID
+  } is aangemaakt en de PDF is gedownload. Let op: je ploeg is nog NIET actief. Hij doet pas mee nadat je het formulier hebt ingeleverd en de inleg hebt betaald. Niet betaald voor ${dutchTime(
+    result.deadline,
+  )}? Dan wordt de inschrijving automatisch verwijderd.`;
 }
 async function openTeam(p: Pool, entry?: Entry) {
   busy.value = true;
@@ -273,10 +382,15 @@ async function openTeam(p: Pool, entry?: Entry) {
   message.value = "";
   teamError.value = "";
   try {
-    const [availableRiders, detail] = await Promise.all([
+    const [availableRiders, detail, suggestion] = await Promise.all([
       apiFetch<Rider[]>(`${apiPrefix.value}/pools/${p.poolID}/riders`),
       entry
         ? apiFetch<Entry & { riders: Rider[] }>(`/me/entries/${entry.deelnID}`)
+        : Promise.resolve(null),
+      !entry && !guest.value
+        ? apiFetch<{ ploegnaam: string }>(
+            `/me/pools/${p.poolID}/suggested-team-name`,
+          )
         : Promise.resolve(null),
     ]);
     selectedPoolID.value = p.poolID;
@@ -284,13 +398,37 @@ async function openTeam(p: Pool, entry?: Entry) {
     savedRiders.value = detail?.riders || [];
     selected.value = detail?.riders.map((r) => r.rennerID) || [];
     editingID.value = entry?.deelnID || null;
-    ploegnaam.value = entry?.ploegnaam || (guest.value ? "" : profile.value.vNaam);
+    suggestedPloegnaam.value = "";
+    ploegnaam.value = entry?.ploegnaam || suggestion?.ploegnaam || "";
     search.value = "";
     editing.value = true;
   } catch (err) {
     error.value = errorMessage(err);
   } finally {
     busy.value = false;
+  }
+}
+async function suggestGuestTeamName() {
+  const p = activePool.value;
+  if (!guest.value || !p) return;
+  if (ploegnaam.value && ploegnaam.value !== suggestedPloegnaam.value) return;
+  const firstName = guestProfile.value.vNaam;
+  const lastName = guestProfile.value.aNaam;
+  const query = new URLSearchParams({
+    firstName,
+    lastName,
+  });
+  try {
+    const result = await apiFetch<{ ploegnaam: string }>(
+      `/public/pools/${p.poolID}/suggested-team-name?${query}`,
+    );
+    if (guestProfile.value.vNaam !== firstName || guestProfile.value.aNaam !== lastName) return;
+    if (!ploegnaam.value || ploegnaam.value === suggestedPloegnaam.value) {
+      ploegnaam.value = result.ploegnaam;
+      suggestedPloegnaam.value = result.ploegnaam;
+    }
+  } catch (err) {
+    teamError.value = errorMessage(err);
   }
 }
 async function openSelectedTeam() {
@@ -302,6 +440,14 @@ async function openSelectedTeam() {
     return;
   }
   await openTeam(p, entry);
+}
+async function openEntry(entry: Entry) {
+  if (!canEditEntry(entry)) {
+    error.value = "De inschrijving is gesloten. Je ploeg kan niet meer worden gewijzigd.";
+    return;
+  }
+  selectedEntryID.value = entry.deelnID;
+  await openSelectedTeam();
 }
 function addRider(id: number) {
   if (
@@ -445,7 +591,9 @@ async function pdf(entry: Entry) {
 </script>
 
 <template>
-  <main class="mx-auto p-2 md:p-4">
+  <main
+    class="mx-auto p-2 md:p-4"
+    :class="{ 'flex h-dvh flex-col overflow-hidden': editing && activePool }">
     <p v-if="error" class="my-4 bg-red-100 p-4 text-red-800" role="alert">
       {{ error }}
     </p>
@@ -454,28 +602,40 @@ async function pdf(entry: Entry) {
       <LoginForm @signed-in="refresh" />
       <section
         class="max-w-140 md:max-w-140 mx-auto my-4 rounded-xl border border-yellow-700 bg-yellow-100 p-3 md:p-5">
-        <h2 class="mb-2 text-center text-2xl font-bold">Meedoen zonder account?  Dat kan!</h2>
+        <h2 class="mb-2 text-center text-2xl font-bold">
+          Meedoen zonder account? Dat kan!
+        </h2>
         <p class="my-2">
-          Vul je tourploeg in en druk het formulier 2 keer af; één voor jezelf en één om in te leveren bij de
-          organisatie.<br />Zonder account kun je je ploeg achteraf niet meer
-          bekijken of wijzigen.
+          Vul je tourploeg in en druk het formulier 2 keer af; één voor jezelf
+          en één om in te leveren bij de organisatie.<br />Zonder account kun je
+          je ploeg achteraf niet meer bekijken of wijzigen.
         </p>
-        <p class="my-2 font-semibold text-red-800">
-          Je ploeg doet pas mee nadat de inleg is betaald.<br />Niet betaald binnen
-          48 uur? Dan wordt de inschrijving verwijderd.
+        <div class="flex justify-center">
+          <button
+            class="btn max-[600px]:min-h-11 m-1 text-center"
+            @click="startGuest">
+            Een pool toevoegen zonder account
+          </button>
+        </div>
+        <p class="my-2 text-center text-xl font-semibold text-red-800">
+          LET OP!
         </p>
-        <button class="btn max-[600px]:min-h-11 m-1 text-center" @click="startGuest">
-          Inschrijven zonder account
-        </button>
+        <p class="my-2 text-center text-red-800">
+          Deze ploeg doet pas mee nadat de inleg is betaald.<br />Hij wordt
+          verwijderd als je niet
+          <span class="underline">binnen 48 uur</span> hebt betaald.
+        </p>
       </section>
     </template>
     <template v-else>
-      <div class="max-w-140 mx-auto rounded-2xl border border-yellow-700 bg-amber-800 px-4 md:max-w-6xl">
+      <div
+        class="max-w-140 mx-auto w-full shrink-0 rounded-2xl border border-yellow-700 bg-amber-800 px-4 md:max-w-6xl">
         <header
           v-if="guest || !auth.account"
           class="mx-auto flex flex-wrap items-center justify-between gap-2 align-middle md:flex-row">
           <h1
-            class="text-shadow-2xs my-5 text-3xl font-extrabold text-yellow-100 md:text-4xl">
+            class="text-shadow-2xs text-3xl font-extrabold text-yellow-100 md:text-4xl"
+            :class="editing ? 'my-2' : 'my-5'">
             Jota's Tourpool
           </h1>
           <h2 class="text-2xl text-yellow-100">Inschrijven zonder account</h2>
@@ -490,16 +650,22 @@ async function pdf(entry: Entry) {
           v-else
           class="mx-auto flex flex-wrap items-center justify-between gap-2 align-middle md:flex-row">
           <h1
-            class="text-shadow-2xs my-5 text-3xl font-extrabold text-yellow-100 md:text-4xl">
+            class="text-shadow-2xs text-3xl font-extrabold text-yellow-100 md:text-4xl"
+            :class="editing ? 'my-2' : 'my-5'">
             Jota's Tourpool
           </h1>
-          <h2 class="text-2xl text-yellow-100">Ingelogd als<span class="ml-2 rounded-2xl border-2 border-amber-100 p-2 text-3xl font-extrabold text-amber-100">{{ auth.account.username }}</span></h2>
-            <button
-              class="btn max-[600px]:min-h-11 m-1"
-              :disabled="busy"
-              @click="openProfileEditor">
-              Account bijwerken
-            </button>
+          <h2 v-if="!editing" class="text-2xl text-yellow-100">
+            Ingelogd als<span
+              class="ml-2 rounded-2xl border-2 border-amber-100 p-2 text-3xl font-extrabold text-amber-100"
+              >{{ auth.account.username }}</span
+            >
+          </h2>
+          <button
+            class="btn max-[600px]:min-h-11 m-1"
+            :disabled="busy"
+            @click="openProfileEditor">
+            Account bijwerken
+          </button>
           <button
             class="btn max-[600px]:min-h-11 m-1"
             :disabled="busy"
@@ -511,7 +677,11 @@ async function pdf(entry: Entry) {
       <p
         v-if="message"
         class="my-4 p-4"
-        :class="guest ? 'border border-red-800 bg-amber-100 font-semibold text-red-900' : 'bg-green-100 text-green-800'"
+        :class="
+          guest
+            ? 'border border-red-800 bg-amber-100 font-semibold text-red-900'
+            : 'bg-green-100 text-green-800'
+        "
         role="status">
         {{ message }}
       </p>
@@ -522,8 +692,11 @@ async function pdf(entry: Entry) {
         aria-labelledby="profile-dialog-title"
         @cancel.prevent="cancelProfileEdit">
         <form @submit.prevent="saveProfile">
-          <div class="mb-4 flex items-center justify-between gap-4 border-b border-yellow-700/30 pb-3">
-            <h2 id="profile-dialog-title" class="text-xl font-bold">Gegevens wijzigen</h2>
+          <div
+            class="mb-4 flex items-center justify-between gap-4 border-b border-yellow-700/30 pb-3">
+            <h2 id="profile-dialog-title" class="text-xl font-bold">
+              Gegevens wijzigen
+            </h2>
             <button
               class="btn max-[600px]:min-h-11 m-1"
               type="button"
@@ -538,9 +711,7 @@ async function pdf(entry: Entry) {
             class="max-w-140 md:max-w-180 mx-auto min-w-0 items-center justify-center">
             <ProfileFields v-model="profile" />
             <div class="flex flex-row justify-between gap-2 p-2">
-              <button
-                class="btn max-[600px]:min-h-11 m-1"
-                type="submit">
+              <button class="btn max-[600px]:min-h-11 m-1" type="submit">
                 Gegevens opslaan
               </button>
               <button
@@ -552,72 +723,167 @@ async function pdf(entry: Entry) {
             </div>
           </fieldset>
         </form>
-        <section class="max-w-140 md:max-w-180 mx-auto mt-4 border-t border-yellow-700/30 p-3">
+        <section
+          class="max-w-140 md:max-w-180 mx-auto mt-4 border-t border-yellow-700/30 p-3">
           <AccountSettings :show-username="false" />
         </section>
       </dialog>
 
+      <dialog
+        ref="pointsDialog"
+        class="m-auto max-h-[90dvh] w-[min(100%-1.5rem,48rem)] max-w-none overflow-y-auto rounded-xl border border-yellow-700 bg-yellow-100 p-4 shadow-xl backdrop:bg-black/50 md:p-6"
+        aria-labelledby="points-dialog-title">
+        <div class="mb-4 flex items-center justify-between gap-4 border-b border-yellow-700/30 pb-3">
+          <h2 id="points-dialog-title" class="text-xl font-bold">
+            Puntentoekenning — {{ pointsPool?.Naam }} - {{ pointsPool?.Org }}
+          </h2>
+          <button
+            type="button"
+            class="btn max-[600px]:min-h-11"
+            @click="pointsDialog?.close()">
+            Sluiten
+          </button>
+        </div>
+        <p v-if="pointsLoading" role="status">Puntentoekenning laden...</p>
+        <p v-else-if="pointsError" class="bg-red-100 p-3 text-red-800" role="alert">
+          {{ pointsError }}
+        </p>
+        <p v-else-if="!points.length">Voor deze pool is nog geen puntentoekenning ingesteld.</p>
+        <table v-else class="w-full text-left">
+          <caption class="sr-only">Puntentoekenning voor {{ pointsPool?.Naam }}</caption>
+          <thead>
+            <tr class="border-b border-yellow-700">
+              <th scope="col" class="p-1">Voor</th>
+              <th scope="col" class="p-1 text-right">Plaats</th>
+              <th scope="col" class="p-1 text-right">Punten</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="point in points" :key="point.prestatieID" class="border-b border-yellow-700/20">
+              <td class="p-1">{{ point.Omschrijving || point.uitslagtype || `Prestatie ${point.prestatieID}` }}</td>
+              <td class="p-1 text-right tabular-nums">{{ point.plaats ?? "—" }}</td>
+              <td class="p-1 text-right tabular-nums">{{ point.Punten ?? "—" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </dialog>
+
       <section
         v-if="editing && activePool"
-        class="mx-auto my-2 max-w-sm rounded-xl border border-yellow-700 bg-yellow-100 p-3 md:max-w-6xl md:p-5">
-
-        <div class="flex items-center justify-between gap-2">
-          <h2 class="mb-4 text-[1.4rem]">
-            {{ editingID ? "Mijn tourploeg" : "Nieuwe tourploeg" }} -
-            {{ activePool.Naam }}
-          </h2>
-          <p v-if="!editable" class="my-4">
-            Deze pool is gesloten voor wijzigingen. Je opgeslagen ploeg blijft
-            zichtbaar.
+        class="mx-auto my-1 flex min-h-0 w-full max-w-6xl flex-1 flex-col rounded-xl border border-yellow-700 bg-yellow-100 px-3 py-1">
+        <div class="shrink-0 text-center">
+          <div class="grid grid-cols-3 items-center gap-2">
+            <h2 class="col-start-2 my-0 min-w-0 text-center text-3xl">
+              {{ editingID ? "Mijn tourploeg" : "Nieuwe tourploeg" }}
+            </h2>
+            <button
+              type="button"
+              class="btn max-[600px]:min-h-11 wrap-break-word min-w-0 max-w-full justify-self-end"
+              :disabled="pointsLoading"
+              @click="showPoints(activePool)">
+              Puntentoekenning
+            </button>
+          </div>
+          <p class="my-1">
+            voor de {{ activePool.Naam }}, georganiseerd door
+            {{ activePool.Org }}
           </p>
-          <p class="my-4">
-            {{ activePool.PloegRennerAantal }} renners, waarvan
-            {{ activePool.PloegReserveAantal }} reserves. Volgorde bepaalt de
-            reservevolgorde.
-          </p>
-          <p v-if="dropOff(activePool)" class="my-4">
-            Inleveren en betalen bij: {{ dropOff(activePool) }}
-          </p>
-          
+          <hr />
+          <div v-if="!editable" class="my-4">
+            <p>
+              Deze pool is gesloten voor wijzigingen. Je opgeslagen ploeg blijft
+              zichtbaar.
+            </p>
+          </div>
         </div>
         <form
+          class="flex min-h-0 flex-1 flex-col"
           @submit.prevent="saveTeam()"
-          @invalid.capture="teamError = guest ? 'Vul alle verplichte velden in.' : 'Vul een ploegnaam in.'">
-          <fieldset :disabled="busy || !editable" class="min-w-0">
-            <div v-if="guest" class="grid max-w-3xl grid-cols-12 gap-x-3">
-              <p class="col-span-12 my-2">
-                Zonder account wordt je ploeg direct ingeschreven en kun je hem
-                daarna niet meer wijzigen. Controleer alles goed.
-              </p>
-              <p class="col-span-12 my-2 rounded-md bg-red-100 p-2 font-semibold text-red-800">
-                Je ploeg is pas actief en doet pas mee nadat de inleg is
-                betaald. Lever het formulier binnen 48 uur in en betaal, anders
-                wordt de inschrijving automatisch verwijderd.
-              </p>
-              <label class="col-span-12 my-1 block font-semibold sm:col-span-4">Voornaam
-                <input class="block w-full rounded-md border border-slate-500 bg-white p-2 font-normal" v-model="guestProfile.vNaam" autocomplete="given-name" required maxlength="24" /></label>
-              <label class="col-span-4 my-1 block font-semibold sm:col-span-2">Voorv.
-                <input class="block w-full rounded-md border border-slate-500 bg-white p-2 font-normal" v-model="guestProfile.tNaam" maxlength="12" /></label>
-              <label class="col-span-8 my-1 block font-semibold sm:col-span-6">Achternaam
-                <input class="block w-full rounded-md border border-slate-500 bg-white p-2 font-normal" v-model="guestProfile.aNaam" autocomplete="family-name" required maxlength="24" /></label>
-              <label class="col-span-12 my-1 block font-semibold sm:col-span-4">Woonplaats (optioneel)
-                <input class="block w-full rounded-md border border-slate-500 bg-white p-2 font-normal" v-model="guestProfile.plaats" autocomplete="address-level2" maxlength="24" /></label>
-              <label class="col-span-12 my-1 block font-semibold sm:col-span-3">Telefoon (optioneel)
-                <input class="block w-full rounded-md border border-slate-500 bg-white p-2 font-normal" v-model="guestProfile.tel" type="tel" autocomplete="tel" maxlength="12" /></label>
-              <label class="col-span-12 my-1 block font-semibold sm:col-span-5">E-mailadres (optioneel)
-                <input class="block w-full rounded-md border border-slate-500 bg-white p-2 font-normal" v-model="guestProfile.email" type="email" autocomplete="email" maxlength="64" /></label>
+          @invalid.capture="
+            teamError = guest
+              ? 'Vul alle verplichte velden in.'
+              : 'Vul een ploegnaam in.'
+          ">
+          <fieldset
+            :disabled="busy || !editable"
+            class="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+            <div
+              class="shrink-0 space-y-3"
+              :class="{ 'max-h-[22dvh] overflow-y-auto md:max-h-[35dvh]': guest }">
+              <div class="grid shrink-0 grid-cols-2 gap-3 text-left md:gap-6">
+                <div class="col-start-1 min-w-0">
+                  <div
+                    v-if="guest"
+                    class="mb-2 grid gap-2 sm:grid-cols-[2fr_1fr_3fr]">
+                    <label class="block min-w-0 font-semibold"
+                      >Voornaam
+                      <input
+                        class="block w-full rounded-md border border-slate-500 bg-white p-2 font-normal"
+                        v-model="guestProfile.vNaam"
+                        @change="suggestGuestTeamName"
+                        autocomplete="given-name"
+                        required
+                        maxlength="24"
+                    /></label>
+                    <label class="block min-w-0 font-semibold"
+                      >Voorv.
+                      <input
+                        class="block w-full rounded-md border border-slate-500 bg-white p-2 font-normal"
+                        v-model="guestProfile.tNaam"
+                        maxlength="12"
+                    /></label>
+                    <label class="block min-w-0 font-semibold"
+                      >Achternaam
+                      <input
+                        class="block w-full rounded-md border border-slate-500 bg-white p-2 font-normal"
+                        v-model="guestProfile.aNaam"
+                        @change="suggestGuestTeamName"
+                        autocomplete="family-name"
+                        required
+                        maxlength="24"
+                    /></label>
+                  </div>
+                  <p v-if="!guest && auth.account" class="mb-2">
+                    Ingelogd als
+                    <strong class="block break-all text-xl text-amber-900">{{
+                      auth.account.username
+                    }}</strong>
+                  </p>
+                  <label class="block font-semibold"
+                    >Ploegnaam
+                    <input
+                      class="block w-full rounded-md border border-slate-500 bg-white p-2 font-normal"
+                      v-model="ploegnaam"
+                      required
+                      maxlength="255"
+                  /></label>
+                </div>
+                <div v-if="editable" class="col-start-2 min-w-0 text-sm md:text-base">
+                  <ul class="list-inside list-disc">
+                    <li>Selecteer {{ activePool.PloegRennerAantal }} renners, de
+                      laatste {{ activePool.PloegReserveAantal }} zijn reserves.
+                    </li>
+                    <li>Inleveren en betalen bij:</li>
+                    <li class="list-none pl-4 font-bold">
+                      {{ activePool.Org }}<br />{{ orgAdr(activePool) }}
+                    </li>
+                  </ul>
+                  <div
+                    v-if="guest"
+                    class="mt-1 space-y-1 rounded-md border border-red-800 bg-amber-100 px-3 pt-1 text-sm">
+                    <p class="font-semibold text-red-800">
+                      Je ploeg is pas actief en doet pas mee nadat de inleg is
+                      betaald. Lever het formulier binnen 48 uur in en betaal,
+                      anders wordt de inschrijving automatisch verwijderd.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <label class="my-3 block font-semibold"
-              >Ploegnaam
-              <input
-                class="max-w-120 block w-full rounded-md border border-slate-500 bg-white p-2.5 font-normal"
-                v-model="ploegnaam"
-                required
-                maxlength="255"
-            /></label>
-            <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-[2fr_3fr]">
-              <div class="min-w-0">
-                <label class="mb-2 block font-semibold"
+            <div
+              class="grid min-h-0 flex-1 gap-4 overflow-y-auto md:grid-cols-2 md:overflow-hidden lg:grid-cols-[2fr_3fr]">
+              <div class="flex min-h-0 min-w-0 flex-col">
+                <label class="mb-2 block shrink-0 font-semibold"
                   >Zoek renner
                   <input
                     class="block w-full rounded-md border border-slate-500 bg-white p-2.5 font-normal"
@@ -626,7 +892,7 @@ async function pdf(entry: Entry) {
                     placeholder="Naam, rugnummer of ploeg"
                 /></label>
                 <ul
-                  class="h-112 overflow-auto rounded-md border border-slate-300 bg-white"
+                  class="h-72 shrink-0 overflow-auto rounded-md border border-slate-300 bg-white md:h-auto md:min-h-0 md:flex-1 md:shrink"
                   aria-label="Beschikbare renners">
                   <li
                     v-for="(r, index) in available"
@@ -640,7 +906,9 @@ async function pdf(entry: Entry) {
                     <button
                       type="button"
                       class="max-[600px]:min-h-11 flex w-full cursor-pointer items-center gap-3 border-b border-slate-200 px-3 py-1.5 text-left hover:bg-yellow-100 disabled:cursor-not-allowed disabled:opacity-50"
-                      :disabled="selected.length >= activePool.PloegRennerAantal"
+                      :disabled="
+                        selected.length >= activePool.PloegRennerAantal
+                      "
                       :title="`${riderName(r)} (${r.ploegNaam}) kiezen`"
                       @click="addRider(r.rennerID)">
                       <span
@@ -667,24 +935,22 @@ async function pdf(entry: Entry) {
                       </svg>
                     </button>
                   </li>
-                  <li
-                    v-if="!available.length"
-                    class="px-3 py-2 text-slate-600">
+                  <li v-if="!available.length" class="px-3 py-2 text-slate-600">
                     Geen renners gevonden.
                   </li>
                 </ul>
               </div>
-              <div class="min-w-0">
-                <h3 class="mb-2 font-semibold">
+              <div class="flex min-h-0 min-w-0 flex-col">
+                <h3 class="mb-2 shrink-0 font-semibold">
                   Gekozen: {{ selected.length }} /
                   {{ activePool.PloegRennerAantal }}
                 </h3>
-                <p v-if="editable && selected.length > 1" class="mb-2 text-sm">
+                <p v-if="editable && selected.length > 1" class="mb-2 shrink-0 text-sm">
                   Sleep een renner aan het greepje om de volgorde te wijzigen
                   (of gebruik de pijltjestoetsen op het greepje).
                 </p>
                 <ol
-                  class="min-h-24 rounded-md border border-slate-300 bg-white sm:grid sm:grid-flow-col sm:grid-cols-2 sm:grid-rows-[repeat(10,auto)] sm:content-start sm:gap-x-2"
+                  class="min-h-24 shrink-0 rounded-md border border-slate-300 bg-white sm:grid sm:grid-flow-col sm:grid-cols-2 sm:grid-rows-[repeat(10,auto)] sm:content-start sm:gap-x-2 md:min-h-0 md:flex-1 md:shrink md:overflow-auto"
                   aria-label="Gekozen renners">
                   <li
                     v-for="(r, index) in selectedRiders"
@@ -695,14 +961,18 @@ async function pdf(entry: Entry) {
                       draggingID === r.rennerID
                         ? 'bg-yellow-200 shadow-md'
                         : index >= mainCount
-                          ? 'bg-slate-50'
-                          : '',
-                      index === mainCount ? 'border-t-2 border-t-yellow-700' : '',
+                        ? 'bg-slate-50'
+                        : '',
+                      index === mainCount
+                        ? 'border-t-2 border-t-yellow-700'
+                        : '',
                     ]">
                     <button
                       type="button"
                       class="flex h-9 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-slate-500 hover:bg-yellow-100 active:cursor-grabbing disabled:cursor-default disabled:opacity-40"
-                      :aria-label="`${riderName(r)} verplaatsen (pijltjestoetsen)`"
+                      :aria-label="`${riderName(
+                        r,
+                      )} verplaatsen (pijltjestoetsen)`"
                       title="Slepen om te verplaatsen"
                       @pointerdown="startDrag($event, r.rennerID)"
                       @pointermove="onDrag"
@@ -723,8 +993,11 @@ async function pdf(entry: Entry) {
                         <circle cx="13" cy="15" r="1.5" />
                       </svg>
                     </button>
-                    <span class="w-7 shrink-0 text-right tabular-nums"
-                      :class="index >= mainCount ? 'font-semibold text-slate-600' : ''"
+                    <span
+                      class="w-7 shrink-0 text-right tabular-nums"
+                      :class="
+                        index >= mainCount ? 'font-semibold text-slate-600' : ''
+                      "
                       >{{
                         index >= mainCount
                           ? `R${index - mainCount + 1}`
@@ -773,9 +1046,11 @@ async function pdf(entry: Entry) {
                 </ol>
               </div>
             </div>
+          </fieldset>
+          <div class="shrink-0 border-t border-yellow-700/30 pt-2">
             <p
               v-if="teamError"
-              class="my-4 bg-red-100 p-4 text-red-800"
+              class="mb-2 bg-red-100 p-2 text-red-800"
               role="alert">
               {{ teamError }}
             </p>
@@ -783,23 +1058,28 @@ async function pdf(entry: Entry) {
               <button
                 class="btn max-[600px]:min-h-11 m-1"
                 type="submit"
-                :disabled="selected.length !== activePool.PloegRennerAantal">
-                {{ busy ? "Bezig met inschrijven..." : "Inschrijven en PDF downloaden" }}
+                :disabled="busy || !editable || selected.length !== activePool.PloegRennerAantal">
+                {{
+                  busy
+                    ? "Bezig met inschrijven..."
+                    : "Inschrijven en PDF downloaden"
+                }}
               </button>
             </template>
             <template v-else>
-            <button
-              class="btn max-[600px]:min-h-11 m-1"
-              type="submit">
-              {{ busy ? "Bezig met opslaan..." : "Tourploeg opslaan" }}
-            </button>
-            <button
-              class="btn max-[600px]:min-h-11 m-1"
-              type="button"
-              :disabled="selected.length !== activePool.PloegRennerAantal"
-              @click="saveTeam(true)">
-              Opslaan en PDF downloaden
-            </button>
+              <button
+                class="btn max-[600px]:min-h-11 m-1"
+                type="submit"
+                :disabled="busy || !editable">
+                {{ busy ? "Bezig met opslaan..." : "Tourploeg opslaan" }}
+              </button>
+              <button
+                class="btn max-[600px]:min-h-11 m-1"
+                type="button"
+                :disabled="busy || !editable || selected.length !== activePool.PloegRennerAantal"
+                @click="saveTeam(true)">
+                Opslaan en PDF downloaden
+              </button>
             </template>
             <button
               class="btn max-[600px]:min-h-11 m-1"
@@ -809,23 +1089,70 @@ async function pdf(entry: Entry) {
               Terug zonder opslaan
             </button>
             <p
-              v-if="guest && selected.length !== activePool.PloegRennerAantal"
-              class="my-4">
+              v-if="editable && guest && selected.length !== activePool.PloegRennerAantal"
+              class="my-1 text-sm">
               Kies alle {{ activePool.PloegRennerAantal }} renners inclusief
               reserves om in te schrijven.
             </p>
             <p
-              v-else-if="selected.length !== activePool.PloegRennerAantal"
-              class="my-4">
+              v-else-if="editable && selected.length !== activePool.PloegRennerAantal"
+              class="my-1 text-sm">
               Je kunt je ploeg alvast opslaan. Kies alle
               {{ activePool.PloegRennerAantal }} renners inclusief reserves om
               het formulier als PDF te downloaden en af te drukken.
             </p>
-          </fieldset>
+          </div>
         </form>
       </section>
 
       <template v-else>
+        <section
+          class="mx-auto my-2 max-w-sm rounded-xl border border-yellow-700 bg-yellow-100 p-3 md:max-w-6xl md:p-3">
+          <div class="flex flex-row justify-between gap-4">
+            <h2 class="mb-2 ml-1 text-2xl">Beschikbare pools</h2>
+            <button class="btn" :disabled="busy || loading" @click="refresh">
+              Verversen
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <article
+              v-for="p in pools"
+              :key="p.poolID"
+              class="flex flex-col rounded-lg border border-yellow-700 bg-white p-4">
+              <h3 class="mb-1 text-center text-lg font-semibold">
+                {{ p.Org || "Geen organisatie" }} {{ p.tourJaar }}
+              </h3>
+              <p class="mb-3 text-center">{{ p.Naam }}</p>
+              <p class="my-2">
+                Inleg: EUR {{ Number(p.inleg || 0).toFixed(2) }} per ploeg.
+                Inschrijving vanaf
+                {{
+                  p.registrationStart
+                    ? enrollmentDate(p.registrationStart)
+                    : "direct"
+                }}
+                {{
+                  p.registrationEnd
+                    ? `tot en met ${enrollmentDate(p.registrationEnd)}`
+                    : "tot de tourstart"
+                }}.
+              </p>
+              <p v-if="!isOpen(p)" class="my-2">
+                {{ p.reason || "De inschrijving is gesloten." }}
+              </p>
+              <div class="mt-auto flex justify-center pt-3">
+                <button
+                  class="btn max-[600px]:min-h-11 m-1 inline-flex items-center gap-2"
+                  :disabled="busy || !isOpen(p)"
+                  @click="openTeam(p)" title="Voeg ploeg toe aan deze pool">
+                  <Plus class="h-4 w-4"  /> 
+                  <p>Voeg ploeg toe</p>
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
         <section
           v-if="guest"
           class="mx-auto my-2 max-w-sm rounded-xl border border-yellow-700 bg-yellow-100 p-3 md:max-w-6xl md:p-5">
@@ -835,8 +1162,8 @@ async function pdf(entry: Entry) {
             hem in bij de organisatie en betaal daar de inleg. Deze lijst
             verdwijnt als je de pagina sluit.
           </p>
-          <p v-if="!guestEntries.length" class="my-4">
-            Je hebt in deze sessie nog geen ploeg ingeschreven.
+          <p v-if="!guestEntries.length" class="my-1 text-center font-semibold text-red-600">
+            Je hebt nog geen ploeg ingeschreven.
           </p>
           <article
             v-for="entry in guestEntries"
@@ -863,7 +1190,17 @@ async function pdf(entry: Entry) {
         <section
           v-else
           class="mx-auto my-2 max-w-sm rounded-xl border border-yellow-700 bg-yellow-100 p-3 md:max-w-6xl md:p-5">
-          <h2 class="mb-4 text-[1.4rem]">Mijn tourploegen</h2>
+          <div class="flex items-center justify-start gap-2">
+            <h2 class="text-xl">Mijn tourploegen voor:</h2>
+              <select
+                class="block w-20 rounded-md border border-slate-500 bg-white p-0.5 text-center font-normal"
+                v-model="selectedTourYear"
+                :disabled="busy">
+                <option v-for="year in tourYears" :key="year.value" :value="year.value">
+                  {{ year.label }}
+                </option>
+              </select>
+          </div>
           <p class="my-4">
             Je kunt meerdere ploegen per pool invullen. Lever per ploeg de PDF
             in bij de organisatie en betaal daar. De admin bevestigt je
@@ -872,104 +1209,46 @@ async function pdf(entry: Entry) {
           <p v-if="!entries.length" class="my-4">
             Je hebt nog geen tourploegen ingevuld.
           </p>
-          <label v-else class="my-3 block font-semibold">
-            Kies mijn tourploeg
-            <select
-              class="max-w-120 block w-full rounded-md border border-slate-500 bg-white p-2.5 font-normal"
-              v-model="selectedEntryID"
-              :disabled="busy">
-              <option
-                v-for="entry in entries"
-                :key="entry.deelnID"
-                :value="entry.deelnID">
-                {{ entry.ploegnaam }} - {{ entry.poolNaam }} (#{{
-                  entry.deelnID
-                }})
-              </option>
-            </select>
-          </label>
-          <article
-            v-if="selectedEntry"
-            class="my-3 rounded-lg border border-yellow-700 bg-white p-4">
-            <h3 class="my-4 text-[1.1rem]">
-              {{ selectedEntry.ploegnaam }} - {{ selectedEntry.poolNaam }}
-            </h3>
-            <p class="my-4">
-              Inschrijving #{{ selectedEntry.deelnID }} -
-              {{
-                selectedEntry.Betaald
-                  ? "Betaald"
-                  : "Nog niet betaald (telt pas mee in de stand na betaling)"
-              }}
-            </p>
-            <button
-              class="btn max-[600px]:min-h-11 m-1"
-              :disabled="
-                busy || !pools.some((p) => p.poolID === selectedEntry?.poolID)
-              "
-              @click="openSelectedTeam">
-              Bekijken / wijzigen
-            </button>
-            <button
-              class="btn max-[600px]:min-h-11 m-1"
-              :disabled="busy"
-              @click="pdf(selectedEntry)">
-              PDF downloaden
-            </button>
-          </article>
-        </section>
-        <section
-          class="mx-auto my-2 max-w-sm rounded-xl border border-yellow-700 bg-yellow-100 p-3 md:max-w-6xl md:p-3">
-
-          <div class="flex flex-row justify-between gap-4">
-            <h2 class="mb-2 ml-1 text-2xl">Beschikbare pools</h2>
-            <button
-              class="btn"
-              :disabled="busy || loading"
-              @click="refresh">
-              Verversen
-            </button>
+          <p v-if="entries.length && !visibleEntries.length" class="my-4">
+            Je hebt nog geen tourploegen voor dit tourjaar.
+          </p>
+          <div v-if="visibleEntries.length" class="mt-4 grid gap-3 md:grid-cols-4">
+            <article
+              v-for="entry in visibleEntries"
+              :key="entry.deelnID"
+              class="rounded-lg border border-yellow-700 bg-yellow-200 p-2"
+              :title="entry.Betaald ? 'Inschrijving is betaald' : 'MOET NOG BETAALD WORDEN'">
+              <div class="flex items-center justify-between">
+                <h3 class="my-2 text-lg font-semibold">{{ entry.ploegnaam }}</h3>
+                  <BanknoteCheck v-if="entry.Betaald" class="text-green-600" />
+                  <BanknoteArrowUp v-else class="h-8 w-8 text-red-600" />
+              </div>
+              <p>{{ entry.poolNaam }} </p>
+              <p class="text-sm text-slate-700">
+                {{ entry.orgNaam || "Geen organisatie" }} ·
+                {{ entry.tourJaar ?? entry.tourNaam }}
+              </p>
+              <p v-if="!canEditEntry(entry)" class="my-1 text-sm text-slate-700">
+                Inschrijving gesloten — deze ploeg kan niet meer worden aangepast.
+              </p>
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-xs text-red-600">{{ entry.Betaald ? '' : 'Ploeg telt niet mee!' }}</p>
+                <button
+                  class="btn max-[600px]:min-h-11 m-1"
+                  :disabled="busy || !canEditEntry(entry)"
+                  :aria-label="canEditEntry(entry) ? 'Tourploeg aanpassen' : 'Tourploeg aanpassen (inschrijving gesloten)'"
+                  @click="openEntry(entry)">
+                  <Edit2 class="h-4 w-4" />
+                </button>
+                <button
+                  class="btn max-[600px]:min-h-11 m-1"
+                  :disabled="busy"
+                  @click="pdf(entry)">
+                  <Printer class="h-4 w-4" />
+                </button>
+              </div>
+            </article>
           </div>
-
-          <article
-            v-for="p in pools"
-            :key="p.poolID"
-            class="my-3 rounded-lg border border-yellow-700 bg-white p-4">
-            <h3 class="my-4 text-[1.1rem]">
-              {{ p.Org }} - {{ p.Naam }} ({{ p.tourNaam }})
-            </h3>
-            <p class="my-4">
-              Inleg: EUR {{ Number(p.inleg || 0).toFixed(2) }} per ploeg.
-            </p>
-            <p v-if="dropOff(p)" class="my-4">
-              Formulier inleveren en betalen bij: {{ dropOff(p) }}
-            </p>
-            <p class="my-4">
-              Inschrijving vanaf
-              {{
-                p.registrationStart
-                  ? enrollmentDate(p.registrationStart)
-                  : "direct"
-              }}
-              {{
-                p.registrationEnd
-                  ? `tot en met ${enrollmentDate(p.registrationEnd)}`
-                  : "tot de tourstart"
-              }}.
-            </p>
-            <p v-if="p.closesAt" class="my-4">
-              Sluit op {{ dutchTime(p.closesAt) }} (Nederlandse tijd).
-            </p>
-            <p v-if="!isOpen(p)" class="my-4">
-              {{ p.reason || "De inschrijving is gesloten." }}
-            </p>
-            <button
-              class="btn max-[600px]:min-h-11 m-1"
-              :disabled="busy || !isOpen(p)"
-              @click="openTeam(p)">
-              Nieuwe tourploeg invullen
-            </button>
-          </article>
         </section>
       </template>
     </template>

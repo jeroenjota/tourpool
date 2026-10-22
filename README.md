@@ -16,6 +16,21 @@ zonder eigen CSS-regels. De deelnemersapp laadt ook Tailwinds Preflight-reset.
 De gedeelde clientcomponenten zijn in beide apps expliciet opgenomen in de
 Tailwind-bronscan.
 
+Bij het invoeren of wijzigen van een tourploeg blijven de appheader,
+ploeggegevens en actieknoppen in beeld. Alleen de rennerkeuze scrolt; op brede
+schermen scrollen de beschikbare en gekozen renners afzonderlijk. Voor ingelogde
+deelnemers staan de instructies links en de gebruikersnaam met de ploegnaam
+rechts.
+Bij gastinschrijvingen staan de naamvelden en ploegnaam rechts van de instructies,
+met de waarschuwingen voor inschrijven zonder account in een kader onder de
+algemene instructies in de linkerkolom.
+Bij gastinschrijvingen kan het extra persoonsgegevens-/instructieblok afzonderlijk
+scrollen, zodat ook op kleine schermen ruimte voor de rennerkeuze overblijft.
+In het ploegscherm opent **Puntentoekenning bekijken** een modal met de prestaties,
+plaatsen en punten van de gekozen pool. Dit kan ook zonder account en bij gesloten
+pools. De leesroutes `/me/pools/:poolID/point-allocations` en
+`/public/pools/:poolID/point-allocations` tonen uitsluitend zichtbare pools.
+
 ## Accounts en autorisatie
 
 In de adminmodule opent **Tours** voor de geselecteerde tour een modal voor
@@ -31,6 +46,10 @@ bevestiging. De API blokkeert het verwijderen van etappes met uitslagen of
 deelnemerspunten; bestaande resultaten blijven behouden.
 De etappe-API geeft datums terug als `YYYY-MM-DD`, zonder tijdzone, zodat het
 openen en opslaan van een etappe of rustdag de kalenderdatum niet verschuift.
+Voor bestaande databases is `apps/api/migrations/20261022_finalize_tour_2027_route.sql` werkt de Tour de
+France 2027 bij naar de officiële route, inclusief alle 21 etappes, drie
+rustdagen en gepubliceerde afstanden (3.479 km vóór homologatie). De migratie
+vervangt de eerdere voorlopige route en verwijdert de bijbehorende kolom.
 
 ### Zichtbaarheid van pools
 
@@ -187,6 +206,11 @@ De PDF blijft na sluiting beschikbaar. De gebruiker levert deze in en betaalt
 bij de organisatie; de admin gebruikt het bestaande betaalveld bij
 **Pools > Deelnemers** om `Betaald` op true te zetten. Users kunnen dit veld
 niet wijzigen, ook niet via een handmatig API-verzoek.
+In het deelnemersploegenoverzicht en de ploegen-PDF krijgen uitgevallen renners
+een `X` in plaats van een nummer. De overige renners worden zonder gaten
+doorgenummerd; reserves schuiven door naar vrijgekomen basisplaatsen en de
+overgebleven reserves worden opnieuw vanaf `R1` genummerd. Dit verandert de
+opgeslagen ploegvolgorde niet en geldt vanaf de ingestelde niet-gestart-etappe.
 In het ploegformulier slaat **Opslaan en PDF downloaden** eerst de ploeg op
 en downloadt daarna het afdrukbare formulier. Bij een downloadfout blijft het
 formulier open en is de ploeg wel opgeslagen; opnieuw opslaan werkt diezelfde
@@ -298,6 +322,8 @@ Voer SQL-updates uit `apps/api/migrations/` eenmalig uit op bestaande databases.
 tot op eurocenten; `20261004_store_stage_prizes_as_double.sql` wijzigt de opslag
 naar `DOUBLE`, zodat gedeelde bedragen hun volledige fractie behouden. Nieuwe
 databases gebruiken deze opslag via `tourpool.sql`.
+`20261015_unique_team_names_per_pool.sql` maakt ploegnamen uniek binnen een pool;
+bestaande dubbele namen krijgen tijdens de migratie een unieke toevoeging.
 
 ## Starten met Docker
 
@@ -425,6 +451,37 @@ en in de poolstand met twee decimalen naar beneden afgerond. Bestaande databases
 hebben hiervoor de migraties
 `migrations/20261004_add_stage_prize_precision.sql` en
 `migrations/20261004_store_stage_prizes_as_double.sql` nodig.
+Alle drie de etappeprijzen worden vermenigvuldigd met een factor op basis van het
+aantal betaalde deelnemers: vanaf 21 deelnemers 100%, 16–20 80%, 11–15 60%,
+6–10 40% en minder dan 6 geen etappeprijs. Dezelfde staffel geldt voor het bedrag
+van de rode lantaarn in de prijzenpotberekening. Onbetaalde deelnemers tellen
+niet mee en krijgen geen etappepunten. De prijsberekening wordt vernieuwd wanneer
+een betaalde deelnemer wordt toegevoegd, verwijderd of van betaalstatus verandert.
+
+Via **Eindklassementen** (`/final-results`, voor admins) voer je na de laatste
+etappe het algemene, punten-, berg- en jongerenklassement in. Deze uitslagen
+gelden voor alle pools van de tour. De verwerking gebruikt per pool de aantallen
+`AantalEindKlasGeel/Groen/Bol/Wit` en de eigen puntenregels
+`eindKlas/eindPunt/eindBerg/eindJon`, ook als hun oorspronkelijke standaardregel
+inmiddels vervangen is. Tussentijdse `eindKlas`-records bij gewone etappes tellen
+niet als eindklassementspunten.
+
+De eindstand staat op de laatste etappe + 1 (bij 21 etappes dus 22), zonder
+extra rij in de etappetabel en zonder extra dagprijzen. Eindklassementspunten
+worden bij de eerdere punten opgeteld. Van de betaalde inleg worden de
+gereserveerde dagprijzen voor de echte etappes en de rode lantaarn afgetrokken.
+Het resterende bedrag wordt verdeeld volgens `PrijsNr1Percentage` tot en met
+`PrijsNr4Percentage`; de rode lantaarn gebruikt `PrijsNrLaatstBedrag` met dezelfde
+deelnemersstaffel als de dagprijzen. Bij gedeelde plaatsen worden de prijzen
+van de bezette plaatsen samengevoegd en gelijk verdeeld. De eindprijs wordt
+als `etapGeld` op de eindstand geboekt en eenmaal bij `ttlGeld` opgeteld.
+Opnieuw opslaan/herberekenen vervangt de uitbetaling; het telt deze niet dubbel.
+Na het wijzigen van opties kun je de poolstand via **Herbereken** vernieuwen.
+
+De keuze **Eindstand** verschijnt in Poolstand zodra eindklassementen zijn
+ingevoerd. De bijbehorende PDF toont bovenaan het algemene eindklassement voor
+de meetellende plaatsen en daarnaast de overige meetellende eindklassementen.
+Daaronder staan de eindklassementspunten, eindprijzen en definitieve pooltotalen.
 
 Test de opslag, validatie en het kopieren naar nieuwe pools zonder
 databasegegevens te wijzigen:

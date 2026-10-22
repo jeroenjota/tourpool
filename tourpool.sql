@@ -958,7 +958,7 @@ CREATE TABLE `tblDeelnemers` (
   `roepnaam` varchar(255) DEFAULT NULL,
   `Betaald` tinyint(1) DEFAULT NULL,
   PRIMARY KEY (`deelnID`),
-  UNIQUE KEY `tblDeelnemers_pool_adr_roep_IDX` (`poolID`,`adrID`,`roepnaam`),
+  UNIQUE KEY `tblDeelnemers_pool_roep_IDX` (`poolID`,`roepnaam`),
   KEY `tblDeelnemers_tblAdressen_FK` (`adrID`),
   KEY `tblDeelnemers_tblPools_FK` (`poolID`),
   CONSTRAINT `tblDeelnemers_tblAdressen_FK` FOREIGN KEY (`adrID`) REFERENCES `tblAdressen` (`adrID`),
@@ -1092,7 +1092,7 @@ CREATE TABLE `tblEtappes` (
 LOCK TABLES `tblEtappes` WRITE;
 /*!40000 ALTER TABLE `tblEtappes` DISABLE KEYS */;
 set autocommit=0;
-INSERT INTO `tblEtappes` VALUES
+INSERT INTO `tblEtappes` (`tour`, `etappeNr`, `datum`, `Start`, `Finish`, `kms`, `type`) VALUES
 ('1',1,'2026-07-04','Barcelona','Barcelona',19.6,'TTT'),
 ('1',2,'2026-07-05','Tarragona','Barcelona',168.5,'heuvels'),
 ('1',3,'2026-07-06','Granollers','Les Angles',195.9,'bergen'),
@@ -1116,9 +1116,30 @@ INSERT INTO `tblEtappes` VALUES
 ('1',21,'2026-07-26','Thoiry','Parijs',133.0,'vlak'),
 ('1',NULL,'2026-07-13',NULL,NULL,NULL,'rustdag'),
 ('1',NULL,'2026-07-20',NULL,NULL,NULL,'rustdag'),
-('2',1,'2027-07-02','Edinburgh','Carlisle',184.0,'vlak'),
+('2',1,'2027-07-02','Edinburgh','Carlisle',185.0,'vlak'),
 ('2',2,'2027-07-03','Keswick','Liverpool',223.0,'heuvels'),
-('2',3,'2027-07-04','Welshpool','Cardiff',223.0,'bergen');
+('2',3,'2027-07-04','Welshpool','Cardiff',223.0,'heuvels'),
+('2',NULL,'2027-07-05','Cherbourg-en-Cotentin',NULL,NULL,'rustdag'),
+('2',4,'2027-07-06','Cherbourg-en-Cotentin','Cherbourg-en-Cotentin',171.0,'heuvels'),
+('2',5,'2027-07-07','Pontorson','Plumelec',178.0,'heuvels'),
+('2',6,'2027-07-08','Vannes','Angers',193.0,'heuvels'),
+('2',7,'2027-07-09','Blois','Chambord',38.0,'ITT'),
+('2',8,'2027-07-10','Bourges','Le Creusot',224.0,'heuvels'),
+('2',9,'2027-07-11','Villars-les-Dombes Parc des Oiseaux','Grand Colombier',162.0,'bergen'),
+('2',NULL,'2027-07-12','Haute-Savoie',NULL,NULL,'rustdag'),
+('2',10,'2027-07-13','Annecy','Sallanches',171.0,'bergen'),
+('2',11,'2027-07-14','Cluses','Les Saisies',150.0,'bergen'),
+('2',12,'2027-07-15','Chambéry','Valence',162.0,'vlak'),
+('2',13,'2027-07-16','Aubenas','Montpellier',164.0,'vlak'),
+('2',14,'2027-07-17','Montpellier','Mende',199.0,'bergen'),
+('2',15,'2027-07-18','Rodez','Albi',169.0,'heuvels'),
+('2',NULL,'2027-07-19','Toulouse',NULL,NULL,'rustdag'),
+('2',16,'2027-07-20','Toulouse','Toulouse',33.0,'ITT'),
+('2',17,'2027-07-21','Muret','Pau',186.0,'vlak'),
+('2',18,'2027-07-22','Pau','Saint-Lary-Soulan Col du Portet',174.0,'bergen'),
+('2',19,'2027-07-23','Hasparren','Laruns',160.0,'bergen'),
+('2',20,'2027-07-24','Maubourguet','Libourne',198.0,'vlak'),
+('2',21,'2027-07-25','Saint-Quentin-en-Yvelines','Paris Champs-Élysées',116.0,'vlak');
 /*!40000 ALTER TABLE `tblEtappes` ENABLE KEYS */;
 UNLOCK TABLES;
 commit;

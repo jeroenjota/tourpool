@@ -8,6 +8,7 @@ import { pool } from '../db.js';
 import { emailSchema, getAccount, HttpError, isDuplicate, profileSchema, usernameSchema } from '../auth.js';
 import { guestEntryLifetimeHours } from '../guestCleanup.js';
 import { assertEnrollmentOpen, enrollmentStatus, validateRiders, type EnrollmentPool } from '../enrollment.js';
+import { suggestTeamName } from '../teamName.js';
 
 export const meRouter = Router();
 const require = createRequire(import.meta.url);
@@ -103,6 +104,7 @@ const entrySchema = z.object({
 }).strict();
 const poolSelect = `
   SELECT p.poolID, p.tourID, p.Naam, p.Org, t.naam AS tourNaam,
+    YEAR(t.StartDatum) AS tourJaar,
     org.straat AS orgStraat, org.huisnummer AS orgHuisnummer, org.postcode AS orgPostcode,
     org.plaats AS orgPlaats, org.email AS orgEmail, org.tel AS orgTel,
     DATE_FORMAT(t.StartDatum, '%Y-%m-%dT%H:%i:%s') AS tourStart,
@@ -219,14 +221,52 @@ const listPoolRiders: RequestHandler = async (request, response, next) => {
     response.json(await availableRiders(connection, p.tourID));
   } catch (error) { next(error); } finally { connection?.release(); }
 };
+const listPoolPointAllocations: RequestHandler = async (request, response, next) => {
+  let connection;
+  try {
+    const poolID = idSchema.parse(request.params.poolID);
+    connection = await pool.getConnection();
+    await loadPool(connection, poolID);
+    response.json(await connection.query(
+      `SELECT prestatieID, Omschrijving, Punten, uitslagtype, plaats, volgorde
+       FROM tblPuntenToekenning WHERE poolID = ?
+       ORDER BY COALESCE(volgorde, prestatieID), plaats, prestatieID`, [poolID]
+    ));
+  } catch (error) { next(error); } finally { connection?.release(); }
+};
 meRouter.get('/pools', listPools);
+meRouter.get('/pools/:poolID/suggested-team-name', async (request, response, next) => {
+  let connection;
+  try {
+    const poolID = idSchema.parse(request.params.poolID);
+    connection = await pool.getConnection();
+    const p = await loadPool(connection, poolID);
+    const account = getAccount(request);
+    const profiles = await connection.query(
+      'SELECT vNaam, aNaam FROM tblAdressen WHERE adrID = ?',
+      [account.adrID]
+    ) as Array<{ vNaam: string | null; aNaam: string | null }>;
+    const profile = profiles[0];
+    if (!profile) throw new HttpError(404, 'Profiel niet gevonden.');
+    const entries = await connection.query(
+      'SELECT roepnaam FROM tblDeelnemers WHERE poolID = ? AND roepnaam IS NOT NULL',
+      [poolID]
+    ) as Array<{ roepnaam: string }>;
+    response.json({
+      ploegnaam: suggestTeamName(profile.vNaam, profile.aNaam, entries.map(entry => entry.roepnaam))
+    });
+  } catch (error) { next(error); } finally { connection?.release(); }
+});
 meRouter.get('/pools/:poolID/riders', listPoolRiders);
+meRouter.get('/pools/:poolID/point-allocations', listPoolPointAllocations);
 
 meRouter.get('/entries', async (request, response, next) => {
   try {
     const rows = await pool.query(
-      `SELECT d.deelnID, d.poolID, d.roepnaam AS ploegnaam, d.Betaald, p.Naam AS poolNaam
+      `SELECT d.deelnID, d.poolID, d.roepnaam AS ploegnaam, d.Betaald, p.Naam AS poolNaam,
+        p.Org AS orgNaam, t.naam AS tourNaam, YEAR(t.StartDatum) AS tourJaar
        FROM tblDeelnemers d JOIN tblPools p ON p.poolID = d.poolID
+       JOIN tblTours t ON t.tourID = p.tourID
        WHERE d.adrID = ? AND p.visibleToUsers = TRUE ORDER BY d.deelnID DESC`, [getAccount(request).adrID]
     );
     response.json(rows);
@@ -282,7 +322,7 @@ meRouter.post('/entries', async (request, response, next) => {
     response.status(201).json({ deelnID });
   } catch (error) {
     if (connection) await connection.rollback();
-    next(isDuplicate(error) ? new HttpError(409, 'Je hebt al een tourploeg met deze ploegnaam in deze pool.') : error);
+    next(isDuplicate(error) ? new HttpError(409, 'Er bestaat al een tourploeg met deze naam in deze pool.') : error);
   } finally { connection?.release(); }
 });
 
@@ -296,7 +336,7 @@ meRouter.put('/entries/:deelnID', async (request, response, next) => {
     response.json({ deelnID });
   } catch (error) {
     if (connection) await connection.rollback();
-    next(isDuplicate(error) ? new HttpError(409, 'Je hebt al een tourploeg met deze ploegnaam in deze pool.') : error);
+    next(isDuplicate(error) ? new HttpError(409, 'Er bestaat al een tourploeg met deze naam in deze pool.') : error);
   } finally { connection?.release(); }
 });
 
@@ -480,7 +520,25 @@ const guestEntrySchema = entrySchema.extend({
 }).strict();
 
 publicRouter.get('/pools', listPools);
+publicRouter.get('/pools/:poolID/suggested-team-name', async (request, response, next) => {
+  let connection;
+  try {
+    const poolID = idSchema.parse(request.params.poolID);
+    const firstName = z.string().trim().max(24).parse(request.query.firstName ?? '');
+    const lastName = z.string().trim().max(24).parse(request.query.lastName ?? '');
+    connection = await pool.getConnection();
+    await loadPool(connection, poolID);
+    const entries = await connection.query(
+      'SELECT roepnaam FROM tblDeelnemers WHERE poolID = ? AND roepnaam IS NOT NULL',
+      [poolID]
+    ) as Array<{ roepnaam: string }>;
+    response.json({
+      ploegnaam: suggestTeamName(firstName, lastName, entries.map(entry => entry.roepnaam))
+    });
+  } catch (error) { next(error); } finally { connection?.release(); }
+});
 publicRouter.get('/pools/:poolID/riders', listPoolRiders);
+publicRouter.get('/pools/:poolID/point-allocations', listPoolPointAllocations);
 
 publicRouter.post('/entries', guestEntryLimit, async (request, response, next) => {
   let connection;
@@ -516,6 +574,6 @@ publicRouter.post('/entries', guestEntryLimit, async (request, response, next) =
     response.status(201).json({ deelnID, deadline: guestDeadline.toISOString(), pdf: buffer.toString('base64') });
   } catch (error) {
     if (connection) await connection.rollback();
-    next(error);
+    next(isDuplicate(error) ? new HttpError(409, 'Er bestaat al een tourploeg met deze naam in deze pool.') : error);
   } finally { connection?.release(); }
 });

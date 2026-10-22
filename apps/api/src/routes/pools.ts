@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../db.js';
 import { enrollmentDateSchema } from '../enrollment.js';
-import { HttpError } from '../auth.js';
+import { HttpError, isDuplicate } from '../auth.js';
 
 export const poolsRouter = Router();
 
@@ -100,6 +100,15 @@ poolsRouter.post('/', async (request, response, next) => {
     validatePeriod(payload.StartInschr, payload.EindInschr);
     const orgName = await organisationName(payload.orgID);
     await connection.beginTransaction();
+    if (payload.orgID) {
+      const duplicateRows = await connection.query(
+        'SELECT poolID FROM tblPools WHERE tourID = ? AND orgID = ? LIMIT 1',
+        [payload.tourID, payload.orgID]
+      ) as Array<{ poolID: number }>;
+      if (duplicateRows.length) {
+        throw new HttpError(409, 'Per organisatie kan er maar één pool per tour zijn.');
+      }
+    }
     // Get the last options for the most recently created pool
     const optionRows = await connection.query(`
       SELECT
@@ -187,7 +196,9 @@ poolsRouter.post('/', async (request, response, next) => {
     });
   } catch (error) {
     await connection.rollback();
-    next(error);
+    next(isDuplicate(error)
+      ? new HttpError(409, 'Per organisatie kan er maar één pool per tour zijn.')
+      : error);
   } finally {
     connection.release();
   }
@@ -224,6 +235,15 @@ poolsRouter.put('/:poolID', async (request, response, next) => {
     };
     validatePeriod(updatedPool.StartInschr, updatedPool.EindInschr);
     if (updatedPool.orgID) updatedPool.Org = await organisationName(updatedPool.orgID);
+    if (updatedPool.orgID) {
+      const duplicateRows = await pool.query(
+        'SELECT poolID FROM tblPools WHERE tourID = ? AND orgID = ? AND poolID <> ? LIMIT 1',
+        [updatedPool.tourID, updatedPool.orgID, poolID]
+      ) as Array<{ poolID: number }>;
+      if (duplicateRows.length) {
+        throw new HttpError(409, 'Per organisatie kan er maar één pool per tour zijn.');
+      }
+    }
 
     await pool.query(
       'UPDATE tblPools SET tourID = ?, Naam = ?, Org = ?, orgID = ?, StartInschr = ?, EindInschr = ?, visibleToUsers = ? WHERE poolID = ?',
@@ -232,7 +252,9 @@ poolsRouter.put('/:poolID', async (request, response, next) => {
 
     response.json({ poolID, ...updatedPool });
   } catch (error) {
-    next(error);
+    next(isDuplicate(error)
+      ? new HttpError(409, 'Per organisatie kan er maar één pool per tour zijn.')
+      : error);
   }
 });
 

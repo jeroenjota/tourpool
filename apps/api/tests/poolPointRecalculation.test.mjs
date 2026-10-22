@@ -89,6 +89,7 @@ test('Allocation mutations recalculate existing stages only for their pool atomi
               assert.match(sql, /AND p.poolID = \?/);
               return [{
                 poolID: 3, PloegRennerAantal: 1, PloegReserveAantal: 0,
+                paidParticipantCount: 21,
                 AantalEtapPlaatsen: 1, AantalKlasGeel: 0, AantalKlasGroen: 0,
                 AantalKlasBol: 0, AantalKlasWit: 0,
                 geldEtappeHoog: 1, geldEtappeTotaal: 2, geldEtappeLaagTTL: 0,
@@ -98,9 +99,9 @@ test('Allocation mutations recalculate existing stages only for their pool atomi
               assert.equal(params[0], 2);
               return params[1] === 3 ? [] : [{ uitslagType: 'rit', plaats: 1, rennerID: 10 }];
             }
-            if (sql.includes('FROM tblStandaardPunten sp')) {
+            if (sql.includes('FROM tblPuntenToekenning pa')) {
               assert.deepEqual(params, [3]);
-              assert.match(sql, /INNER JOIN tblPuntenToekenning pa/);
+              assert.match(sql, /LEFT JOIN tblStandaardPunten sp/);
               assert.doesNotMatch(sql, /COALESCE\(pa.Punten, sp.punten/);
               return allocation ? [allocation] : [];
             }

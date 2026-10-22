@@ -557,7 +557,7 @@ const saveResults = async () => {
               <span v-if="!isRestDay(s) && s.kms != null">{{ s.kms }}</span>
             </td>
             <td class="px-2 py-1 capitalize text-slate-700">
-              {{ isRestDay(s) ? "" : s.type }}
+              <span>{{ isRestDay(s) ? "" : s.type }}</span>
             </td>
             <td v-if="management" class="whitespace-nowrap px-2 py-1">
               <button

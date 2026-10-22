@@ -210,14 +210,12 @@ test('Accounts and enrollment work against actual MariaDB in an isolated tempora
     const untouched = await connection.query('SELECT adrID FROM tblDeelnemers WHERE deelnID = ?', [Number(untouchedEntry.insertId)]);
     assert.equal(untouched[0].adrID, legacyAdrID);
     assert.equal((await connection.query('SELECT adrID FROM tblAdressen WHERE adrID = ?', [legacyAdrID])).length, 1);
-    // Conflicting names roll back and keep access with the previous owner.
-    await connection.query('UPDATE tblDeelnemers SET roepnaam = ? WHERE deelnID = ?', [payload.ploegnaam, legacyID]);
-    assert.equal((await request(`/participants/${legacyID}/account`, 'PUT', {
-      accountID: user.account.accountID, expectedAdrID: other.account.adrID
+    // Duplicate pool names are rejected, while a unique legacy entry remains linkable.
+    assert.equal((await request(`/participants/${legacyID}`, 'PUT', {
+      ploegnaam: payload.ploegnaam
     }, admin)).status, 409);
     assert.equal((await request(`/me/entries/${legacyID}`, 'GET', undefined, other)).status, 200);
     assert.equal((await request(`/me/entries/${legacyID}`, 'GET', undefined, user)).status, 404);
-    await connection.query("UPDATE tblDeelnemers SET roepnaam = 'Legacy ploeg' WHERE deelnID = ?", [legacyID]);
     assert.equal((await request(`/participants/${legacyID}/account`, 'PUT', {
       accountID: user.account.accountID, expectedAdrID: other.account.adrID
     }, admin)).status, 200);

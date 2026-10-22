@@ -349,7 +349,7 @@ const participantRidersForPrint = (deelnID: number) => {
       printPlace: index < targetRiderCount.value ? String(index + 1) : `R${index - targetRiderCount.value + 1}`,
       printDropped: false
     })),
-    ...droppedRiders.map(rider => ({ ...rider, printPlace: '-', printDropped: true }))
+    ...droppedRiders.map(rider => ({ ...rider, printPlace: 'X', printDropped: true }))
   ];
 };
 
@@ -540,6 +540,24 @@ const isRiderOutAtSelectedStage = (rennerID: number) => {
   const dropoutStage = getRiderDetails(rennerID)?.nietGestartEtappe;
   return dropoutStage != null && selectedStageNumber.value != null && dropoutStage <= selectedStageNumber.value;
 };
+
+const riderNumbering = (riders: Array<{ rennerID: number }>) => {
+  let activePosition = 0;
+  return riders.map(rider => {
+    const dropped = isRiderOutAtSelectedStage(rider.rennerID);
+    if (!dropped) activePosition++;
+    const reserve = !dropped && activePosition > targetRiderCount.value;
+    return {
+      ...rider,
+      dropped,
+      reserve,
+      label: dropped ? 'X' : reserve ? `R${activePosition - targetRiderCount.value}` : String(activePosition)
+    };
+  });
+};
+
+const addRiderNumbering = computed(() => riderNumbering(addForm.value.selectedRiders));
+const manageRiderNumbering = computed(() => riderNumbering(managingSelectedRiders.value));
 
 const sortSelectedRiders = (
   riders: Array<{ rennerID: number; positie: number }>,
@@ -1262,7 +1280,7 @@ const openEntryPdf = async (p: Participant) => {
                 </div>
                 <div v-else class="flex-1 divide-y divide-slate-200/60 overflow-y-auto pr-1">
                   <div 
-                    v-for="(item, idx) in addForm.selectedRiders" 
+                    v-for="(item, idx) in addRiderNumbering"
                     :key="item.rennerID"
                     draggable="true"
                     @dragstart="onAddRiderDragStart($event, idx)"
@@ -1271,7 +1289,7 @@ const openEntryPdf = async (p: Participant) => {
                     @drop="onAddRiderDrop(idx)"
                     @dragend="onAddRiderDragEnd"
                     class="my-0.5 flex cursor-grab items-center justify-between rounded border bg-white px-1.5 py-1.5 text-xs transition active:cursor-grabbing"
-                    :style="idx >= targetRiderCount ? { backgroundColor: '#f1f5f9' } : undefined"
+                    :style="item.reserve ? { backgroundColor: '#f1f5f9' } : undefined"
                     :class="[
                       addRiderDragIdx === idx ? 'opacity-40 border-dashed border-amber-400 bg-amber-50/50' : '',
                       addRiderDragOverIdx === idx && addRiderDragIdx !== idx ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-400/50 scale-[1.01]' : 'border-slate-200/70 hover:border-slate-300'
@@ -1281,9 +1299,9 @@ const openEntryPdf = async (p: Participant) => {
                       <GripVertical class="h-3.5 w-3.5 shrink-0 text-slate-400" />
                       <span 
                         class="w-6 shrink-0 rounded px-1 py-0.5 text-center font-mono text-[10px] font-bold"
-                        :class="isRiderOutAtSelectedStage(item.rennerID) ? 'bg-rose-100 text-rose-700' : idx < targetRiderCount ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'"
+                        :class="item.dropped ? 'bg-rose-100 text-rose-700' : item.reserve ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-800'"
                       >
-                        {{ isRiderOutAtSelectedStage(item.rennerID) ? 'X' : idx < targetRiderCount ? idx + 1 : `R${idx + 1 - targetRiderCount}` }}
+                        {{ item.label }}
                       </span>
                       <span class="truncate font-medium text-slate-800">
                         {{ getRiderDetails(item.rennerID)?.anaam }}, {{ getRiderDetails(item.rennerID)?.vnaam }}
@@ -1394,7 +1412,7 @@ const openEntryPdf = async (p: Participant) => {
               </div>
               <div v-else class="flex-1 divide-y divide-slate-200/60 overflow-y-auto pr-1">
                 <div 
-                  v-for="(item, idx) in managingSelectedRiders" 
+                  v-for="(item, idx) in manageRiderNumbering"
                   :key="item.rennerID"
                   draggable="true"
                   @dragstart="onManageRiderDragStart($event, idx)"
@@ -1403,7 +1421,7 @@ const openEntryPdf = async (p: Participant) => {
                   @drop="onManageRiderDrop(idx)"
                   @dragend="onManageRiderDragEnd"
                   class="my-0.5 flex cursor-grab items-center justify-between rounded border bg-white px-1.5 py-1.5 text-xs transition active:cursor-grabbing"
-                  :style="idx >= targetRiderCount ? { backgroundColor: '#f1f5f9' } : undefined"
+                  :style="item.reserve ? { backgroundColor: '#f1f5f9' } : undefined"
                   :class="[
                     manageRiderDragIdx === idx ? 'opacity-40 border-dashed border-amber-400 bg-amber-50/50' : '',
                     manageRiderDragOverIdx === idx && manageRiderDragIdx !== idx ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-400/50 scale-[1.01]' : 'border-slate-200/70 hover:border-slate-300'
@@ -1413,9 +1431,9 @@ const openEntryPdf = async (p: Participant) => {
                     <GripVertical class="h-3.5 w-3.5 shrink-0 text-slate-400" />
                     <span 
                       class="w-6 shrink-0 rounded px-1 py-0.5 text-center font-mono text-[10px] font-bold"
-                      :class="isRiderOutAtSelectedStage(item.rennerID) ? 'bg-rose-100 text-rose-700' : idx < targetRiderCount ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'"
+                      :class="item.dropped ? 'bg-rose-100 text-rose-700' : item.reserve ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-800'"
                     >
-                      {{ isRiderOutAtSelectedStage(item.rennerID) ? 'X' : idx < targetRiderCount ? idx + 1 : `R${idx + 1 - targetRiderCount}` }}
+                      {{ item.label }}
                     </span>
                     <span class="truncate font-medium text-slate-800">
                       {{ getRiderDetails(item.rennerID)?.anaam }}, {{ getRiderDetails(item.rennerID)?.vnaam }}
@@ -1515,7 +1533,7 @@ const openEntryPdf = async (p: Participant) => {
     </div>
 
     <!-- Modal: Nieuw adres toevoegen aan het adresboek -->
-    <div v-if="addAddressModalOpen" class="backdrop-blur-xs fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4">
+    <div v-if="addAddressModalOpen" class="backdrop-blur-xs z-60 fixed inset-0 flex items-center justify-center bg-slate-900/40 p-4">
       <form @submit.prevent="addAddress" class="w-full max-w-md space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
         <div class="flex items-center justify-between border-b border-slate-200 pb-4">
           <div>

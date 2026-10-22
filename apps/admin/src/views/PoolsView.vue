@@ -48,6 +48,7 @@ interface PoolOption {
 
 interface Participant {
   poolID: number;
+  Betaald?: number | boolean | null;
 }
 
 interface Stage {
@@ -153,16 +154,25 @@ const prizeBreakdowns = computed(() => {
     const option = poolOptions.value.find(item => item.poolID === pool.poolID);
     if (!option) return [pool.poolID, null];
 
-    const participantCount = participants.value.filter(participant => participant.poolID === pool.poolID).length;
+    const poolParticipants = participants.value.filter(participant => participant.poolID === pool.poolID);
+    const paidCount = poolParticipants.filter(participant => Boolean(participant.Betaald)).length;
+    const unpaidCount = poolParticipants.length - paidCount;
+    const stagePrizeMultiplier = paidCount >= 21 ? 1
+      : paidCount >= 16 ? 0.8
+        : paidCount >= 11 ? 0.6
+          : paidCount >= 6 ? 0.4
+            : 0;
     const stageCount = stages.value.filter(stage => Number(stage.tour) === pool.tourID).length;
-    const totalInlegCents = participantCount * toCents(option.inleg);
-    const stagePrizePerStageCents =
+    const paidInlegCents = paidCount * toCents(option.inleg);
+    const unpaidInlegCents = unpaidCount * toCents(option.inleg);
+    const stagePrizePerStageCents = Math.round((
       toCents(option.geldEtappeHoog) +
       toCents(option.geldEtappeTotaal) +
-      toCents(option.geldEtappeLaagTTL);
+      toCents(option.geldEtappeLaagTTL)
+    ) * stagePrizeMultiplier);
     const stagePrizeTotalCents = stagePrizePerStageCents * stageCount;
-    const redLanternCents = toCents(option.PrijsNrLaatstBedrag);
-    const remainingCents = totalInlegCents - stagePrizeTotalCents - redLanternCents;
+    const redLanternCents = Math.round(toCents(option.PrijsNrLaatstBedrag) * stagePrizeMultiplier);
+    const remainingCents = paidInlegCents - stagePrizeTotalCents - redLanternCents;
     const distributableCents = Math.max(remainingCents, 0);
     const prizes = [
       { label: '1e prijs', percentage: getPercentage(option.PrijsNr1Percentage) },
@@ -175,9 +185,12 @@ const prizeBreakdowns = computed(() => {
     }));
 
     return [pool.poolID, {
-      participantCount,
+      paidCount,
+      unpaidCount,
       stageCount,
-      totalInlegCents,
+      stagePrizeMultiplier,
+      paidInlegCents,
+      unpaidInlegCents,
       stagePrizePerStageCents,
       stagePrizeTotalCents,
       redLanternCents,
@@ -384,7 +397,7 @@ const toggleVisibility = async (item: Pool) => {
             <div>
               <h4 class="text-sm font-bold text-slate-900">Prijzenpot</h4>
               <p class="text-xs text-slate-500">
-                {{ prizeBreakdowns[p.poolID]!.participantCount }} deelnemers · {{ prizeBreakdowns[p.poolID]!.stageCount }} etappes
+                {{ prizeBreakdowns[p.poolID]!.paidCount }} betaald · {{ prizeBreakdowns[p.poolID]!.unpaidCount }} niet betaald · {{ prizeBreakdowns[p.poolID]!.stageCount }} etappes · prijzenstaffel {{ Math.round(prizeBreakdowns[p.poolID]!.stagePrizeMultiplier * 100) }}%
               </p>
             </div>
             <div class="text-right">
@@ -398,8 +411,12 @@ const toggleVisibility = async (item: Pool) => {
           <div class="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
             <div class="space-y-1.5">
               <div class="flex justify-between gap-3">
-                <span class="text-slate-600">Totale inleg</span>
-                <strong class="font-mono text-slate-900">{{ formatPrizeAmount(prizeBreakdowns[p.poolID]!.totalInlegCents) }}</strong>
+                <span class="text-slate-600">Betaalde inleg</span>
+                <strong class="font-mono text-slate-900">{{ formatPrizeAmount(prizeBreakdowns[p.poolID]!.paidInlegCents) }}</strong>
+              </div>
+              <div class="flex justify-between gap-3">
+                <span class="text-slate-600">Nog te ontvangen</span>
+                <strong class="font-mono text-amber-700">{{ formatPrizeAmount(prizeBreakdowns[p.poolID]!.unpaidInlegCents) }}</strong>
               </div>
               <div class="flex justify-between gap-3">
                 <span class="text-slate-600">

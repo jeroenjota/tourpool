@@ -4,6 +4,7 @@ import { pool } from '../db.js';
 import { HttpError, isDuplicate } from '../auth.js';
 import { recalculatePoolPoints } from './stageResults.js';
 import { participantPdf } from './me.js';
+import { suggestTeamName } from '../teamName.js';
 
 export const participantsRouter = Router();
 
@@ -46,34 +47,15 @@ const generatePloegnaam = async (connection: Awaited<ReturnType<typeof pool.getC
     return 'Deelnemer';
   }
 
-  const firstName = (address.vNaam || 'Deelnemer').trim();
-  const lastName = (address.aNaam || '').trim();
   const existingRows = await connection.query(
     'SELECT roepnaam AS ploegnaam FROM tblDeelnemers WHERE poolID = ? AND roepnaam IS NOT NULL',
     [poolID]
   ) as Array<{ ploegnaam?: string | null }>;
-  const existingNames = new Set(existingRows.map(row => row.ploegnaam?.trim().toLocaleLowerCase()).filter(Boolean));
-  const normalizedFirstName = firstName.toLocaleLowerCase();
-  const normalizedLastName = lastName.toLocaleLowerCase();
-
-  for (let length = 1; length <= lastName.length; length++) {
-    const candidate = `${firstName} ${lastName.slice(0, length)}`;
-    if (!existingNames.has(candidate.toLocaleLowerCase())) {
-      return candidate;
-    }
-  }
-
-  const fullName = lastName ? `${firstName} ${lastName}` : firstName;
-  if (!existingNames.has(`${normalizedFirstName} ${normalizedLastName}`.trim())) {
-    return fullName;
-  }
-
-  let suffix = 2;
-  while (existingNames.has(`${fullName} ${suffix}`.toLocaleLowerCase())) {
-    suffix++;
-  }
-
-  return `${fullName} ${suffix}`;
+  return suggestTeamName(
+    address.vNaam?.trim() || 'Deelnemer',
+    address.aNaam ?? null,
+    existingRows.map(row => row.ploegnaam ?? '')
+  );
 };
 
 participantsRouter.get('/', async (request, response, next) => {
@@ -211,6 +193,14 @@ participantsRouter.post('/', async (request, response, next) => {
       }
     }
 
+    if (Boolean(betaaldVal)) {
+      const pools = await connection.query(
+        'SELECT tourID FROM tblPools WHERE poolID = ?',
+        [payload.poolID]
+      ) as Array<{ tourID: number }>;
+      if (pools[0]) await recalculatePoolPoints(connection, payload.poolID, pools[0].tourID);
+    }
+
     await connection.commit();
 
     response.status(201).json({
@@ -221,7 +211,9 @@ participantsRouter.post('/', async (request, response, next) => {
     });
   } catch (error) {
     await connection.rollback();
-    next(error);
+    next(isDuplicate(error)
+      ? new HttpError(409, 'Er bestaat al een tourploeg met deze naam in deze pool.')
+      : error);
   } finally {
     connection.release();
   }
@@ -255,7 +247,7 @@ participantsRouter.put('/:deelnID/account', async (request, response, next) => {
   } catch (error) {
     if (connection) await connection.rollback();
     next(isDuplicate(error)
-      ? new HttpError(409, 'Dit account heeft al een ploeg met dezelfde ploegnaam in deze pool. Pas eerst de ploegnaam aan.')
+      ? new HttpError(409, 'Er bestaat al een tourploeg met deze naam in deze pool.')
       : error);
   } finally { connection?.release(); }
 });
@@ -308,16 +300,38 @@ participantsRouter.put('/:deelnID', async (request, response, next) => {
 
     response.json({ deelnID, ...updated });
   } catch (error) {
-    next(error);
+    next(isDuplicate(error)
+      ? new HttpError(409, 'Er bestaat al een tourploeg met deze naam in deze pool.')
+      : error);
   }
 });
 
 participantsRouter.delete('/:deelnID', async (request, response, next) => {
+  const connection = await pool.getConnection();
+
   try {
     const deelnID = Number(request.params.deelnID);
-    await pool.query('DELETE FROM tblDeelnemers WHERE deelnID = ?', [deelnID]);
+    await connection.beginTransaction();
+    const rows = await connection.query(`
+      SELECT d.poolID, d.Betaald, p.tourID
+      FROM tblDeelnemers d
+      INNER JOIN tblPools p ON p.poolID = d.poolID
+      WHERE d.deelnID = ?
+    `, [deelnID]) as Array<{ poolID: number; Betaald: number | null; tourID: number }>;
+    const participant = rows[0];
+
+    await connection.query('DELETE FROM tblDeelnemerPunten WHERE deelnemID = ?', [deelnID]);
+    await connection.query('DELETE FROM tblDeelnemers WHERE deelnID = ?', [deelnID]);
+    if (participant?.Betaald) {
+      await recalculatePoolPoints(connection, participant.poolID, participant.tourID);
+    }
+
+    await connection.commit();
     response.status(204).send();
   } catch (error) {
+    await connection.rollback();
     next(error);
+  } finally {
+    connection.release();
   }
 });
