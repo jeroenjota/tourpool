@@ -446,8 +446,17 @@ nemen de bedragen over van de meest recente poolopties.
 Bij het opslaan van een etappe-uitslag bestaat `etapGeld` uit de prijzen voor
 de hoogste dagscore, de hoogste totaalstand en de laagste totaalstand. Elke
 prijs wordt bij een gedeelde plaats gelijk verdeeld over de deelnemers met die
-score. Gedeelde prijzen en totaalgeld worden met hun volledige fractie opgeslagen
-en in de poolstand met twee decimalen naar beneden afgerond. Bestaande databases
+score. Elk van de drie etappeprijzen wordt na toepassing van de deelnemersstaffel
+naar boven afgerond op EUR 0,05, voordat de prijs wordt verdeeld.
+Bijvoorbeeld: (EUR 2,50 + EUR 1,00 + EUR 0,10) bij 80% wordt
+EUR 2,00 + EUR 0,80 + EUR 0,10 = EUR 2,90 per etappe.
+Dit afgeronde dagbudget wordt voor elke echte etappe van de inleg afgetrokken
+bij het bepalen van de eindprijzen, ook in het pooloverzicht.
+Bij gelijke stand wordt het aandeel per winnaar normaal afgerond op centen,
+zowel voor etappeprijzen als eindprijzen en de rode lantaarn.
+Daardoor kunnen bij het delen enkele restcenten ontstaan.
+Deze regels gelden ook bij herberekenen. Totaalgeld wordt in de
+poolstand met twee decimalen naar beneden afgerond. Bestaande databases
 hebben hiervoor de migraties
 `migrations/20261004_add_stage_prize_precision.sql` en
 `migrations/20261004_store_stage_prizes_as_double.sql` nodig.

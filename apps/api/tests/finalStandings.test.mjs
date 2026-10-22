@@ -97,10 +97,10 @@ test('Final standings score each classification, add final prizes once, and pres
     assert.equal(scores.get('4:22').etapPnt, 0, 'Only configured final places earn points');
     const dailyMoney = [...scores.values()].filter(row => row.etappeNr === 21).reduce((sum, row) => sum + row.etapGeld, 0);
     assert.ok(Math.abs(dailyMoney - 1.04) < 1e-9);
-    // 6 * 10 - 21 * 1.04 - 4 = 34.16; tied winners share first and second prizes.
-    assert.equal(first.etapGeld, (17.08 + 11.96) / 2);
-    assert.equal(third.etapGeld, 5.12);
-    for (const id of [4, 5, 6]) assert.equal(scores.get(`${id}:22`).etapGeld, 4 / 3);
+    // 6 * 10 - 21 * 1.05 - 4 = 33.95; tied winners share first and second prizes.
+    assert.equal(first.etapGeld, 14.43);
+    assert.equal(third.etapGeld, 5.09);
+    for (const id of [4, 5, 6]) assert.equal(scores.get(`${id}:22`).etapGeld, 1.33);
     assert.equal(first.ttlGeld, scores.get('1:21').ttlGeld + first.etapGeld);
     const initial = structuredClone(scores);
     await recalculatePoolPoints(connection, 1, 1);
@@ -113,10 +113,10 @@ test('Final standings score each classification, add final prizes once, and pres
     rosters.find(row => row.deelnID === 2 && row.rennerID === 11).rennerID = 21;
     rosters.find(row => row.deelnID === 3 && row.rennerID === 13).rennerID = 21;
     await recalculatePoolPoints(connection, 1, 1);
-    assert.equal(scores.get('1:22').etapGeld, 13.66);
-    assert.equal(scores.get('2:22').etapGeld, 10.25);
-    assert.equal(scores.get('4:22').etapGeld, 6.83);
-    assert.equal(scores.get('3:22').etapGeld, 3.42, 'Fourth prize is paid using the configured percentage');
+    assert.equal(scores.get('1:22').etapGeld, 13.58);
+    assert.equal(scores.get('2:22').etapGeld, 10.19);
+    assert.equal(scores.get('4:22').etapGeld, 6.79);
+    assert.equal(scores.get('3:22').etapGeld, 3.40, 'Fourth prize is paid using the configured percentage');
     results.length = 0;
     await recalculatePoolPoints(connection, 1, 1);
     assert.equal([...scores.values()].filter(row => row.etappeNr === 22).length, 0, 'Clearing finals removes awards');

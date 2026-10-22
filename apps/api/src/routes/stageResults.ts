@@ -14,11 +14,15 @@ type ParticipantStagePoints = {
   ttlPnt: number;
 };
 
+const stagePrize = (amount: number | string | null, multiplier: number) =>
+  Math.ceil(Math.max(Number(amount ?? 0), 0) * multiplier * 20 - 1e-9) / 20;
+
 const splitPrize = (amount: number | string | null, winners: number[]) => {
   const shares = new Map<number, number>();
   if (winners.length === 0) return shares;
 
-  const share = Math.max(Number(amount ?? 0), 0) / winners.length;
+  const amountCents = Math.round(Math.max(Number(amount ?? 0), 0) * 100);
+  const share = Math.round(amountCents / winners.length) / 100;
   winners.forEach(deelnemID => {
     shares.set(deelnemID, share);
   });
@@ -135,15 +139,17 @@ const recalculateStagePrizes = async (connection: DatabaseConnection, tourID: nu
         ? totalScores.filter(row => row.score === lowestTotalScore).map(row => row.deelnemID)
         : [];
       let prizeShares = [
-        splitPrize(Number(poolRow.geldEtappeHoog ?? 0) * prizeMultiplier, dailyWinners),
-        splitPrize(Number(poolRow.geldEtappeTotaal ?? 0) * prizeMultiplier, highestTotalWinners),
-        splitPrize(Number(poolRow.geldEtappeLaagTTL ?? 0) * prizeMultiplier, lowestTotalWinners)
+        splitPrize(stagePrize(poolRow.geldEtappeHoog, prizeMultiplier), dailyWinners),
+        splitPrize(stagePrize(poolRow.geldEtappeTotaal, prizeMultiplier), highestTotalWinners),
+        splitPrize(stagePrize(poolRow.geldEtappeLaagTTL, prizeMultiplier), lowestTotalWinners)
       ];
       if (poolRow.lastStage != null && etappeNr === Number(poolRow.lastStage) + 1) {
         const cents = (amount: number | string | null) => Math.round(Number(amount ?? 0) * 100);
-        const dailyPrizeCents = Math.round((
-          cents(poolRow.geldEtappeHoog) + cents(poolRow.geldEtappeTotaal) + cents(poolRow.geldEtappeLaagTTL)
-        ) * prizeMultiplier);
+        const dailyPrizeCents = Math.round(100 * (
+          stagePrize(poolRow.geldEtappeHoog, prizeMultiplier) +
+          stagePrize(poolRow.geldEtappeTotaal, prizeMultiplier) +
+          stagePrize(poolRow.geldEtappeLaagTTL, prizeMultiplier)
+        ));
         const lanternCents = Math.round(cents(poolRow.PrijsNrLaatstBedrag) * prizeMultiplier);
         const distributableCents = Math.max(
           Number(poolRow.paidParticipantCount) * cents(poolRow.inleg) -
@@ -163,7 +169,7 @@ const recalculateStagePrizes = async (connection: DatabaseConnection, tourID: nu
           const firstPlace = totalScores.filter(row => row.score > score).length;
           const amountCents = percentages.slice(firstPlace, firstPlace + winners.length)
             .reduce((sum, percentage) => sum + Math.round(distributableCents * percentage), 0);
-          for (const winner of winners) finalShares.set(winner.deelnemID, amountCents / 100 / winners.length);
+          for (const winner of winners) finalShares.set(winner.deelnemID, Math.round(amountCents / winners.length) / 100);
         }
         prizeShares = [finalShares, splitPrize(lanternCents / 100, lowestTotalWinners)];
       }

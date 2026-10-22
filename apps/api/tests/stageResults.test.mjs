@@ -20,6 +20,12 @@ test('Saving stage results calculates category points and rolls back on failure'
   try {
     for (const scenario of [
       { name: 'Individual stage', includeRit: true, fail: false },
+      {
+        name: 'Eighty percent of 2.50, 1.00 and 0.10 reserves a 2.90 daily budget',
+        includeRit: true, fail: false, paidParticipants: 20, prizeFactor: 0.8,
+        prizes: { daily: 2.50, total: 1, lowest: 0.10 },
+        expectedWinnerMoney: 2.80, expectedLowestMoney: 0.10,
+      },
       { name: 'Tied winners retain full prize shares', includeRit: true, fail: false, tie: true },
       { name: 'Paid participant tiers scale all stage prizes', includeRit: true, fail: false, paidParticipants: 20, prizeFactor: 0.8 },
       { name: '16 paid participants remain in the 80% tier', includeRit: true, fail: false, paidParticipants: 16, prizeFactor: 0.8 },
@@ -29,12 +35,21 @@ test('Saving stage results calculates category points and rolls back on failure'
       { name: '6 paid participants remain in the 40% tier', includeRit: true, fail: false, paidParticipants: 6, prizeFactor: 0.4 },
       { name: 'Fewer than 6 paid participants receive no stage prizes', includeRit: true, fail: false, paidParticipants: 5, prizeFactor: 0 },
       {
-        name: 'Fractional prize shares are stored without cent rounding',
+        name: 'Stage prizes round up before tied shares round to cents',
         includeRit: true,
         fail: false,
         tie: true,
         prizes: { daily: 1.01, total: 0, lowest: 0 },
-        expectedTieMoney: 0.505,
+        expectedTieMoney: 0.53,
+      },
+      {
+        name: 'Exact five-cent shares do not round up again after tier scaling',
+        includeRit: true,
+        fail: false,
+        tie: true,
+        paidParticipants: 20,
+        prizes: { daily: 0.75, total: 0, lowest: 0 },
+        expectedTieMoney: 0.30,
       },
       { name: 'Non-starters are excluded from stage points', includeRit: true, fail: false, nonStarter: true },
       { name: 'Pool-specific result category and place are used', includeRit: true, fail: false, poolOverride: true },
@@ -196,6 +211,10 @@ test('Saving stage results calculates category points and rolls back on failure'
           } else {
             assert.deepEqual(nonStarterUpdates, [[2, 1]]);
           }
+          const factor = scenario.prizeFactor ?? 1;
+          const expectedWinnerMoney = scenario.expectedWinnerMoney ?? new Map([[1, 3.10], [0.8, 2.50], [0.6, 1.90], [0.4, 1.30], [0, 0]]).get(factor);
+          const expectedLowestMoney = scenario.expectedLowestMoney ?? new Map([[1, 0.50], [0.8, 0.40], [0.6, 0.30], [0.4, 0.20], [0, 0]]).get(factor);
+          const expectedTieMoney = scenario.expectedTieMoney ?? 1.81;
           const expectedPrizeUpdates = scenario.nonStarter
             ? [
                 [1, 0, 0, 1, 0, 4, 1],
@@ -203,12 +222,12 @@ test('Saving stage results calculates category points and rolls back on failure'
               ]
             : scenario.tie
             ? [
-                [1, (scenario.expectedTieMoney ?? 1.78) * (scenario.prizeFactor ?? 1), participantPoints, 1, (scenario.expectedTieMoney ?? 1.78) * (scenario.prizeFactor ?? 1), 4, 1],
-                [1, (scenario.expectedTieMoney ?? 1.78) * (scenario.prizeFactor ?? 1), participantPoints, 1, (scenario.expectedTieMoney ?? 1.78) * (scenario.prizeFactor ?? 1), 5, 1],
+                [1, expectedTieMoney, participantPoints, 1, expectedTieMoney, 4, 1],
+                [1, expectedTieMoney, participantPoints, 1, expectedTieMoney, 5, 1],
               ]
             : [
-                [1, 3.06 * (scenario.prizeFactor ?? 1), participantPoints, 1, 3.06 * (scenario.prizeFactor ?? 1), 4, 1],
-                [2, 0.50 * (scenario.prizeFactor ?? 1), 0, 2, 0.50 * (scenario.prizeFactor ?? 1), 5, 1],
+                [1, expectedWinnerMoney, participantPoints, 1, expectedWinnerMoney, 4, 1],
+                [2, expectedLowestMoney, 0, 2, expectedLowestMoney, 5, 1],
               ];
           assert.equal(prizeUpdates.length, expectedPrizeUpdates.length);
           prizeUpdates.forEach((actual, index) => {

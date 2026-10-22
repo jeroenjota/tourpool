@@ -165,11 +165,10 @@ const prizeBreakdowns = computed(() => {
     const stageCount = stages.value.filter(stage => Number(stage.tour) === pool.tourID).length;
     const paidInlegCents = paidCount * toCents(option.inleg);
     const unpaidInlegCents = unpaidCount * toCents(option.inleg);
-    const stagePrizePerStageCents = Math.round((
-      toCents(option.geldEtappeHoog) +
-      toCents(option.geldEtappeTotaal) +
-      toCents(option.geldEtappeLaagTTL)
-    ) * stagePrizeMultiplier);
+    const stagePrizePerStageCents = [
+      option.geldEtappeHoog, option.geldEtappeTotaal, option.geldEtappeLaagTTL
+    ].reduce<number>((sum, amount) =>
+      sum + Math.ceil(Math.max(Number(amount ?? 0), 0) * stagePrizeMultiplier * 20 - 1e-9) * 5, 0);
     const stagePrizeTotalCents = stagePrizePerStageCents * stageCount;
     const redLanternCents = Math.round(toCents(option.PrijsNrLaatstBedrag) * stagePrizeMultiplier);
     const remainingCents = paidInlegCents - stagePrizeTotalCents - redLanternCents;
